@@ -1,6 +1,5 @@
 'use client';
 
-import * as THREE from 'three';
 import { useEffect, useRef, useState } from 'react';
 import { VisitsByCountry, GlobePolygon, CapitalCity, USER_DISPLAY } from '@/types';
 import { CAPITALS } from '@/data/capitals';
@@ -10,38 +9,28 @@ interface GlobeProps {
   onCountryClick: (isoCode: string, countryName: string) => void;
 }
 
-// THREE.Color does not parse rgba() — use MeshLambertMaterial with explicit opacity.
-// Pre-built and shared across polygons to avoid per-frame allocations.
-function makeMat(hex: number, opacity: number) {
-  return new THREE.MeshLambertMaterial({
-    color: hex,
-    transparent: true,
-    opacity,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-}
-
-const MAT = {
-  default: makeMat(0x3a8a3a, 0.50), // natural green — clearly visible on land
-  hover:   makeMat(0x88ccf0, 0.65), // light blue glow
-  tati:    makeMat(0xFFD700, 0.70), // gold
-  iva:     makeMat(0xFF69B4, 0.70), // pink
-  both:    makeMat(0xFFB347, 0.72), // orange
+// globe.gl parses colors via tinycolor (supports rgba) — no external THREE needed.
+// Use high-opacity rgba so countries are clearly visible over the Blue Marble texture.
+const COLOR = {
+  default: 'rgba(58,138,58,0.82)',
+  hover:   'rgba(136,204,240,0.88)',
+  tati:    'rgba(255,215,0,0.88)',
+  iva:     'rgba(255,105,180,0.88)',
+  both:    'rgba(255,179,71,0.88)',
 };
 
-function getCapMaterial(
+function getCapColor(
   iso: string,
   visitsByCountry: VisitsByCountry,
   hoveredIso: string | null
-): THREE.MeshLambertMaterial {
-  if (iso === hoveredIso) return MAT.hover;
+): string {
+  if (iso === hoveredIso) return COLOR.hover;
   const e = visitsByCountry[iso];
-  if (!e) return MAT.default;
-  if (e.tati && e.iva) return MAT.both;
-  if (e.tati) return MAT.tati;
-  if (e.iva) return MAT.iva;
-  return MAT.default;
+  if (!e) return COLOR.default;
+  if (e.tati && e.iva) return COLOR.both;
+  if (e.tati) return COLOR.tati;
+  if (e.iva) return COLOR.iva;
+  return COLOR.default;
 }
 
 function countryTooltip(name: string, iso: string, visitsByCountry: VisitsByCountry): string {
@@ -89,7 +78,6 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
   }, []);
 
   useEffect(() => {
-    // Bundled locally — no external CDN dependency
     fetch('/countries.geojson')
       .then((r) => r.json())
       .then((d) => setPolygonsData(d.features as GlobePolygon[]))
@@ -121,15 +109,14 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
         .cloudsOpacity(0.25)
         .atmosphereColor('#4a90e2')
         .atmosphereAltitude(0.22)
-        // Polygons — use polygonCapMaterial for real THREE.js transparency support
         .polygonsData(polygonsData)
-        .polygonAltitude(0.012)
-        .polygonCapMaterial((d: object) => {
+        .polygonAltitude(0.015)
+        .polygonCapColor((d: object) => {
           const iso = (d as GlobePolygon).properties?.ISO_A2;
-          return getCapMaterial(iso, visitsByCountryRef.current, hoveredIsoRef.current);
+          return getCapColor(iso, visitsByCountryRef.current, hoveredIsoRef.current);
         })
-        .polygonSideColor(() => '#1a3a1a')
-        .polygonStrokeColor(() => '#ffffff')   // solid white — THREE.Color handles this fine
+        .polygonSideColor(() => 'rgba(30,80,30,0.6)')
+        .polygonStrokeColor(() => 'rgba(255,255,255,0.9)')
         .polygonLabel((d: object) => {
           const poly = d as GlobePolygon;
           const iso = poly.properties?.ISO_A2;
@@ -145,24 +132,23 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
           hoveredIsoRef.current = iso;
           if (globe) {
             globe
-              .polygonCapMaterial((d: object) => {
+              .polygonCapColor((d: object) => {
                 const i = (d as GlobePolygon).properties?.ISO_A2;
-                return getCapMaterial(i, visitsByCountryRef.current, hoveredIsoRef.current);
+                return getCapColor(i, visitsByCountryRef.current, hoveredIsoRef.current);
               })
               .polygonAltitude((d: object) => {
                 const i = (d as GlobePolygon).properties?.ISO_A2;
-                return i === hoveredIsoRef.current ? 0.030 : 0.012;
+                return i === hoveredIsoRef.current ? 0.035 : 0.015;
               });
             globe.controls().autoRotate = !iso;
           }
           setHoveredIso(iso);
         })
-        // Capital dots
         .pointsData(CAPITALS)
         .pointLat((d: object) => (d as CapitalCity).lat)
         .pointLng((d: object) => (d as CapitalCity).lng)
         .pointColor(() => '#ffe880')
-        .pointAltitude(0.012)
+        .pointAltitude(0.015)
         .pointRadius(0.2)
         .pointLabel((d: object) => capitalTooltip(d as CapitalCity));
 
@@ -183,13 +169,12 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polygonsData, dims]);
 
-  // Refresh materials when visited countries change
   useEffect(() => {
     if (!globeRef.current) return;
     globeRef.current
-      .polygonCapMaterial((d: object) => {
+      .polygonCapColor((d: object) => {
         const iso = (d as GlobePolygon).properties?.ISO_A2;
-        return getCapMaterial(iso, visitsByCountry, hoveredIsoRef.current);
+        return getCapColor(iso, visitsByCountry, hoveredIsoRef.current);
       })
       .polygonLabel((d: object) => {
         const poly = d as GlobePolygon;
@@ -198,7 +183,6 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
       });
   }, [visitsByCountry]);
 
-  // Refresh labels on hover (tooltip content updates)
   useEffect(() => {
     if (!globeRef.current) return;
     globeRef.current.polygonLabel((d: object) => {
