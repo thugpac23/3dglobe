@@ -1,5 +1,10 @@
 export type UserType = 'tati' | 'iva';
 
+export const USER_DISPLAY: Record<UserType, string> = {
+  tati: 'Тати',
+  iva: 'Ива',
+};
+
 export interface Country {
   id: string;
   name: string;
@@ -29,4 +34,12 @@ export interface GlobePolygon {
     [key: string]: string | number;
   };
   [key: string]: unknown;
+}
+
+export interface CapitalCity {
+  isoCode: string;
+  name: string;
+  capital: string;
+  lat: number;
+  lng: number;
 }

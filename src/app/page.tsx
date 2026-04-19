@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { UserType, Visit, VisitsByCountry } from '@/types';
+import { UserType, Visit, VisitsByCountry, USER_DISPLAY } from '@/types';
 import { fetchVisits, addVisit, removeVisit } from '@/lib/api';
 import UserToggle from '@/components/UserToggle';
 import VisitsTable from '@/components/VisitsTable';
@@ -24,7 +24,7 @@ export default function Home() {
   const showToast = useCallback((message: string, type: 'add' | 'remove') => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2500);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2800);
   }, []);
 
   useEffect(() => {
@@ -38,9 +38,7 @@ export default function Home() {
     const map: VisitsByCountry = {};
     for (const visit of visits) {
       const iso = visit.country.isoCode;
-      if (!map[iso]) {
-        map[iso] = { country: visit.country, tati: false, iva: false };
-      }
+      if (!map[iso]) map[iso] = { country: visit.country, tati: false, iva: false };
       map[iso][visit.user] = true;
     }
     return map;
@@ -60,6 +58,7 @@ export default function Home() {
     async (isoCode: string, countryName: string) => {
       const entry = visitsByCountry[isoCode];
       const alreadyVisited = entry?.[activeUser] ?? false;
+      const displayName = USER_DISPLAY[activeUser];
 
       if (alreadyVisited) {
         const visit = visits.find(
@@ -68,7 +67,7 @@ export default function Home() {
         if (!visit) return;
 
         setVisits((prev) => prev.filter((v) => v.id !== visit.id));
-        showToast(`${countryName} премахната от списъка на ${activeUser}`, 'remove');
+        showToast(`${countryName} премахната от списъка на ${displayName}`, 'remove');
 
         try {
           await removeVisit(visit.countryId, activeUser);
@@ -105,7 +104,7 @@ export default function Home() {
           },
         };
         setVisits((prev) => [...prev, optimisticVisit]);
-        showToast(`${countryName} добавена в списъка на ${activeUser} ✓`, 'add');
+        showToast(`${countryName} добавена в списъка на ${displayName} ✓`, 'add');
 
         try {
           const newVisit = await addVisit(countryId!, activeUser);
@@ -124,70 +123,81 @@ export default function Home() {
 
   return (
     <main
-      className="min-h-screen flex flex-col items-center pb-16"
-      style={{ background: '#050d1f' }}
+      className="min-h-screen flex flex-col items-center pb-20"
+      style={{ background: 'radial-gradient(ellipse at top, #060e24 0%, #020810 100%)' }}
     >
-      <header className="w-full py-6 px-6 text-center relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/30 to-transparent pointer-events-none" />
-        <h1 className="text-3xl font-bold tracking-tight text-white relative z-10">
+      {/* Header */}
+      <header className="w-full py-5 px-6 text-center relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/20 to-transparent pointer-events-none" />
+        <h1 className="text-2xl font-bold tracking-tight text-white relative z-10">
           🌍 Пътешественически Глобус
         </h1>
-        <p className="text-slate-500 text-sm mt-1 relative z-10">
+        <p className="text-slate-600 text-xs mt-1 relative z-10 tracking-wide">
           Открийте света заедно
         </p>
       </header>
 
+      {/* User toggle */}
       <UserToggle
         activeUser={activeUser}
         onToggle={setActiveUser}
         visitCount={visitCount}
       />
 
+      {/* Globe */}
       {loading ? (
-        <div className="flex items-center justify-center h-96">
-          <div className="text-slate-400 flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center justify-center" style={{ height: '70vh' }}>
+          <div className="text-slate-500 flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <span className="text-sm">Зареждане на глобуса...</span>
           </div>
         </div>
       ) : (
-        <div className="globe-glow">
+        <div className="globe-glow flex justify-center">
           <Globe
             visitsByCountry={visitsByCountry}
-            activeUser={activeUser}
             onCountryClick={handleCountryClick}
           />
         </div>
       )}
 
-      <div className="flex items-center gap-6 mt-4 text-xs text-slate-500">
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full inline-block bg-[#FFD700]" />
-          само тати
+      {/* Legend */}
+      <div className="flex items-center gap-5 mt-3 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FFD700] opacity-80" />
+          само {USER_DISPLAY.tati}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full inline-block bg-[#FF69B4]" />
-          само ива
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FF69B4] opacity-80" />
+          само {USER_DISPLAY.iva}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full inline-block bg-[#FFB347]" />
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FFB347] opacity-80" />
           двете заедно
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full inline-block bg-yellow-200 opacity-70" />
+          столица
         </div>
       </div>
 
+      {/* Visits table */}
       <VisitsTable visitsByCountry={visitsByCountry} />
 
-      <div className="fixed top-4 left-1/2 z-50 flex flex-col gap-2 pointer-events-none"
-           style={{ transform: 'translateX(-50%)' }}>
+      {/* Toast notifications */}
+      <div
+        className="fixed top-4 left-1/2 z-50 flex flex-col gap-2 pointer-events-none"
+        style={{ transform: 'translateX(-50%)' }}
+      >
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="toast px-4 py-2 rounded-lg text-sm font-medium shadow-xl whitespace-nowrap"
+            className="toast px-5 py-2.5 rounded-xl text-sm font-medium shadow-2xl whitespace-nowrap"
             style={{
               background:
                 toast.type === 'add'
-                  ? 'rgba(5,150,105,0.95)'
-                  : 'rgba(220,38,38,0.9)',
+                  ? 'rgba(5,150,105,0.97)'
+                  : 'rgba(220,38,38,0.93)',
               color: '#fff',
               border:
                 toast.type === 'add'
