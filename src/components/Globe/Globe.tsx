@@ -14,13 +14,13 @@ function getCapColor(
   visitsByCountry: VisitsByCountry,
   hoveredIso: string | null
 ): string {
-  if (iso === hoveredIso) return 'rgba(180, 225, 255, 0.55)';
+  if (iso === hoveredIso) return 'rgba(180, 225, 255, 0.65)';
   const e = visitsByCountry[iso];
-  if (!e) return 'rgba(60, 120, 60, 0.14)';   // subtle natural green for unvisited
-  if (e.tati && e.iva) return 'rgba(255, 179, 71, 0.55)';
-  if (e.tati) return 'rgba(255, 215, 0, 0.55)';
-  if (e.iva)  return 'rgba(255, 105, 180, 0.55)';
-  return 'rgba(60, 120, 60, 0.14)';
+  if (!e) return 'rgba(50, 110, 50, 0.45)';   // clear natural green for unvisited land
+  if (e.tati && e.iva) return 'rgba(255, 179, 71, 0.70)';
+  if (e.tati) return 'rgba(255, 215, 0, 0.70)';
+  if (e.iva)  return 'rgba(255, 105, 180, 0.70)';
+  return 'rgba(50, 110, 50, 0.45)';
 }
 
 function countryTooltip(
@@ -80,9 +80,8 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
   }, []);
 
   useEffect(() => {
-    fetch(
-      'https://raw.githubusercontent.com/vasturiano/react-globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson'
-    )
+    // Served from /public — no external fetch, no CDN failure risk
+    fetch('/countries.geojson')
       .then((r) => r.json())
       .then((d) => setPolygonsData(d.features as GlobePolygon[]))
       .catch(console.error);
@@ -115,7 +114,7 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
         .atmosphereAltitude(0.22)
         // ── Polygons ─────────────────────────────────────────────────
         .polygonsData(polygonsData)
-        .polygonAltitude(0.006)
+        .polygonAltitude(0.012)
         .polygonCapColor((d: object) => {
           const iso = (d as GlobePolygon).properties?.ISO_A2;
           return getCapColor(iso, visitsByCountryRef.current, hoveredIsoRef.current);
@@ -143,7 +142,7 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
               return getCapColor(i, visitsByCountryRef.current, hoveredIsoRef.current);
             }).polygonAltitude((d: object) => {
               const i = (d as GlobePolygon).properties?.ISO_A2;
-              return i === hoveredIsoRef.current ? 0.025 : 0.006;
+              return i === hoveredIsoRef.current ? 0.030 : 0.012;
             });
             g.controls().autoRotate = !iso;
           }
