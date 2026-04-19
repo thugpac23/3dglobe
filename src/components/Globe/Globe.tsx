@@ -15,7 +15,7 @@ function getCapColor(
   visitsByCountry: VisitsByCountry,
   hoveredIso: string | null
 ): string {
-  if (iso === hoveredIso) return 'rgba(200, 230, 255, 0.22)';
+  if (iso === hoveredIso) return 'rgba(210, 240, 255, 0.42)';
   const e = visitsByCountry[iso];
   if (!e) return 'rgba(255,255,255,0.04)';
   if (e.tati && e.iva) return 'rgba(255, 179, 71, 0.52)';
@@ -72,7 +72,7 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
     function resize() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const size = Math.min(vw - 8, Math.floor(vh * 0.86));
+      const size = Math.min(vw - 16, Math.floor(vh * 0.65), 780);
       setDims({ w: Math.max(size, 320), h: Math.max(size, 320) });
     }
     resize();
@@ -127,7 +127,7 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
           return getCapColor(iso, visitsByCountryRef.current, null);
         })
         .polygonSideColor(() => 'rgba(20, 50, 120, 0.25)')
-        .polygonStrokeColor(() => 'rgba(180, 210, 255, 0.45)')
+        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.72)')
         .polygonLabel((d: object) => {
           const poly = d as GlobePolygon;
           const iso = poly.properties?.ISO_A2;

@@ -1,6 +1,7 @@
 'use client';
 
-import { VisitsByCountry, USER_DISPLAY } from '@/types';
+import { VisitsByCountry } from '@/types';
+import { BG_NAMES } from '@/data/countryNamesBg';
 
 interface VisitsTableProps {
   visitsByCountry: VisitsByCountry;
@@ -8,8 +9,7 @@ interface VisitsTableProps {
 
 interface CountryRow {
   isoCode: string;
-  name: string;
-  capital: string;
+  nameBg: string;
 }
 
 export default function VisitsTable({ visitsByCountry }: VisitsTableProps) {
@@ -20,42 +20,27 @@ export default function VisitsTable({ visitsByCountry }: VisitsTableProps) {
   for (const [isoCode, entry] of Object.entries(visitsByCountry)) {
     const row: CountryRow = {
       isoCode,
-      name: entry.country.name,
-      capital: entry.country.capital,
+      nameBg: BG_NAMES[isoCode] ?? entry.country.name,
     };
     if (entry.tati && entry.iva) both.push(row);
     else if (entry.tati) tatiOnly.push(row);
     else if (entry.iva) ivaOnly.push(row);
   }
 
-  const sortByName = (a: CountryRow, b: CountryRow) => a.name.localeCompare(b.name);
+  const sortByName = (a: CountryRow, b: CountryRow) =>
+    a.nameBg.localeCompare(b.nameBg, 'bg');
   tatiOnly.sort(sortByName);
   ivaOnly.sort(sortByName);
   both.sort(sortByName);
 
   const columns = [
-    {
-      label: `Държави посетени от ${USER_DISPLAY.tati}`,
-      color: '#FFD700',
-      data: tatiOnly,
-      emoji: '🟡',
-    },
-    {
-      label: `Държави посетени от ${USER_DISPLAY.iva}`,
-      color: '#FF69B4',
-      data: ivaOnly,
-      emoji: '🩷',
-    },
-    {
-      label: 'Държави посетени и от двамата',
-      color: '#FFB347',
-      data: both,
-      emoji: '🌍',
-    },
+    { label: 'Тати',           color: '#FFD700', data: tatiOnly, emoji: '🟡' },
+    { label: 'Ива',            color: '#FF69B4', data: ivaOnly,  emoji: '🩷' },
+    { label: 'Двамата заедно', color: '#FFB347', data: both,     emoji: '🌍' },
   ];
 
   return (
-    <div className="w-full max-w-5xl mx-auto mt-6 px-4">
+    <div className="w-full max-w-4xl mx-auto mt-6 px-4">
       <h2 className="text-center text-slate-500 text-xs font-semibold uppercase tracking-widest mb-4">
         Посетени Държави
       </h2>
@@ -66,49 +51,41 @@ export default function VisitsTable({ visitsByCountry }: VisitsTableProps) {
             className="rounded-xl border overflow-hidden"
             style={{ borderColor: col.color + '38', background: 'rgba(4,10,28,0.82)' }}
           >
-            {/* Column header */}
+            {/* Header */}
             <div
-              className="py-3 px-3 text-center font-semibold text-xs leading-tight"
+              className="py-3 px-3 text-center font-bold text-sm tracking-wide"
               style={{
                 color: col.color,
-                background: col.color + '12',
+                background: col.color + '14',
                 borderBottom: `1px solid ${col.color}28`,
               }}
             >
               {col.emoji} {col.label}
-              <span className="ml-1 opacity-60">({col.data.length})</span>
+              <span className="ml-1 text-xs font-normal opacity-55">
+                ({col.data.length})
+              </span>
             </div>
 
-            {/* Country list */}
-            <div className="overflow-y-auto" style={{ maxHeight: '280px' }}>
+            {/* Rows */}
+            <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
               {col.data.length === 0 ? (
-                <div className="py-8 text-center text-slate-700 text-xs italic">
+                <div className="py-7 text-center text-slate-700 text-xs italic">
                   Няма държави все още
                 </div>
               ) : (
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800/80">
-                      <th className="py-1.5 px-3 text-left text-slate-600 font-medium">
-                        Държава
-                      </th>
-                      <th className="py-1.5 px-3 text-left text-slate-600 font-medium">
-                        Столица
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {col.data.map((row) => (
-                      <tr
-                        key={row.isoCode}
-                        className="border-b border-slate-800/40 hover:bg-slate-800/30 transition-colors"
-                      >
-                        <td className="py-2 px-3 text-slate-300">{row.name}</td>
-                        <td className="py-2 px-3 text-slate-500">{row.capital}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <ul>
+                  {col.data.map((row, idx) => (
+                    <li
+                      key={row.isoCode}
+                      className="flex items-center gap-2 px-3 py-2 text-sm border-b border-slate-800/40 hover:bg-slate-800/30 transition-colors"
+                    >
+                      <span className="text-slate-600 text-xs w-5 text-right shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <span className="text-slate-200">{row.nameBg}</span>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
