@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { VisitsByCountry, GlobePolygon, CapitalCity, USER_DISPLAY } from '@/types';
 import { CAPITALS } from '@/data/capitals';
-// Bundled directly — eliminates the async /countries.geojson fetch that can fail silently
+import dynamic from 'next/dynamic';
 import countriesGeoJson from '@/data/countries.json';
+
+const ReactGlobe = dynamic(() => import('react-globe.gl'), { ssr: false });
 
 interface GlobeProps {
   visitsByCountry: VisitsByCountry;
@@ -59,13 +61,11 @@ function capitalTooltip(c: CapitalCity): string {
 const polygonsData = (countriesGeoJson as any).features as GlobePolygon[];
 
 export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
-  const mountRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
   const visitsByCountryRef = useRef(visitsByCountry);
-  const hoveredIsoRef = useRef<string | null>(null);
-  const [dims, setDims] = useState({ w: 320, h: 320 });
   const [hoveredIso, setHoveredIso] = useState<string | null>(null);
+  const [dims, setDims] = useState({ w: 320, h: 320 });
 
   visitsByCountryRef.current = visitsByCountry;
 
@@ -79,119 +79,77 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
     return () => window.removeEventListener('resize', resize);
   }, []);
 
-  useEffect(() => {
-    if (!mountRef.current) return;
-    const el = mountRef.current;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let globe: any = null;
-    let destroyed = false;
-
-    import('globe.gl').then((mod) => {
-      if (destroyed || !el) return;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const GlobeFactory = mod.default as any;
-      globe = GlobeFactory()(el);
-      globeRef.current = globe;
-
-      globe
-        .width(dims.w)
-        .height(dims.h)
-        .backgroundColor('rgba(0,0,0,0)')
-        .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-        .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-        .cloudsImageUrl('//unpkg.com/three-globe/example/img/fair_1_clouds_2048.png')
-        .cloudsOpacity(0.25)
-        .atmosphereColor('#4a90e2')
-        .atmosphereAltitude(0.22)
-        .polygonsData(polygonsData)
-        .polygonAltitude(0.015)
-        .polygonCapColor((d: object) => {
-          const iso = (d as GlobePolygon).properties?.ISO_A2;
-          return getCapColor(iso, visitsByCountryRef.current, hoveredIsoRef.current);
-        })
-        .polygonSideColor(() => 'rgba(30,80,30,0.6)')
-        .polygonStrokeColor(() => 'rgba(255,255,255,0.9)')
-        .polygonLabel((d: object) => {
-          const poly = d as GlobePolygon;
-          const iso = poly.properties?.ISO_A2;
-          return countryTooltip(poly.properties?.NAME || iso, iso, visitsByCountryRef.current);
-        })
-        .onPolygonClick((polygon: object) => {
-          const poly = polygon as GlobePolygon;
-          const iso = poly.properties?.ISO_A2;
-          if (iso) onCountryClick(iso, poly.properties?.NAME || iso);
-        })
-        .onPolygonHover((polygon: object | null) => {
-          const iso = (polygon as GlobePolygon | null)?.properties?.ISO_A2 || null;
-          hoveredIsoRef.current = iso;
-          if (globe) {
-            globe
-              .polygonCapColor((d: object) => {
-                const i = (d as GlobePolygon).properties?.ISO_A2;
-                return getCapColor(i, visitsByCountryRef.current, hoveredIsoRef.current);
-              })
-              .polygonAltitude((d: object) => {
-                const i = (d as GlobePolygon).properties?.ISO_A2;
-                return i === hoveredIsoRef.current ? 0.035 : 0.015;
-              });
-            globe.controls().autoRotate = !iso;
-          }
-          setHoveredIso(iso);
-        })
-        .pointsData(CAPITALS)
-        .pointLat((d: object) => (d as CapitalCity).lat)
-        .pointLng((d: object) => (d as CapitalCity).lng)
-        .pointColor(() => '#ffe880')
-        .pointAltitude(0.015)
-        .pointRadius(0.2)
-        .pointLabel((d: object) => capitalTooltip(d as CapitalCity));
-
-      const ctrl = globe.controls();
+  // Set up controls once globe is mounted
+  const handleGlobeMounted = useCallback(() => {
+    if (!globeRef.current) return;
+    const ctrl = globeRef.current.controls();
+    if (ctrl) {
       ctrl.autoRotate = true;
       ctrl.autoRotateSpeed = 0.35;
       ctrl.enableDamping = true;
       ctrl.dampingFactor = 0.08;
       ctrl.minDistance = 120;
       ctrl.maxDistance = 700;
-    });
+    }
+  }, []);
 
-    return () => {
-      destroyed = true;
-      if (el) el.innerHTML = '';
-      globeRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dims]);
+  // Callbacks that depend on hoveredIso and visitsByCountry recreate on each change
+  const capColor = useCallback((d: object) => {
+    const iso = (d as GlobePolygon).properties?.ISO_A2;
+    return getCapColor(iso, visitsByCountry, hoveredIso);
+  }, [visitsByCountry, hoveredIso]);
 
-  useEffect(() => {
-    if (!globeRef.current) return;
-    globeRef.current
-      .polygonCapColor((d: object) => {
-        const iso = (d as GlobePolygon).properties?.ISO_A2;
-        return getCapColor(iso, visitsByCountry, hoveredIsoRef.current);
-      })
-      .polygonLabel((d: object) => {
-        const poly = d as GlobePolygon;
-        const iso = poly.properties?.ISO_A2;
-        return countryTooltip(poly.properties?.NAME || iso, iso, visitsByCountry);
-      });
-  }, [visitsByCountry]);
-
-  useEffect(() => {
-    if (!globeRef.current) return;
-    globeRef.current.polygonLabel((d: object) => {
-      const poly = d as GlobePolygon;
-      const iso = poly.properties?.ISO_A2;
-      return countryTooltip(poly.properties?.NAME || iso, iso, visitsByCountryRef.current);
-    });
+  const polygonAltitude = useCallback((d: object) => {
+    const iso = (d as GlobePolygon).properties?.ISO_A2;
+    return iso === hoveredIso ? 0.035 : 0.015;
   }, [hoveredIso]);
 
+  const handlePolygonHover = useCallback((polygon: object | null) => {
+    const iso = (polygon as GlobePolygon | null)?.properties?.ISO_A2 || null;
+    setHoveredIso(iso);
+    if (globeRef.current?.controls) {
+      globeRef.current.controls().autoRotate = !iso;
+    }
+  }, []);
+
+  const handlePolygonClick = useCallback((polygon: object) => {
+    const poly = polygon as GlobePolygon;
+    const iso = poly.properties?.ISO_A2;
+    if (iso) onCountryClick(iso, poly.properties?.NAME || iso);
+  }, [onCountryClick]);
+
+  const polygonLabel = useCallback((d: object) => {
+    const poly = d as GlobePolygon;
+    const iso = poly.properties?.ISO_A2;
+    return countryTooltip(poly.properties?.NAME || iso, iso, visitsByCountry);
+  }, [visitsByCountry]);
+
   return (
-    <div
-      ref={mountRef}
-      style={{ width: dims.w, height: dims.h }}
-      className="cursor-pointer select-none"
+    <ReactGlobe
+      ref={globeRef}
+      width={dims.w}
+      height={dims.h}
+      backgroundColor="rgba(0,0,0,0)"
+      globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+      bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+      atmosphereColor="#4a90e2"
+      atmosphereAltitude={0.22}
+      polygonsData={polygonsData}
+      polygonAltitude={polygonAltitude}
+      polygonCapColor={capColor}
+      polygonSideColor={() => 'rgba(30,80,30,0.6)'}
+      polygonStrokeColor={() => 'rgba(255,255,255,0.9)'}
+      polygonLabel={polygonLabel}
+      onPolygonClick={handlePolygonClick}
+      onPolygonHover={handlePolygonHover}
+      pointsData={CAPITALS}
+      pointLat="lat"
+      pointLng="lng"
+      pointColor={() => '#ffe880'}
+      pointAltitude={0.015}
+      pointRadius={0.2}
+      pointLabel={(d: object) => capitalTooltip(d as CapitalCity)}
+      onGlobeReady={handleGlobeMounted}
     />
   );
 }
