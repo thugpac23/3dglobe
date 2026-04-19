@@ -162,7 +162,7 @@ export default function Home() {
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-5 mt-3 text-xs text-slate-500">
+      <div className="flex flex-wrap justify-center items-center gap-4 mt-3 text-xs text-slate-500 px-4">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FFD700] opacity-80" />
           само {USER_DISPLAY.tati}
@@ -174,10 +174,6 @@ export default function Home() {
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FFB347] opacity-80" />
           двете заедно
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full inline-block bg-yellow-200 opacity-70" />
-          столица
         </div>
       </div>
 

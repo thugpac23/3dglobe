@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { VisitsByCountry, GlobePolygon, CapitalCity, USER_DISPLAY } from '@/types';
 import { CAPITALS } from '@/data/capitals';
+// Bundled directly — eliminates the async /countries.geojson fetch that can fail silently
+import countriesGeoJson from '@/data/countries.json';
 
 interface GlobeProps {
   visitsByCountry: VisitsByCountry;
   onCountryClick: (isoCode: string, countryName: string) => void;
 }
 
-// globe.gl parses colors via tinycolor (supports rgba) — no external THREE needed.
-// Use high-opacity rgba so countries are clearly visible over the Blue Marble texture.
 const COLOR = {
   default: 'rgba(58,138,58,0.82)',
   hover:   'rgba(136,204,240,0.88)',
@@ -55,14 +55,16 @@ function capitalTooltip(c: CapitalCity): string {
     </div>`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const polygonsData = (countriesGeoJson as any).features as GlobePolygon[];
+
 export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
   const visitsByCountryRef = useRef(visitsByCountry);
   const hoveredIsoRef = useRef<string | null>(null);
-  const [polygonsData, setPolygonsData] = useState<GlobePolygon[]>([]);
-  const [dims, setDims] = useState({ w: 700, h: 700 });
+  const [dims, setDims] = useState({ w: 320, h: 320 });
   const [hoveredIso, setHoveredIso] = useState<string | null>(null);
 
   visitsByCountryRef.current = visitsByCountry;
@@ -78,14 +80,7 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
   }, []);
 
   useEffect(() => {
-    fetch('/countries.geojson')
-      .then((r) => r.json())
-      .then((d) => setPolygonsData(d.features as GlobePolygon[]))
-      .catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    if (!mountRef.current || polygonsData.length === 0) return;
+    if (!mountRef.current) return;
     const el = mountRef.current;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let globe: any = null;
@@ -167,7 +162,7 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
       globeRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [polygonsData, dims]);
+  }, [dims]);
 
   useEffect(() => {
     if (!globeRef.current) return;

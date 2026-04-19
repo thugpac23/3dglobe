@@ -44,7 +44,7 @@ export default function VisitsTable({ visitsByCountry }: VisitsTableProps) {
       <h2 className="text-center text-slate-500 text-xs font-semibold uppercase tracking-widest mb-4">
         Посетени Държави
       </h2>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {columns.map((col) => (
           <div
             key={col.label}
