@@ -68,13 +68,13 @@ export default function Home() {
         if (!visit) return;
 
         setVisits((prev) => prev.filter((v) => v.id !== visit.id));
-        showToast(`Removed ${countryName} from ${activeUser}'s list`, 'remove');
+        showToast(`${countryName} премахната от списъка на ${activeUser}`, 'remove');
 
         try {
           await removeVisit(visit.countryId, activeUser);
         } catch {
           setVisits((prev) => [...prev, visit]);
-          showToast('Error: could not remove visit', 'remove');
+          showToast('Грешка: не може да се премахне посещението', 'remove');
         }
       } else {
         let countryId: string | null = null;
@@ -88,7 +88,7 @@ export default function Home() {
             const data = await res.json();
             countryId = data.id;
           } catch {
-            showToast(`${countryName} not found in database`, 'remove');
+            showToast(`${countryName} не е намерена в базата данни`, 'remove');
             return;
           }
         }
@@ -105,7 +105,7 @@ export default function Home() {
           },
         };
         setVisits((prev) => [...prev, optimisticVisit]);
-        showToast(`Added ${countryName} to ${activeUser}'s list ✓`, 'add');
+        showToast(`${countryName} добавена в списъка на ${activeUser} ✓`, 'add');
 
         try {
           const newVisit = await addVisit(countryId!, activeUser);
@@ -115,7 +115,7 @@ export default function Home() {
           ]);
         } catch {
           setVisits((prev) => prev.filter((v) => v.id !== optimisticVisit.id));
-          showToast('Error: could not save visit', 'remove');
+          showToast('Грешка: не може да се запази посещението', 'remove');
         }
       }
     },
@@ -130,10 +130,10 @@ export default function Home() {
       <header className="w-full py-6 px-6 text-center relative">
         <div className="absolute inset-0 bg-gradient-to-b from-blue-950/30 to-transparent pointer-events-none" />
         <h1 className="text-3xl font-bold tracking-tight text-white relative z-10">
-          🌍 Travel Globe Tracker
+          🌍 Пътешественически Глобус
         </h1>
         <p className="text-slate-500 text-sm mt-1 relative z-10">
-          Explore the world together
+          Открийте света заедно
         </p>
       </header>
 
@@ -147,7 +147,7 @@ export default function Home() {
         <div className="flex items-center justify-center h-96">
           <div className="text-slate-400 flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm">Loading globe...</span>
+            <span className="text-sm">Зареждане на глобуса...</span>
           </div>
         </div>
       ) : (
@@ -163,15 +163,15 @@ export default function Home() {
       <div className="flex items-center gap-6 mt-4 text-xs text-slate-500">
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full inline-block bg-[#FFD700]" />
-          tati only
+          само тати
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full inline-block bg-[#FF69B4]" />
-          iva only
+          само ива
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full inline-block bg-[#FFB347]" />
-          both visited
+          двете заедно
         </div>
       </div>
 

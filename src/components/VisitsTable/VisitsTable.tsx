@@ -34,15 +34,15 @@ export default function VisitsTable({ visitsByCountry }: VisitsTableProps) {
   both.sort(sortByName);
 
   const columns = [
-    { label: 'tati', color: '#FFD700', data: tatiOnly, emoji: '🟡' },
-    { label: 'iva', color: '#FF69B4', data: ivaOnly, emoji: '🩷' },
-    { label: 'both', color: '#FFB347', data: both, emoji: '🌍' },
+    { label: 'тати', color: '#FFD700', data: tatiOnly, emoji: '🟡' },
+    { label: 'ива', color: '#FF69B4', data: ivaOnly, emoji: '🩷' },
+    { label: 'двете', color: '#FFB347', data: both, emoji: '🌍' },
   ];
 
   return (
     <div className="w-full max-w-5xl mx-auto mt-8 px-4">
       <h2 className="text-center text-slate-400 text-sm font-semibold uppercase tracking-widest mb-4">
-        Visited Countries
+        Посетени Държави
       </h2>
       <div className="grid grid-cols-3 gap-4">
         {columns.map((col) => (
@@ -68,17 +68,17 @@ export default function VisitsTable({ visitsByCountry }: VisitsTableProps) {
             <div className="overflow-y-auto" style={{ maxHeight: '320px' }}>
               {col.data.length === 0 ? (
                 <div className="py-8 text-center text-slate-600 text-sm italic">
-                  No countries yet
+                  Няма държави все още
                 </div>
               ) : (
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-slate-800">
                       <th className="py-2 px-3 text-left text-slate-500 font-medium">
-                        Country
+                        Държава
                       </th>
                       <th className="py-2 px-3 text-left text-slate-500 font-medium">
-                        Capital
+                        Столица
                       </th>
                     </tr>
                   </thead>

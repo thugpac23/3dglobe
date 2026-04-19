@@ -12,7 +12,7 @@ export default function UserToggle({ activeUser, onToggle, visitCount }: UserTog
   return (
     <div className="flex flex-col items-center gap-3 mb-6">
       <p className="text-slate-400 text-sm">
-        Click a country on the globe to mark it as visited
+        Кликни върху държава на глобуса, за да я отбележиш като посетена
       </p>
       <div className="flex items-center gap-4">
         <button
@@ -32,7 +32,7 @@ export default function UserToggle({ activeUser, onToggle, visitCount }: UserTog
             {' + '}
             <span className="text-[#FF69B4]">{visitCount.iva}</span>
             {' + '}
-            <span className="text-[#FFB347]">{visitCount.both} both</span>
+            <span className="text-[#FFB347]">{visitCount.both} двете</span>
           </div>
         </div>
 
@@ -49,7 +49,7 @@ export default function UserToggle({ activeUser, onToggle, visitCount }: UserTog
       </div>
 
       <div className="flex items-center gap-2 text-xs text-slate-500">
-        <span>Active:</span>
+        <span>Активен:</span>
         <span
           className="font-bold"
           style={{ color: activeUser === 'tati' ? '#FFD700' : '#FF69B4' }}
