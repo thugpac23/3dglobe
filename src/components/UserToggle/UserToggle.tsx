@@ -10,52 +10,46 @@ interface UserToggleProps {
 
 export default function UserToggle({ activeUser, onToggle, visitCount }: UserToggleProps) {
   return (
-    <div className="flex flex-col items-center gap-3 mb-4">
-      <p className="text-slate-400 text-sm">
-        Кликни върху държава на глобуса, за да я отбележиш като посетена
+    <div className="flex flex-col items-center gap-3 my-3 px-4">
+      <p className="text-slate-500 text-xs text-center tracking-wide">
+        Кликни върху държава, за да я отбележиш като посетена
       </p>
 
-      <div className="flex items-center gap-5">
-        <button
-          onClick={() => onToggle('tati')}
-          className={`px-7 py-2.5 rounded-full font-semibold text-sm transition-all duration-200 ${
-            activeUser === 'tati'
-              ? 'bg-[#FFD700] text-slate-900 shadow-[0_0_24px_rgba(255,215,0,0.55)] scale-110'
-              : 'bg-slate-800/70 text-slate-400 hover:bg-slate-700 border border-slate-600/60'
-          }`}
-        >
-          ✈️ {USER_DISPLAY.tati}
-        </button>
+      <div className="flex items-center gap-2">
+        {(['tati', 'iva'] as UserType[]).map((user) => {
+          const isActive = activeUser === user;
+          const color = user === 'tati' ? '#FFD700' : '#FF50A0';
+          const count = visitCount[user] + (user === 'tati' ? visitCount.both : visitCount.both);
+          return (
+            <button
+              key={user}
+              onClick={() => onToggle(user)}
+              className="relative px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200 select-none"
+              style={{
+                background: isActive ? color : 'rgba(30,40,60,0.7)',
+                color: isActive ? '#0a0a0a' : '#64748b',
+                border: isActive ? 'none' : '1px solid rgba(100,116,139,0.3)',
+                boxShadow: isActive ? `0 0 28px ${color}55` : 'none',
+                transform: isActive ? 'scale(1.06)' : 'scale(1)',
+              }}
+            >
+              ✈ {USER_DISPLAY[user]}
+              <span
+                className="ml-1.5 text-xs font-normal"
+                style={{ opacity: isActive ? 0.65 : 0.45 }}
+              >
+                ({count})
+              </span>
+            </button>
+          );
+        })}
 
-        <div className="text-center text-xs text-slate-600 leading-5">
-          <span className="text-[#FFD700]">{visitCount.tati}</span>
-          <span className="mx-1 text-slate-700">+</span>
-          <span className="text-[#FF69B4]">{visitCount.iva}</span>
-          <span className="mx-1 text-slate-700">+</span>
-          <span className="text-[#FFB347]">{visitCount.both}</span>
-          <div className="text-slate-700">двете</div>
+        <div
+          className="flex items-center gap-1 px-4 py-2 rounded-full text-xs"
+          style={{ background: 'rgba(255,155,40,0.12)', border: '1px solid rgba(255,155,40,0.2)', color: '#FF9B28' }}
+        >
+          🌍 {visitCount.both}
         </div>
-
-        <button
-          onClick={() => onToggle('iva')}
-          className={`px-7 py-2.5 rounded-full font-semibold text-sm transition-all duration-200 ${
-            activeUser === 'iva'
-              ? 'bg-[#FF69B4] text-slate-900 shadow-[0_0_24px_rgba(255,105,180,0.55)] scale-110'
-              : 'bg-slate-800/70 text-slate-400 hover:bg-slate-700 border border-slate-600/60'
-          }`}
-        >
-          ✈️ {USER_DISPLAY.iva}
-        </button>
-      </div>
-
-      <div className="text-xs text-slate-500">
-        Активен потребител:{' '}
-        <span
-          className="font-bold"
-          style={{ color: activeUser === 'tati' ? '#FFD700' : '#FF69B4' }}
-        >
-          {USER_DISPLAY[activeUser]}
-        </span>
       </div>
     </div>
   );

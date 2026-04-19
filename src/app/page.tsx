@@ -124,15 +124,14 @@ export default function Home() {
   return (
     <main
       className="min-h-screen flex flex-col items-center pb-20"
-      style={{ background: 'radial-gradient(ellipse at top, #060e24 0%, #020810 100%)' }}
+      style={{ background: 'radial-gradient(ellipse at 50% 0%, #071428 0%, #020810 60%)' }}
     >
       {/* Header */}
-      <header className="w-full py-5 px-6 text-center relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/20 to-transparent pointer-events-none" />
-        <h1 className="text-2xl font-bold tracking-tight text-white relative z-10">
-          🌍 Пътешественически Глобус
+      <header className="w-full pt-6 pb-4 px-6 text-center">
+        <h1 className="text-3xl font-extrabold tracking-tight text-white" style={{ letterSpacing: '-0.02em' }}>
+          Пътешественически Глобус
         </h1>
-        <p className="text-slate-600 text-xs mt-1 relative z-10 tracking-wide">
+        <p className="text-slate-500 text-xs mt-1.5 tracking-widest uppercase">
           Открийте света заедно
         </p>
       </header>
@@ -148,12 +147,12 @@ export default function Home() {
       {loading ? (
         <div className="flex items-center justify-center" style={{ height: '70vh' }}>
           <div className="text-slate-500 flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm">Зареждане на глобуса...</span>
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs tracking-wide">Зареждане…</span>
           </div>
         </div>
       ) : (
-        <div className="globe-glow flex justify-center">
+        <div className="flex justify-center" style={{ filter: 'drop-shadow(0 0 40px rgba(14,100,148,0.35))' }}>
           <Globe
             visitsByCountry={visitsByCountry}
             onCountryClick={handleCountryClick}
@@ -162,19 +161,17 @@ export default function Home() {
       )}
 
       {/* Legend */}
-      <div className="flex flex-wrap justify-center items-center gap-4 mt-3 text-xs text-slate-500 px-4">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FFD700] opacity-80" />
-          само {USER_DISPLAY.tati}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FF69B4] opacity-80" />
-          само {USER_DISPLAY.iva}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full inline-block bg-[#FFB347] opacity-80" />
-          двете заедно
-        </div>
+      <div className="flex flex-wrap justify-center items-center gap-3 mt-2 px-4">
+        {[
+          { color: '#FFD700', label: `само ${USER_DISPLAY.tati}` },
+          { color: '#FF50A0', label: `само ${USER_DISPLAY.iva}` },
+          { color: '#FF9B28', label: 'двете заедно' },
+        ].map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: color, opacity: 0.85 }} />
+            {label}
+          </div>
+        ))}
       </div>
 
       {/* Visits table */}

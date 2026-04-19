@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import * as THREE from 'three';
 import { VisitsByCountry, GlobePolygon, CapitalCity, USER_DISPLAY } from '@/types';
+import { BG_NAMES } from '@/data/countryNamesBg';
 import { CAPITALS } from '@/data/capitals';
 import dynamic from 'next/dynamic';
 import countriesGeoJson from '@/data/countries.json';
@@ -14,12 +16,57 @@ interface GlobeProps {
 }
 
 const COLOR = {
-  default: 'rgba(58,138,58,0.82)',
-  hover:   'rgba(136,204,240,0.88)',
-  tati:    'rgba(255,215,0,0.88)',
-  iva:     'rgba(255,105,180,0.88)',
-  both:    'rgba(255,179,71,0.88)',
+  default: 'rgba(44,120,44,0.92)',
+  hover:   'rgba(100,190,255,0.92)',
+  tati:    'rgba(255,215,0,0.94)',
+  iva:     'rgba(255,80,160,0.94)',
+  both:    'rgba(255,155,40,0.94)',
 };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const polygonsData = (countriesGeoJson as any).features as GlobePolygon[];
+
+// Compute bounding-box centre of each GeoJSON feature for label placement
+function featureCentroid(feature: GlobePolygon): [number, number] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const geom = (feature as any).geometry;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let ring: [number, number][] = [];
+  if (geom.type === 'Polygon') {
+    ring = geom.coordinates[0];
+  } else if (geom.type === 'MultiPolygon') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ring = geom.coordinates.reduce((a: any, b: any) =>
+      a[0].length >= b[0].length ? a : b
+    )[0];
+  }
+  if (!ring.length) return [0, 0];
+  const lons = ring.map((c) => c[0]);
+  const lats = ring.map((c) => c[1]);
+  return [
+    (Math.min(...lons) + Math.max(...lons)) / 2,
+    (Math.min(...lats) + Math.max(...lats)) / 2,
+  ];
+}
+
+interface LabelDatum {
+  lat: number;
+  lng: number;
+  name: string;
+  labelrank: number;
+}
+
+// Only show labels for countries important enough to be legible on globe
+const labelsData: LabelDatum[] = polygonsData.flatMap((feature) => {
+  const iso = feature.properties?.ISO_A2;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const labelrank: number = (feature.properties as any)?.LABELRANK ?? 99;
+  if (labelrank > 5) return [];
+  const name = BG_NAMES[iso] ?? feature.properties?.NAME ?? '';
+  if (!name) return [];
+  const [lng, lat] = featureCentroid(feature);
+  return [{ lat, lng, name, labelrank }];
+});
 
 function getCapColor(
   iso: string,
@@ -39,26 +86,21 @@ function countryTooltip(name: string, iso: string, visitsByCountry: VisitsByCoun
   const e = visitsByCountry[iso];
   const badges: string[] = [];
   if (e?.tati)
-    badges.push(`<span style="background:rgba(255,215,0,0.2);color:#FFD700;border:1px solid rgba(255,215,0,0.4);border-radius:20px;padding:2px 8px;font-size:11px">✈ ${USER_DISPLAY.tati}</span>`);
+    badges.push(`<span style="background:rgba(255,215,0,0.18);color:#FFD700;border:1px solid rgba(255,215,0,0.4);border-radius:20px;padding:2px 9px;font-size:11px">✈ ${USER_DISPLAY.tati}</span>`);
   if (e?.iva)
-    badges.push(`<span style="background:rgba(255,105,180,0.2);color:#FF69B4;border:1px solid rgba(255,105,180,0.4);border-radius:20px;padding:2px 8px;font-size:11px">✈ ${USER_DISPLAY.iva}</span>`);
-  return `
-    <div style="background:rgba(4,10,28,0.96);border:1px solid rgba(80,130,220,0.35);border-radius:12px;padding:11px 15px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:13px;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.6);min-width:130px">
-      <div style="font-weight:700;color:#93c5fd;font-size:14px;${badges.length ? 'margin-bottom:8px' : ''}">${name}</div>
-      ${badges.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${badges.join('')}</div>` : ''}
-    </div>`;
+    badges.push(`<span style="background:rgba(255,80,160,0.18);color:#ff50a0;border:1px solid rgba(255,80,160,0.4);border-radius:20px;padding:2px 9px;font-size:11px">✈ ${USER_DISPLAY.iva}</span>`);
+  return `<div style="background:rgba(6,14,36,0.97);border:1px solid rgba(80,140,230,0.3);border-radius:12px;padding:10px 14px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:13px;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.7);min-width:120px">
+    <div style="font-weight:700;color:#93c5fd;font-size:14px${badges.length ? ';margin-bottom:7px' : ''}">${name}</div>
+    ${badges.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${badges.join('')}</div>` : ''}
+  </div>`;
 }
 
 function capitalTooltip(c: CapitalCity): string {
-  return `
-    <div style="background:rgba(4,10,28,0.94);border:1px solid rgba(255,220,100,0.3);border-radius:10px;padding:7px 11px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:12px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.5)">
-      <div style="color:#fde68a;font-weight:700">🏛 ${c.capital}</div>
-      <div style="color:#64748b;font-size:11px;margin-top:2px">${c.name}</div>
-    </div>`;
+  return `<div style="background:rgba(6,14,36,0.95);border:1px solid rgba(255,210,80,0.25);border-radius:9px;padding:6px 11px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:12px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.5)">
+    <div style="color:#fde68a;font-weight:600">🏛 ${c.capital}</div>
+    <div style="color:#64748b;font-size:11px;margin-top:2px">${c.name}</div>
+  </div>`;
 }
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const polygonsData = (countriesGeoJson as any).features as GlobePolygon[];
 
 export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,31 +111,38 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
 
   visitsByCountryRef.current = visitsByCountry;
 
+  // Ocean sphere material — created client-side only
+  const globeMaterial = useMemo(() => new THREE.MeshPhongMaterial({
+    color: new THREE.Color('#0e6494'),
+    emissive: new THREE.Color('#071d30'),
+    emissiveIntensity: 0.35,
+    shininess: 6,
+    specular: new THREE.Color('#1a4a6e'),
+  }), []);
+
   useEffect(() => {
     function resize() {
       const size = Math.min(window.innerWidth - 16, Math.floor(window.innerHeight * 0.75));
-      setDims({ w: Math.max(size, 320), h: Math.max(size, 320) });
+      setDims({ w: Math.max(size, 300), h: Math.max(size, 300) });
     }
     resize();
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
 
-  // Set up controls once globe is mounted
-  const handleGlobeMounted = useCallback(() => {
+  const handleGlobeReady = useCallback(() => {
     if (!globeRef.current) return;
     const ctrl = globeRef.current.controls();
     if (ctrl) {
       ctrl.autoRotate = true;
-      ctrl.autoRotateSpeed = 0.35;
+      ctrl.autoRotateSpeed = 0.3;
       ctrl.enableDamping = true;
-      ctrl.dampingFactor = 0.08;
+      ctrl.dampingFactor = 0.1;
       ctrl.minDistance = 120;
       ctrl.maxDistance = 700;
     }
   }, []);
 
-  // Callbacks that depend on hoveredIso and visitsByCountry recreate on each change
   const capColor = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;
     return getCapColor(iso, visitsByCountry, hoveredIso);
@@ -101,7 +150,7 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
 
   const polygonAltitude = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;
-    return iso === hoveredIso ? 0.035 : 0.015;
+    return iso === hoveredIso ? 0.03 : 0.012;
   }, [hoveredIso]);
 
   const handlePolygonHover = useCallback((polygon: object | null) => {
@@ -124,32 +173,50 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
     return countryTooltip(poly.properties?.NAME || iso, iso, visitsByCountry);
   }, [visitsByCountry]);
 
+  const labelSize = useCallback((d: object) => {
+    const l = d as LabelDatum;
+    return l.labelrank <= 2 ? 0.9 : l.labelrank <= 3 ? 0.65 : 0.45;
+  }, []);
+
+  const labelColor = useCallback(() => 'rgba(255,255,255,0.92)', []);
+
   return (
     <ReactGlobe
       ref={globeRef}
       width={dims.w}
       height={dims.h}
       backgroundColor="rgba(0,0,0,0)"
-      globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-      bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-      atmosphereColor="#4a90e2"
-      atmosphereAltitude={0.22}
+      globeMaterial={globeMaterial}
+      atmosphereColor="#5dade2"
+      atmosphereAltitude={0.25}
+      // Countries
       polygonsData={polygonsData}
       polygonAltitude={polygonAltitude}
       polygonCapColor={capColor}
-      polygonSideColor={() => 'rgba(30,80,30,0.6)'}
-      polygonStrokeColor={() => 'rgba(255,255,255,0.9)'}
+      polygonSideColor={() => 'rgba(20,70,20,0.7)'}
+      polygonStrokeColor={() => 'rgba(255,255,255,0.55)'}
       polygonLabel={polygonLabel}
       onPolygonClick={handlePolygonClick}
       onPolygonHover={handlePolygonHover}
+      // Country name labels always visible
+      labelsData={labelsData}
+      labelLat={(d: object) => (d as LabelDatum).lat}
+      labelLng={(d: object) => (d as LabelDatum).lng}
+      labelText={(d: object) => (d as LabelDatum).name}
+      labelSize={labelSize}
+      labelColor={labelColor}
+      labelAltitude={0.013}
+      labelIncludeDot={false}
+      labelResolution={3}
+      // Capital dots
       pointsData={CAPITALS}
       pointLat="lat"
       pointLng="lng"
       pointColor={() => '#ffe880'}
-      pointAltitude={0.015}
-      pointRadius={0.2}
+      pointAltitude={0.013}
+      pointRadius={0.22}
       pointLabel={(d: object) => capitalTooltip(d as CapitalCity)}
-      onGlobeReady={handleGlobeMounted}
+      onGlobeReady={handleGlobeReady}
     />
   );
 }
