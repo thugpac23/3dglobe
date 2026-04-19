@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Country {
+  id      String  @id @default(cuid())
+  name    String
+  capital String
+  isoCode String  @unique
+  visits  Visit[]
+
+  @@map("countries")
+}
+
+model Visit {
+  id        String   @id @default(cuid())
+  countryId String
+  user      User
+  createdAt DateTime @default(now())
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@unique([countryId, user])
+  @@map("visits")
+}
+
+enum User {
+  tati
+  iva
+}

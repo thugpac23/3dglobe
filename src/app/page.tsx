@@ -1,0 +1,204 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
+import { UserType, Visit, VisitsByCountry } from '@/types';
+import { fetchVisits, addVisit, removeVisit } from '@/lib/api';
+import UserToggle from '@/components/UserToggle';
+import VisitsTable from '@/components/VisitsTable';
+
+const Globe = dynamic(() => import('@/components/Globe'), { ssr: false });
+
+interface Toast {
+  id: number;
+  message: string;
+  type: 'add' | 'remove';
+}
+
+export default function Home() {
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [activeUser, setActiveUser] = useState<UserType>('tati');
+  const [loading, setLoading] = useState(true);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const showToast = useCallback((message: string, type: 'add' | 'remove') => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2500);
+  }, []);
+
+  useEffect(() => {
+    fetchVisits()
+      .then(setVisits)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const visitsByCountry = useMemo<VisitsByCountry>(() => {
+    const map: VisitsByCountry = {};
+    for (const visit of visits) {
+      const iso = visit.country.isoCode;
+      if (!map[iso]) {
+        map[iso] = { country: visit.country, tati: false, iva: false };
+      }
+      map[iso][visit.user] = true;
+    }
+    return map;
+  }, [visits]);
+
+  const visitCount = useMemo(() => {
+    let tati = 0, iva = 0, both = 0;
+    for (const entry of Object.values(visitsByCountry)) {
+      if (entry.tati && entry.iva) both++;
+      else if (entry.tati) tati++;
+      else if (entry.iva) iva++;
+    }
+    return { tati, iva, both };
+  }, [visitsByCountry]);
+
+  const handleCountryClick = useCallback(
+    async (isoCode: string, countryName: string) => {
+      const entry = visitsByCountry[isoCode];
+      const alreadyVisited = entry?.[activeUser] ?? false;
+
+      if (alreadyVisited) {
+        const visit = visits.find(
+          (v) => v.country.isoCode === isoCode && v.user === activeUser
+        );
+        if (!visit) return;
+
+        setVisits((prev) => prev.filter((v) => v.id !== visit.id));
+        showToast(`Removed ${countryName} from ${activeUser}'s list`, 'remove');
+
+        try {
+          await removeVisit(visit.countryId, activeUser);
+        } catch {
+          setVisits((prev) => [...prev, visit]);
+          showToast('Error: could not remove visit', 'remove');
+        }
+      } else {
+        let countryId: string | null = null;
+        const anyVisit = visits.find((v) => v.country.isoCode === isoCode);
+        if (anyVisit) {
+          countryId = anyVisit.countryId;
+        } else {
+          try {
+            const res = await fetch(`/api/country?iso=${isoCode}`);
+            if (!res.ok) throw new Error('Not found');
+            const data = await res.json();
+            countryId = data.id;
+          } catch {
+            showToast(`${countryName} not found in database`, 'remove');
+            return;
+          }
+        }
+
+        const optimisticVisit: Visit = {
+          id: `temp-${Date.now()}`,
+          countryId: countryId!,
+          user: activeUser,
+          country: entry?.country ?? {
+            id: countryId!,
+            name: countryName,
+            capital: '',
+            isoCode,
+          },
+        };
+        setVisits((prev) => [...prev, optimisticVisit]);
+        showToast(`Added ${countryName} to ${activeUser}'s list ✓`, 'add');
+
+        try {
+          const newVisit = await addVisit(countryId!, activeUser);
+          setVisits((prev) => [
+            ...prev.filter((v) => v.id !== optimisticVisit.id),
+            newVisit,
+          ]);
+        } catch {
+          setVisits((prev) => prev.filter((v) => v.id !== optimisticVisit.id));
+          showToast('Error: could not save visit', 'remove');
+        }
+      }
+    },
+    [visitsByCountry, visits, activeUser, showToast]
+  );
+
+  return (
+    <main
+      className="min-h-screen flex flex-col items-center pb-16"
+      style={{ background: '#050d1f' }}
+    >
+      <header className="w-full py-6 px-6 text-center relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/30 to-transparent pointer-events-none" />
+        <h1 className="text-3xl font-bold tracking-tight text-white relative z-10">
+          🌍 Travel Globe Tracker
+        </h1>
+        <p className="text-slate-500 text-sm mt-1 relative z-10">
+          Explore the world together
+        </p>
+      </header>
+
+      <UserToggle
+        activeUser={activeUser}
+        onToggle={setActiveUser}
+        visitCount={visitCount}
+      />
+
+      {loading ? (
+        <div className="flex items-center justify-center h-96">
+          <div className="text-slate-400 flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm">Loading globe...</span>
+          </div>
+        </div>
+      ) : (
+        <div className="globe-glow">
+          <Globe
+            visitsByCountry={visitsByCountry}
+            activeUser={activeUser}
+            onCountryClick={handleCountryClick}
+          />
+        </div>
+      )}
+
+      <div className="flex items-center gap-6 mt-4 text-xs text-slate-500">
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full inline-block bg-[#FFD700]" />
+          tati only
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full inline-block bg-[#FF69B4]" />
+          iva only
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full inline-block bg-[#FFB347]" />
+          both visited
+        </div>
+      </div>
+
+      <VisitsTable visitsByCountry={visitsByCountry} />
+
+      <div className="fixed top-4 left-1/2 z-50 flex flex-col gap-2 pointer-events-none"
+           style={{ transform: 'translateX(-50%)' }}>
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="toast px-4 py-2 rounded-lg text-sm font-medium shadow-xl whitespace-nowrap"
+            style={{
+              background:
+                toast.type === 'add'
+                  ? 'rgba(5,150,105,0.95)'
+                  : 'rgba(220,38,38,0.9)',
+              color: '#fff',
+              border:
+                toast.type === 'add'
+                  ? '1px solid rgba(16,185,129,0.5)'
+                  : '1px solid rgba(248,113,113,0.5)',
+            }}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}
