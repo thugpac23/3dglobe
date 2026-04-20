@@ -18,6 +18,7 @@ interface GlobeProps {
   activeUser: string;
   mode: AppMode;
   onCountryClick: (isoCode: string, countryName: string) => void;
+  fullscreen?: boolean;
 }
 
 const COLOR = {
@@ -32,7 +33,6 @@ const COLOR = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const polygonsData = (countriesGeoJson as any).features as GlobePolygon[];
 
-// Compute bounding-box centre of each GeoJSON feature for label placement
 function featureCentroid(feature: GlobePolygon): [number, number] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const geom = (feature as any).geometry;
@@ -62,7 +62,6 @@ interface LabelDatum {
   labelrank: number;
 }
 
-// Only show labels for countries important enough to be legible on globe
 const labelsData: LabelDatum[] = polygonsData.flatMap((feature) => {
   const iso = feature.properties?.ISO_A2;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,6 +92,7 @@ function getCapColor(
 }
 
 function countryTooltip(name: string, iso: string, visitsByCountry: VisitsByCountry): string {
+  const bgName = BG_NAMES[iso] ?? name;
   const e = visitsByCountry[iso];
   const badges: string[] = [];
   if (e?.tati)
@@ -100,7 +100,7 @@ function countryTooltip(name: string, iso: string, visitsByCountry: VisitsByCoun
   if (e?.iva)
     badges.push(`<span style="background:rgba(255,80,160,0.18);color:#ff50a0;border:1px solid rgba(255,80,160,0.4);border-radius:20px;padding:2px 9px;font-size:11px">✈ ${USER_DISPLAY.iva}</span>`);
   return `<div style="background:rgba(6,14,36,0.97);border:1px solid rgba(80,140,230,0.3);border-radius:12px;padding:10px 14px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:13px;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.7);min-width:120px">
-    <div style="font-weight:700;color:#93c5fd;font-size:14px${badges.length ? ';margin-bottom:7px' : ''}">${name}</div>
+    <div style="font-weight:700;color:#93c5fd;font-size:14px${badges.length ? ';margin-bottom:7px' : ''}">${bgName}</div>
     ${badges.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${badges.join('')}</div>` : ''}
   </div>`;
 }
@@ -112,7 +112,26 @@ function capitalTooltip(c: CapitalCity): string {
   </div>`;
 }
 
-export default function Globe({ visitsByCountry, wishlistByCountry, onCountryClick }: GlobeProps) {
+// Creates a DOM element for each country label — uses real HTML so Cyrillic renders correctly
+function makeLabelEl(d: LabelDatum): HTMLElement {
+  const el = document.createElement('div');
+  el.textContent = d.name;
+  const size = d.labelrank <= 2 ? 11 : d.labelrank <= 3 ? 9 : 8;
+  el.style.cssText = [
+    'color:rgba(255,255,255,0.95)',
+    `font-size:${size}px`,
+    'font-weight:700',
+    'font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif',
+    'text-shadow:0 1px 4px rgba(0,0,0,0.95),0 0 8px rgba(0,0,0,0.7)',
+    'pointer-events:none',
+    'white-space:nowrap',
+    'user-select:none',
+    'letter-spacing:0.03em',
+  ].join(';');
+  return el;
+}
+
+export default function Globe({ visitsByCountry, wishlistByCountry, onCountryClick, fullscreen = false }: GlobeProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
   const visitsByCountryRef = useRef(visitsByCountry);
@@ -123,7 +142,6 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
 
   visitsByCountryRef.current = visitsByCountry;
 
-  // Ocean sphere material — created client-side only
   const globeMaterial = useMemo(() => new THREE.MeshPhongMaterial({
     color: new THREE.Color('#0e6494'),
     emissive: new THREE.Color('#071d30'),
@@ -134,13 +152,18 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
 
   useEffect(() => {
     function resize() {
-      const size = Math.min(window.innerWidth - 16, Math.floor(window.innerHeight * 0.75));
+      let size: number;
+      if (fullscreen) {
+        size = Math.min(window.innerWidth, window.innerHeight - 72);
+      } else {
+        size = Math.min(window.innerWidth - 16, Math.floor(window.innerHeight * 0.75));
+      }
       setDims({ w: Math.max(size, 300), h: Math.max(size, 300) });
     }
     resize();
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
-  }, []);
+  }, [fullscreen]);
 
   const handleGlobeReady = useCallback(() => {
     if (!globeRef.current) return;
@@ -185,13 +208,6 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
     return countryTooltip(poly.properties?.NAME || iso, iso, visitsByCountry);
   }, [visitsByCountry]);
 
-  const labelSize = useCallback((d: object) => {
-    const l = d as LabelDatum;
-    return l.labelrank <= 2 ? 0.9 : l.labelrank <= 3 ? 0.65 : 0.45;
-  }, []);
-
-  const labelColor = useCallback(() => 'rgba(255,255,255,0.92)', []);
-
   return (
     <ReactGlobe
       ref={globeRef}
@@ -201,7 +217,6 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
       globeMaterial={globeMaterial}
       atmosphereColor="#5dade2"
       atmosphereAltitude={0.25}
-      // Countries
       polygonsData={polygonsData}
       polygonAltitude={polygonAltitude}
       polygonCapColor={capColor}
@@ -210,17 +225,12 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
       polygonLabel={polygonLabel}
       onPolygonClick={handlePolygonClick}
       onPolygonHover={handlePolygonHover}
-      // Country name labels always visible
-      labelsData={labelsData}
-      labelLat={(d: object) => (d as LabelDatum).lat}
-      labelLng={(d: object) => (d as LabelDatum).lng}
-      labelText={(d: object) => (d as LabelDatum).name}
-      labelSize={labelSize}
-      labelColor={labelColor}
-      labelAltitude={0.013}
-      labelIncludeDot={false}
-      labelResolution={3}
-      // Capital dots
+      // HTML elements layer — renders real DOM so Cyrillic works
+      htmlElementsData={labelsData}
+      htmlLat={(d: object) => (d as LabelDatum).lat}
+      htmlLng={(d: object) => (d as LabelDatum).lng}
+      htmlAltitude={0.02}
+      htmlElement={(d: object) => makeLabelEl(d as LabelDatum)}
       pointsData={CAPITALS}
       pointLat="lat"
       pointLng="lng"

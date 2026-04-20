@@ -3,12 +3,55 @@
 import { useState, useEffect } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
 import { Visit, VisitsByCountry, UserType, USER_COLOR, USER_DISPLAY } from '@/types';
+import { BG_NAMES } from '@/data/countryNamesBg';
 import { fetchVisits } from '@/lib/api';
 import { sounds, resumeAudio } from '@/lib/sounds';
+import countriesGeoJson from '@/data/countries.json';
 
-const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+// Compute centroid from GeoJSON feature for label placement
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function featureCentroid(feature: any): [number, number] {
+  const geom = feature.geometry;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let ring: [number, number][] = [];
+  if (geom.type === 'Polygon') {
+    ring = geom.coordinates[0];
+  } else if (geom.type === 'MultiPolygon') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ring = geom.coordinates.reduce((a: any, b: any) =>
+      a[0].length >= b[0].length ? a : b
+    )[0];
+  }
+  if (!ring.length) return [0, 0];
+  const lons = ring.map((c) => c[0]);
+  const lats = ring.map((c) => c[1]);
+  return [
+    (Math.min(...lons) + Math.max(...lons)) / 2,
+    (Math.min(...lats) + Math.max(...lats)) / 2,
+  ];
+}
 
-const COUNTRY_ISO_MAP: Record<string, string> = {};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const geoFeatures = (countriesGeoJson as any).features as any[];
+
+interface LabelFeature {
+  iso: string;
+  name: string;
+  lng: number;
+  lat: number;
+  rank: number;
+}
+
+// Only label important countries (LABELRANK ≤ 4) to avoid clutter
+const labelFeatures: LabelFeature[] = geoFeatures.flatMap(f => {
+  const iso = f.properties?.ISO_A2 as string;
+  const rank = (f.properties?.LABELRANK ?? 99) as number;
+  if (rank > 4) return [];
+  const name = BG_NAMES[iso] ?? f.properties?.NAME ?? '';
+  if (!name) return [];
+  const [lng, lat] = featureCentroid(f);
+  return [{ iso, name, lng, lat, rank }];
+});
 
 export default function KartaPage() {
   const [visits, setVisits] = useState<VisitsByCountry>({});
@@ -49,7 +92,7 @@ export default function KartaPage() {
     <main className="min-h-screen px-4 py-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-extrabold text-slate-800 mb-1">🗺️ Карта на пътешествията</h1>
       <p className="text-slate-500 text-sm mb-5">
-        {visitedCount} посетени държави
+        {visitedCount > 0 ? `${visitedCount} посетени държави` : 'Все още няма посетени държави'}
       </p>
 
       {/* User filter */}
@@ -95,17 +138,21 @@ export default function KartaPage() {
       </div>
 
       {/* Map */}
-      <div className="rounded-2xl overflow-hidden shadow-md bg-sky-100 relative" style={{ height: 480 }}>
+      <div
+        className="rounded-2xl overflow-hidden shadow-md relative"
+        style={{ height: 480, background: '#bfdbfe' }}
+      >
         <ComposableMap
           projection="geoNaturalEarth1"
           style={{ width: '100%', height: '100%' }}
         >
           <ZoomableGroup>
-            <Geographies geography={GEO_URL}>
+            <Geographies geography={countriesGeoJson}>
               {({ geographies }) =>
                 geographies.map(geo => {
-                  const iso2 = geo.properties.ISO_A2 as string;
+                  const iso2 = geo.properties?.ISO_A2 as string;
                   const color = getColor(iso2);
+                  const bgName = BG_NAMES[iso2] ?? geo.properties?.NAME ?? iso2;
                   return (
                     <Geography
                       key={geo.rsmKey}
@@ -119,7 +166,10 @@ export default function KartaPage() {
                         pressed: { outline: 'none' },
                       }}
                       onMouseEnter={(e) => {
-                        setTooltip({ name: geo.properties.NAME as string, x: e.clientX, y: e.clientY });
+                        setTooltip({ name: bgName, x: e.clientX, y: e.clientY });
+                      }}
+                      onMouseMove={(e) => {
+                        setTooltip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null);
                       }}
                       onMouseLeave={() => setTooltip(null)}
                     />
@@ -127,13 +177,31 @@ export default function KartaPage() {
                 })
               }
             </Geographies>
+
+            {/* Country name labels for major countries */}
+            {labelFeatures.map(lbl => (
+              <Marker key={lbl.iso} coordinates={[lbl.lng, lbl.lat]}>
+                <text
+                  textAnchor="middle"
+                  style={{ pointerEvents: 'none', userSelect: 'none' }}
+                  fontSize={lbl.rank <= 2 ? 5 : lbl.rank <= 3 ? 4 : 3.5}
+                  fontWeight="bold"
+                  fill="#1e293b"
+                  stroke="white"
+                  strokeWidth={0.8}
+                  paintOrder="stroke"
+                >
+                  {lbl.name}
+                </text>
+              </Marker>
+            ))}
           </ZoomableGroup>
         </ComposableMap>
 
         {tooltip && (
           <div
-            className="pointer-events-none fixed z-50 px-3 py-1.5 bg-slate-800 text-white text-xs rounded-lg shadow-lg"
-            style={{ left: tooltip.x + 12, top: tooltip.y - 30 }}
+            className="pointer-events-none fixed z-50 px-3 py-1.5 bg-slate-800 text-white text-xs rounded-lg shadow-lg font-semibold"
+            style={{ left: tooltip.x + 12, top: tooltip.y - 36 }}
           >
             {tooltip.name}
           </div>
@@ -158,7 +226,7 @@ export default function KartaPage() {
                       : USER_COLOR[activeUser],
                   }}
                 >
-                  {v.country.name}
+                  {BG_NAMES[v.country.isoCode] ?? v.country.name}
                 </span>
               ))}
           </div>
