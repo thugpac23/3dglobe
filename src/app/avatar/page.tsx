@@ -15,14 +15,26 @@ const HAIR_COLORS = ['#8B4513','#1a1a1a','#F59E0B','#DC2626','#7C3AED','#D1D5DB'
 const EYE_COLORS  = ['#4B5563','#1E40AF','#065F46','#92400E','#7C3AED','#DB2777'];
 const SKIN_COLORS = ['#FBBF8A','#F5CBA7','#C68642','#8D5524','#FFDAB9'];
 const OUTFITS: { value: AvatarConfig['outfit']; label: string; emoji: string }[] = [
-  { value: 'casual',   label: 'Ежедневно', emoji: '👕' },
-  { value: 'travel',   label: 'Пътувалник',emoji: '🧥' },
-  { value: 'explorer', label: 'Изследовател', emoji: '🦺' },
+  { value: 'casual',    label: 'Ежедневно',    emoji: '👕' },
+  { value: 'travel',    label: 'Пътна яке',    emoji: '🧥' },
+  { value: 'explorer',  label: 'Изследовател', emoji: '🦺' },
+  { value: 'summer',    label: 'Лятно',        emoji: '🌞' },
+  { value: 'winter',    label: 'Зимно',        emoji: '🧣' },
+  { value: 'sporty',    label: 'Спортно',      emoji: '🏃' },
+  { value: 'adventure', label: 'Приключение',  emoji: '🧗' },
+  { value: 'beach',     label: 'Плажно',       emoji: '🏖️' },
+  { value: 'city',      label: 'Градско',      emoji: '🏙️' },
 ];
 const ACCESSORIES_LIST = [
-  { id: 'hat',      label: 'Шапка',    emoji: '🎩' },
-  { id: 'glasses',  label: 'Очила',    emoji: '👓' },
-  { id: 'backpack', label: 'Раница',   emoji: '🎒' },
+  { id: 'hat',            label: 'Цилиндър',        emoji: '🎩' },
+  { id: 'glasses',        label: 'Очила',            emoji: '👓' },
+  { id: 'backpack',       label: 'Раница',           emoji: '🎒' },
+  { id: 'cap',            label: 'Шапка с козирка',  emoji: '🧢' },
+  { id: 'sunglasses',     label: 'Слънчеви очила',   emoji: '🕶️' },
+  { id: 'travel-backpack',label: 'Туристическа раница', emoji: '🏕️' },
+  { id: 'camera',         label: 'Фотоапарат',       emoji: '📷' },
+  { id: 'scarf',          label: 'Шал',              emoji: '🧣' },
+  { id: 'headphones',     label: 'Слушалки',         emoji: '🎧' },
 ];
 
 const DEFAULT_AVATAR: Omit<AvatarConfig, 'id' | 'user'> = {

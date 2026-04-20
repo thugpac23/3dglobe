@@ -23,11 +23,12 @@ interface GlobeProps {
 
 const COLOR = {
   default:  'rgba(44,120,44,0.92)',
-  hover:    'rgba(100,190,255,0.92)',
   tati:     'rgba(255,215,0,0.94)',
   iva:      'rgba(255,80,160,0.94)',
   both:     'rgba(255,155,40,0.94)',
   wishlist: 'rgba(20,184,166,0.88)',
+  wishHover:'rgba(20,220,200,0.96)',
+  hover:    'rgba(255,220,60,0.92)',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,14 +56,25 @@ function featureCentroid(feature: GlobePolygon): [number, number] {
   ];
 }
 
+function getFlagEmoji(iso2: string): string {
+  if (!iso2 || iso2.length !== 2) return '';
+  try {
+    return String.fromCodePoint(
+      0x1F1E6 + iso2.toUpperCase().charCodeAt(0) - 65,
+      0x1F1E6 + iso2.toUpperCase().charCodeAt(1) - 65,
+    );
+  } catch { return ''; }
+}
+
 interface LabelDatum {
   lat: number;
   lng: number;
   name: string;
   labelrank: number;
+  type: 'label' | 'flag';
 }
 
-const labelsData: LabelDatum[] = polygonsData.flatMap((feature) => {
+const allLabels: LabelDatum[] = polygonsData.flatMap((feature) => {
   const iso = feature.properties?.ISO_A2;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const labelrank: number = (feature.properties as any)?.LABELRANK ?? 99;
@@ -70,77 +82,110 @@ const labelsData: LabelDatum[] = polygonsData.flatMap((feature) => {
   const name = BG_NAMES[iso] ?? feature.properties?.NAME ?? '';
   if (!name) return [];
   const [lng, lat] = featureCentroid(feature);
-  return [{ lat, lng, name, labelrank }];
+  return [{ lat, lng, name, labelrank, type: 'label' as const }];
 });
+
+// Centroid map for flag overlay
+const centroidByIso = new Map<string, [number, number]>();
+for (const feature of polygonsData) {
+  const iso = feature.properties?.ISO_A2;
+  if (iso) centroidByIso.set(iso, featureCentroid(feature));
+}
 
 function getCapColor(
   iso: string,
   visitsByCountry: VisitsByCountry,
   wishlistByCountry: WishlistByCountry,
-  hoveredIso: string | null
+  hoveredIso: string | null,
+  mode: AppMode,
 ): string {
   if (iso === hoveredIso) return COLOR.hover;
+  if (mode === 'wishlist') {
+    const w = wishlistByCountry[iso];
+    if (w && (w.tati || w.iva)) return COLOR.wishlist;
+    return COLOR.default;
+  }
   const v = visitsByCountry[iso];
   if (v) {
     if (v.tati && v.iva) return COLOR.both;
     if (v.tati) return COLOR.tati;
     if (v.iva) return COLOR.iva;
   }
-  const w = wishlistByCountry[iso];
-  if (w && (w.tati || w.iva)) return COLOR.wishlist;
   return COLOR.default;
 }
 
-function countryTooltip(name: string, iso: string, visitsByCountry: VisitsByCountry): string {
+function makeTooltip(name: string, iso: string, visited: VisitsByCountry, wished: WishlistByCountry, mode: AppMode): string {
+  const flag = getFlagEmoji(iso);
   const bgName = BG_NAMES[iso] ?? name;
-  const e = visitsByCountry[iso];
   const badges: string[] = [];
-  if (e?.tati)
-    badges.push(`<span style="background:rgba(255,215,0,0.18);color:#FFD700;border:1px solid rgba(255,215,0,0.4);border-radius:20px;padding:2px 9px;font-size:11px">✈ ${USER_DISPLAY.tati}</span>`);
-  if (e?.iva)
-    badges.push(`<span style="background:rgba(255,80,160,0.18);color:#ff50a0;border:1px solid rgba(255,80,160,0.4);border-radius:20px;padding:2px 9px;font-size:11px">✈ ${USER_DISPLAY.iva}</span>`);
+  if (mode === 'visited') {
+    const e = visited[iso];
+    if (e?.tati) badges.push(`<span style="background:rgba(255,215,0,0.18);color:#FFD700;border:1px solid rgba(255,215,0,0.4);border-radius:20px;padding:2px 9px;font-size:11px">✈ ${USER_DISPLAY.tati}</span>`);
+    if (e?.iva)  badges.push(`<span style="background:rgba(255,80,160,0.18);color:#ff50a0;border:1px solid rgba(255,80,160,0.4);border-radius:20px;padding:2px 9px;font-size:11px">✈ ${USER_DISPLAY.iva}</span>`);
+  } else {
+    const e = wished[iso];
+    if (e?.tati) badges.push(`<span style="background:rgba(20,184,166,0.18);color:#14B8A6;border:1px solid rgba(20,184,166,0.4);border-radius:20px;padding:2px 9px;font-size:11px">⭐ ${USER_DISPLAY.tati}</span>`);
+    if (e?.iva)  badges.push(`<span style="background:rgba(20,184,166,0.18);color:#14B8A6;border:1px solid rgba(20,184,166,0.4);border-radius:20px;padding:2px 9px;font-size:11px">⭐ ${USER_DISPLAY.iva}</span>`);
+  }
   return `<div style="background:rgba(6,14,36,0.97);border:1px solid rgba(80,140,230,0.3);border-radius:12px;padding:10px 14px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:13px;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.7);min-width:120px">
-    <div style="font-weight:700;color:#93c5fd;font-size:14px${badges.length ? ';margin-bottom:7px' : ''}">${bgName}</div>
+    <div style="font-weight:700;color:#93c5fd;font-size:14px${badges.length ? ';margin-bottom:7px' : ''}">${flag} ${bgName}</div>
     ${badges.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${badges.join('')}</div>` : ''}
   </div>`;
 }
 
-function capitalTooltip(c: CapitalCity): string {
-  return `<div style="background:rgba(6,14,36,0.95);border:1px solid rgba(255,210,80,0.25);border-radius:9px;padding:6px 11px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:12px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.5)">
-    <div style="color:#fde68a;font-weight:600">🏛 ${c.capital}</div>
-    <div style="color:#64748b;font-size:11px;margin-top:2px">${c.name}</div>
-  </div>`;
-}
-
-// Creates a DOM element for each country label — uses real HTML so Cyrillic renders correctly
-function makeLabelEl(d: LabelDatum): HTMLElement {
+function makeHtmlEl(d: object): HTMLElement {
+  const datum = d as LabelDatum;
   const el = document.createElement('div');
-  el.textContent = d.name;
-  const size = d.labelrank <= 2 ? 11 : d.labelrank <= 3 ? 9 : 8;
-  el.style.cssText = [
-    'color:rgba(255,255,255,0.95)',
-    `font-size:${size}px`,
-    'font-weight:700',
-    'font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif',
-    'text-shadow:0 1px 4px rgba(0,0,0,0.95),0 0 8px rgba(0,0,0,0.7)',
-    'pointer-events:none',
-    'white-space:nowrap',
-    'user-select:none',
-    'letter-spacing:0.03em',
-  ].join(';');
+  if (datum.type === 'flag') {
+    el.textContent = datum.name;
+    el.style.cssText = [
+      'font-size:22px',
+      'line-height:1',
+      'pointer-events:none',
+      'filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))',
+      'transform:translate(-50%,-50%)',
+      'user-select:none',
+    ].join(';');
+  } else {
+    const sz = datum.labelrank <= 2 ? 11 : datum.labelrank <= 3 ? 9 : 8;
+    el.textContent = datum.name;
+    el.style.cssText = [
+      'color:rgba(255,255,255,0.95)',
+      `font-size:${sz}px`,
+      'font-weight:700',
+      'font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif',
+      'text-shadow:0 1px 4px rgba(0,0,0,0.95),0 0 8px rgba(0,0,0,0.7)',
+      'pointer-events:none',
+      'white-space:nowrap',
+      'user-select:none',
+      'transform:translate(-50%,-50%)',
+      'letter-spacing:0.03em',
+    ].join(';');
+  }
   return el;
 }
 
-export default function Globe({ visitsByCountry, wishlistByCountry, onCountryClick, fullscreen = false }: GlobeProps) {
+const ZoomBtn = ({ label, onClick }: { label: string; onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    className="w-9 h-9 rounded-xl flex items-center justify-center text-xl font-bold transition-all hover:scale-110 active:scale-95"
+    style={{
+      background: 'rgba(6,18,40,0.85)',
+      color: 'rgba(180,210,255,0.9)',
+      border: '1px solid rgba(80,140,230,0.25)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+    }}
+  >
+    {label}
+  </button>
+);
+
+export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCountryClick, fullscreen = false }: GlobeProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
-  const visitsByCountryRef = useRef(visitsByCountry);
-  const wishlistByCountryRef = useRef(wishlistByCountry);
   const [hoveredIso, setHoveredIso] = useState<string | null>(null);
-  wishlistByCountryRef.current = wishlistByCountry;
   const [dims, setDims] = useState({ w: 320, h: 320 });
-
-  visitsByCountryRef.current = visitsByCountry;
+  const [cameraAlt, setCameraAlt] = useState(2.5);
 
   const globeMaterial = useMemo(() => new THREE.MeshPhongMaterial({
     color: new THREE.Color('#0e6494'),
@@ -150,14 +195,12 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
     specular: new THREE.Color('#1a4a6e'),
   }), []);
 
+  // Resize
   useEffect(() => {
     function resize() {
-      let size: number;
-      if (fullscreen) {
-        size = Math.min(window.innerWidth, window.innerHeight - 72);
-      } else {
-        size = Math.min(window.innerWidth - 16, Math.floor(window.innerHeight * 0.75));
-      }
+      const size = fullscreen
+        ? Math.min(window.innerWidth, window.innerHeight - 72)
+        : Math.min(window.innerWidth - 16, Math.floor(window.innerHeight * 0.75));
       setDims({ w: Math.max(size, 300), h: Math.max(size, 300) });
     }
     resize();
@@ -165,9 +208,40 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
     return () => window.removeEventListener('resize', resize);
   }, [fullscreen]);
 
+  // Poll camera altitude for label threshold
+  useEffect(() => {
+    const id = setInterval(() => {
+      const pov = globeRef.current?.pointOfView?.();
+      if (pov?.altitude !== undefined) {
+        setCameraAlt(prev => Math.abs(prev - pov.altitude) > 0.05 ? pov.altitude : prev);
+      }
+    }, 300);
+    return () => clearInterval(id);
+  }, []);
+
+  // Labels: only show after zoom in (altitude < 1.8)
+  const visibleLabels = useMemo<LabelDatum[]>(() => {
+    if (cameraAlt > 2.0) return [];
+    if (cameraAlt > 1.4) return allLabels.filter(l => l.labelrank <= 2);
+    if (cameraAlt > 0.9) return allLabels.filter(l => l.labelrank <= 3);
+    return allLabels.filter(l => l.labelrank <= 5);
+  }, [cameraAlt]);
+
+  // Combine labels + flag emoji on hover
+  const htmlData = useMemo<LabelDatum[]>(() => {
+    const base = [...visibleLabels];
+    if (hoveredIso) {
+      const coords = centroidByIso.get(hoveredIso);
+      const flag = getFlagEmoji(hoveredIso);
+      if (coords && flag) {
+        base.push({ lat: coords[1], lng: coords[0], name: flag, labelrank: -1, type: 'flag' });
+      }
+    }
+    return base;
+  }, [visibleLabels, hoveredIso]);
+
   const handleGlobeReady = useCallback(() => {
-    if (!globeRef.current) return;
-    const ctrl = globeRef.current.controls();
+    const ctrl = globeRef.current?.controls();
     if (ctrl) {
       ctrl.autoRotate = true;
       ctrl.autoRotateSpeed = 0.3;
@@ -180,8 +254,8 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
 
   const capColor = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;
-    return getCapColor(iso, visitsByCountry, wishlistByCountry, hoveredIso);
-  }, [visitsByCountry, wishlistByCountry, hoveredIso]);
+    return getCapColor(iso, visitsByCountry, wishlistByCountry, hoveredIso, mode);
+  }, [visitsByCountry, wishlistByCountry, hoveredIso, mode]);
 
   const polygonAltitude = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;
@@ -205,40 +279,58 @@ export default function Globe({ visitsByCountry, wishlistByCountry, onCountryCli
   const polygonLabel = useCallback((d: object) => {
     const poly = d as GlobePolygon;
     const iso = poly.properties?.ISO_A2;
-    return countryTooltip(poly.properties?.NAME || iso, iso, visitsByCountry);
-  }, [visitsByCountry]);
+    return makeTooltip(poly.properties?.NAME || iso, iso, visitsByCountry, wishlistByCountry, mode);
+  }, [visitsByCountry, wishlistByCountry, mode]);
+
+  function zoomIn() {
+    const pov = globeRef.current?.pointOfView?.();
+    if (pov) globeRef.current.pointOfView({ ...pov, altitude: Math.max(0.3, pov.altitude * 0.65) }, 350);
+  }
+  function zoomOut() {
+    const pov = globeRef.current?.pointOfView?.();
+    if (pov) globeRef.current.pointOfView({ ...pov, altitude: Math.min(5, pov.altitude * 1.5) }, 350);
+  }
 
   return (
-    <ReactGlobe
-      ref={globeRef}
-      width={dims.w}
-      height={dims.h}
-      backgroundColor="rgba(0,0,0,0)"
-      globeMaterial={globeMaterial}
-      atmosphereColor="#5dade2"
-      atmosphereAltitude={0.25}
-      polygonsData={polygonsData}
-      polygonAltitude={polygonAltitude}
-      polygonCapColor={capColor}
-      polygonSideColor={() => 'rgba(20,70,20,0.7)'}
-      polygonStrokeColor={() => 'rgba(255,255,255,0.55)'}
-      polygonLabel={polygonLabel}
-      onPolygonClick={handlePolygonClick}
-      onPolygonHover={handlePolygonHover}
-      // HTML elements layer — renders real DOM so Cyrillic works
-      htmlElementsData={labelsData}
-      htmlLat={(d: object) => (d as LabelDatum).lat}
-      htmlLng={(d: object) => (d as LabelDatum).lng}
-      htmlAltitude={0.02}
-      htmlElement={(d: object) => makeLabelEl(d as LabelDatum)}
-      pointsData={CAPITALS}
-      pointLat="lat"
-      pointLng="lng"
-      pointColor={() => '#ffe880'}
-      pointAltitude={0.013}
-      pointRadius={0.22}
-      pointLabel={(d: object) => capitalTooltip(d as CapitalCity)}
-      onGlobeReady={handleGlobeReady}
-    />
+    <div className="relative inline-block">
+      <ReactGlobe
+        ref={globeRef}
+        width={dims.w}
+        height={dims.h}
+        backgroundColor="rgba(0,0,0,0)"
+        globeMaterial={globeMaterial}
+        atmosphereColor="#5dade2"
+        atmosphereAltitude={0.25}
+        polygonsData={polygonsData}
+        polygonAltitude={polygonAltitude}
+        polygonCapColor={capColor}
+        polygonSideColor={() => 'rgba(20,70,20,0.7)'}
+        polygonStrokeColor={() => 'rgba(255,240,120,0.85)'}
+        polygonLabel={polygonLabel}
+        onPolygonClick={handlePolygonClick}
+        onPolygonHover={handlePolygonHover}
+        htmlElementsData={htmlData}
+        htmlLat={(d: object) => (d as LabelDatum).lat}
+        htmlLng={(d: object) => (d as LabelDatum).lng}
+        htmlAltitude={0.02}
+        htmlElement={makeHtmlEl}
+        pointsData={CAPITALS}
+        pointLat="lat"
+        pointLng="lng"
+        pointColor={() => '#ffe880'}
+        pointAltitude={0.013}
+        pointRadius={0.22}
+        pointLabel={(d: object) => {
+          const c = d as CapitalCity;
+          return `<div style="background:rgba(6,14,36,0.95);border:1px solid rgba(255,210,80,0.25);border-radius:9px;padding:6px 11px;color:#e2e8f0;font-family:-apple-system,sans-serif;font-size:12px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.5)"><div style="color:#fde68a;font-weight:600">🏛 ${c.capital}</div><div style="color:#64748b;font-size:11px;margin-top:2px">${c.name}</div></div>`;
+        }}
+        onGlobeReady={handleGlobeReady}
+      />
+      {/* Zoom buttons */}
+      <div className="absolute flex flex-col gap-2 z-10" style={{ top: 16, right: 16 }}>
+        <ZoomBtn label="+" onClick={zoomIn} />
+        <ZoomBtn label="−" onClick={zoomOut} />
+      </div>
+    </div>
   );
 }
