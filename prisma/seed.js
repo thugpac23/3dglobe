@@ -209,6 +209,15 @@ async function main() {
     });
   }
   console.log(`Done — ${countries.length} countries seeded.`);
+
+  for (const user of ['tati', 'iva']) {
+    await prisma.userProgress.upsert({
+      where: { user },
+      update: {},
+      create: { user, xp: 0, level: 1, achievements: '[]' },
+    });
+  }
+  console.log('UserProgress records ready.');
 }
 
 main()

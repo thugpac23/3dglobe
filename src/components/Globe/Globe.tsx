@@ -10,17 +10,23 @@ import countriesGeoJson from '@/data/countries.json';
 
 const ReactGlobe = dynamic(() => import('react-globe.gl'), { ssr: false });
 
+import { AppMode, WishlistByCountry } from '@/types';
+
 interface GlobeProps {
   visitsByCountry: VisitsByCountry;
+  wishlistByCountry: WishlistByCountry;
+  activeUser: string;
+  mode: AppMode;
   onCountryClick: (isoCode: string, countryName: string) => void;
 }
 
 const COLOR = {
-  default: 'rgba(44,120,44,0.92)',
-  hover:   'rgba(100,190,255,0.92)',
-  tati:    'rgba(255,215,0,0.94)',
-  iva:     'rgba(255,80,160,0.94)',
-  both:    'rgba(255,155,40,0.94)',
+  default:  'rgba(44,120,44,0.92)',
+  hover:    'rgba(100,190,255,0.92)',
+  tati:     'rgba(255,215,0,0.94)',
+  iva:      'rgba(255,80,160,0.94)',
+  both:     'rgba(255,155,40,0.94)',
+  wishlist: 'rgba(20,184,166,0.88)',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,14 +77,18 @@ const labelsData: LabelDatum[] = polygonsData.flatMap((feature) => {
 function getCapColor(
   iso: string,
   visitsByCountry: VisitsByCountry,
+  wishlistByCountry: WishlistByCountry,
   hoveredIso: string | null
 ): string {
   if (iso === hoveredIso) return COLOR.hover;
-  const e = visitsByCountry[iso];
-  if (!e) return COLOR.default;
-  if (e.tati && e.iva) return COLOR.both;
-  if (e.tati) return COLOR.tati;
-  if (e.iva) return COLOR.iva;
+  const v = visitsByCountry[iso];
+  if (v) {
+    if (v.tati && v.iva) return COLOR.both;
+    if (v.tati) return COLOR.tati;
+    if (v.iva) return COLOR.iva;
+  }
+  const w = wishlistByCountry[iso];
+  if (w && (w.tati || w.iva)) return COLOR.wishlist;
   return COLOR.default;
 }
 
@@ -102,11 +112,13 @@ function capitalTooltip(c: CapitalCity): string {
   </div>`;
 }
 
-export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
+export default function Globe({ visitsByCountry, wishlistByCountry, onCountryClick }: GlobeProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
   const visitsByCountryRef = useRef(visitsByCountry);
+  const wishlistByCountryRef = useRef(wishlistByCountry);
   const [hoveredIso, setHoveredIso] = useState<string | null>(null);
+  wishlistByCountryRef.current = wishlistByCountry;
   const [dims, setDims] = useState({ w: 320, h: 320 });
 
   visitsByCountryRef.current = visitsByCountry;
@@ -145,8 +157,8 @@ export default function Globe({ visitsByCountry, onCountryClick }: GlobeProps) {
 
   const capColor = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;
-    return getCapColor(iso, visitsByCountry, hoveredIso);
-  }, [visitsByCountry, hoveredIso]);
+    return getCapColor(iso, visitsByCountry, wishlistByCountry, hoveredIso);
+  }, [visitsByCountry, wishlistByCountry, hoveredIso]);
 
   const polygonAltitude = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;

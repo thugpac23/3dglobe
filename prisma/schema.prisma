@@ -8,11 +8,12 @@ datasource db {
 }
 
 model Country {
-  id      String  @id @default(cuid())
-  name    String
-  capital String
-  isoCode String  @unique
-  visits  Visit[]
+  id       String     @id @default(cuid())
+  name     String
+  capital  String
+  isoCode  String     @unique
+  visits   Visit[]
+  wishlist Wishlist[]
 
   @@map("countries")
 }
@@ -26,6 +27,27 @@ model Visit {
 
   @@unique([countryId, user])
   @@map("visits")
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  countryId String
+  user      User
+  createdAt DateTime @default(now())
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@unique([countryId, user])
+  @@map("wishlists")
+}
+
+model UserProgress {
+  id           String @id @default(cuid())
+  user         User   @unique
+  xp           Int    @default(0)
+  level        Int    @default(1)
+  achievements String @default("[]")
+
+  @@map("user_progress")
 }
 
 enum User {
