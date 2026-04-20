@@ -47,25 +47,52 @@ function InkStamp({ stamp, color }: { stamp: Stamp; color: string }) {
   );
 }
 
-function DraggableStamp({ stamp, color, onSave, getPage }: {
+// Each stamp: outer div handles position + rotation (also draggable);
+// inner div handles the impact animation independently.
+function DraggableStamp({ stamp, color, onSave, getPage, animEpoch, index }: {
   stamp: Stamp;
   color: string;
   onSave: (id: string, x: number, y: number) => void;
   getPage: () => HTMLDivElement | null;
+  animEpoch: number;
+  index: number;
 }) {
-  const divRef   = useRef<HTMLDivElement>(null);
-  const pos      = useRef({ x: stamp.positionX, y: stamp.positionY });
-  const dragging = useRef(false);
-  const lastMouse= useRef({ x: 0, y: 0 });
-  const [hover, setHover] = useState(false);
+  const outerRef    = useRef<HTMLDivElement>(null);
+  const pos         = useRef({ x: stamp.positionX, y: stamp.positionY });
+  const dragging    = useRef(false);
+  const lastMouse   = useRef({ x: 0, y: 0 });
+  const hasAnimated = useRef(false);
+  const [hover,     setHover]     = useState(false);
+  const [animating, setAnimating] = useState(false);
+  const [inkRing,   setInkRing]   = useState(false);
 
+  // Sync position if stamp data changes (e.g. after PATCH round-trip)
   useEffect(() => {
     pos.current = { x: stamp.positionX, y: stamp.positionY };
-    if (divRef.current) {
-      divRef.current.style.left = `${stamp.positionX}%`;
-      divRef.current.style.top  = `${stamp.positionY}%`;
+    if (outerRef.current) {
+      outerRef.current.style.left = `${stamp.positionX}%`;
+      outerRef.current.style.top  = `${stamp.positionY}%`;
     }
   }, [stamp.id, stamp.positionX, stamp.positionY]);
+
+  // Stamp impact animation — fires once per mount when epoch > 0
+  useEffect(() => {
+    if (animEpoch === 0 || hasAnimated.current) return;
+    hasAnimated.current = true;
+
+    const delay     = index * 80;
+    const impactAt  = delay + 225; // 50% of 450ms
+
+    const t1 = setTimeout(() => setAnimating(true), delay);
+    const t2 = setTimeout(() => {
+      setInkRing(true);
+      if (index < 3) { resumeAudio(); sounds.stamp(); }
+    }, impactAt);
+    const t3 = setTimeout(() => setAnimating(false), delay + 460);
+    const t4 = setTimeout(() => setInkRing(false),   impactAt + 430);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, [animEpoch, index]);
 
   function onMouseDown(e: React.MouseEvent) {
     const pageEl = getPage();
@@ -77,15 +104,15 @@ function DraggableStamp({ stamp, color, onSave, getPage }: {
     resumeAudio();
 
     function onMove(ev: MouseEvent) {
-      if (!dragging.current || !divRef.current) return;
+      if (!dragging.current || !outerRef.current) return;
       const rect = page.getBoundingClientRect();
       const dx = ((ev.clientX - lastMouse.current.x) / rect.width)  * 100;
       const dy = ((ev.clientY - lastMouse.current.y) / rect.height) * 100;
       lastMouse.current = { x: ev.clientX, y: ev.clientY };
       pos.current.x = Math.max(7, Math.min(93, pos.current.x + dx));
       pos.current.y = Math.max(7, Math.min(93, pos.current.y + dy));
-      divRef.current.style.left = `${pos.current.x}%`;
-      divRef.current.style.top  = `${pos.current.y}%`;
+      outerRef.current.style.left = `${pos.current.x}%`;
+      outerRef.current.style.top  = `${pos.current.y}%`;
     }
 
     function onUp() {
@@ -102,7 +129,7 @@ function DraggableStamp({ stamp, color, onSave, getPage }: {
 
   return (
     <div
-      ref={divRef}
+      ref={outerRef}
       onMouseDown={onMouseDown}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -110,25 +137,39 @@ function DraggableStamp({ stamp, color, onSave, getPage }: {
         position: 'absolute',
         left: `${stamp.positionX}%`,
         top: `${stamp.positionY}%`,
-        width: 72, height: 72,
-        transform: `translate(-50%,-50%) rotate(${stamp.rotation}deg) scale(${hover ? 1.1 : 1})`,
-        cursor: 'grab',
-        transition: 'transform 0.15s ease, filter 0.15s',
+        transform: `translate(-50%,-50%) rotate(${stamp.rotation}deg)`,
         userSelect: 'none',
+        zIndex: hover ? 10 : (animating ? 8 : 1),
         filter: `drop-shadow(0 2px 6px ${color}55)`,
-        zIndex: hover ? 10 : 1,
+        cursor: 'grab',
       }}
     >
-      <InkStamp stamp={stamp} color={color} />
+      {/* Ink ring — expands and fades on impact */}
+      {inkRing && (
+        <div className="ink-ring" style={{ width: 72, height: 72, border: `1.5px solid ${color}` }} />
+      )}
+
+      {/* Inner container — handles drop + squash animation, hover scale when idle */}
+      <div
+        className={animating ? 'stamp-impact' : ''}
+        style={{
+          width: 72, height: 72,
+          transform: animating ? undefined : `scale(${hover ? 1.1 : 1})`,
+          transition: animating ? 'none' : 'transform 0.15s ease',
+        }}
+      >
+        <InkStamp stamp={stamp} color={color} />
+      </div>
     </div>
   );
 }
 
-// Interactive page — each has its own internal ref for drag calculations
-function StampsPage({ stamps, color, onSave }: {
+// Interactive stamps page — owns its internal ref so DraggableStamps can measure it
+function StampsPage({ stamps, color, onSave, animEpoch }: {
   stamps: Stamp[];
   color: string;
   onSave: (id: string, x: number, y: number) => void;
+  animEpoch: number;
 }) {
   const pageRef = useRef<HTMLDivElement>(null);
   return (
@@ -153,14 +194,22 @@ function StampsPage({ stamps, color, onSave }: {
           <div style={{ fontSize: 10, color: '#b0a080', opacity: 0.5, fontStyle: 'italic' }}>няма печати</div>
         </div>
       )}
-      {stamps.map(s => (
-        <DraggableStamp key={s.id} stamp={s} color={color} onSave={onSave} getPage={() => pageRef.current} />
+      {stamps.map((s, i) => (
+        <DraggableStamp
+          key={s.id}
+          stamp={s}
+          color={color}
+          onSave={onSave}
+          getPage={() => pageRef.current}
+          animEpoch={animEpoch}
+          index={i}
+        />
       ))}
     </div>
   );
 }
 
-// Non-interactive snapshot used in flip animation faces
+// Non-interactive snapshot used for flip animation faces
 function StaticStampsPage({ stamps, color }: { stamps: Stamp[]; color: string }) {
   return (
     <div style={{
@@ -219,7 +268,6 @@ function InfoPage({ user, count }: { user: UserType; count: number }) {
   );
 }
 
-// Determines left/right stamp page numbers for a given spread
 // spread 0: left = 'info', right = stamp page 0
 // spread n>0: left = stamp page (2n-1), right = stamp page (2n)
 function spreadToPages(idx: number): [number | 'info', number] {
@@ -233,21 +281,26 @@ export default function PasportPage() {
   const [loading, setLoading]       = useState(true);
   const [spreadIdx, setSpreadIdx]   = useState(0);
   const [flipping, setFlipping]     = useState<'fwd' | 'bwd' | null>(null);
+  // Incremented each time stamps should (re-)animate on the visible spread
+  const [animEpoch, setAnimEpoch]   = useState(0);
 
   useEffect(() => {
     setLoading(true);
     setSpreadIdx(0);
     fetch(`/api/passport?user=${activeUser}`)
       .then(r => r.json())
-      .then((data: Stamp[]) => { setStamps(data); setLoading(false); })
+      .then((data: Stamp[]) => {
+        setStamps(data);
+        setLoading(false);
+        setAnimEpoch(e => e + 1); // trigger animation on first visible spread
+      })
       .catch(() => setLoading(false));
   }, [activeUser]);
 
   const byPage = useCallback((pg: number) => stamps.filter(s => s.page === pg), [stamps]);
 
   const totalStampPages = Math.max(1, Math.ceil(stamps.length / STAMPS_PER_PAGE));
-  // spread 0 consumes 1 stamp page; each additional spread consumes 2
-  const maxSpread = Math.ceil((totalStampPages - 1) / 2);
+  const maxSpread       = Math.ceil((totalStampPages - 1) / 2);
 
   const [curLeft,  curRight]  = spreadToPages(spreadIdx);
   const [nextLeft, nextRight] = spreadToPages(spreadIdx + 1);
@@ -258,6 +311,7 @@ export default function PasportPage() {
     setFlipping(dir);
     setTimeout(() => {
       setSpreadIdx(p => dir === 'fwd' ? p + 1 : p - 1);
+      setAnimEpoch(e => e + 1); // animate newly revealed stamps
       setFlipping(null);
     }, 640);
   }
@@ -330,7 +384,7 @@ export default function PasportPage() {
               }}>
                 {curLeft === 'info'
                   ? <InfoPage user={activeUser} count={stamps.length} />
-                  : <StampsPage stamps={byPage(curLeft)} color={COVER_GOLD} onSave={savePosition} />}
+                  : <StampsPage stamps={byPage(curLeft)} color={COVER_GOLD} onSave={savePosition} animEpoch={animEpoch} />}
                 {curLeft !== 'info' && (
                   <div style={{
                     position: 'absolute', bottom: 8, right: 10,
@@ -352,7 +406,7 @@ export default function PasportPage() {
                 overflow: 'hidden', flexShrink: 0, position: 'relative',
                 boxShadow: 'inset 8px 0 22px rgba(0,0,0,0.08)',
               }}>
-                <StampsPage stamps={byPage(curRight)} color={COVER_GOLD} onSave={savePosition} />
+                <StampsPage stamps={byPage(curRight)} color={COVER_GOLD} onSave={savePosition} animEpoch={animEpoch} />
                 <div style={{
                   position: 'absolute', bottom: 8, left: 10,
                   fontSize: 8, color: '#b0a080', fontStyle: 'italic', pointerEvents: 'none',
@@ -369,11 +423,9 @@ export default function PasportPage() {
                       zIndex: 20,
                     }}
                   >
-                    {/* Front — current right page */}
                     <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden' }}>
                       <StaticStampsPage stamps={byPage(curRight)} color={COVER_GOLD} />
                     </div>
-                    {/* Back — next spread's left page */}
                     <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
                       {nextLeft === 'info'
                         ? <InfoPage user={activeUser} count={stamps.length} />
@@ -383,7 +435,7 @@ export default function PasportPage() {
                 )}
               </div>
 
-              {/* BACKWARD FLIP OVERLAY — on left page area */}
+              {/* BACKWARD FLIP OVERLAY */}
               {flipping === 'bwd' && (
                 <div
                   className="passport-flip-bwd"
@@ -395,13 +447,11 @@ export default function PasportPage() {
                     zIndex: 20,
                   }}
                 >
-                  {/* Front — current left page */}
                   <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden' }}>
                     {curLeft === 'info'
                       ? <InfoPage user={activeUser} count={stamps.length} />
                       : <StaticStampsPage stamps={byPage(curLeft as number)} color={COVER_GOLD} />}
                   </div>
-                  {/* Back — previous spread's right page */}
                   <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
                     <StaticStampsPage stamps={byPage(prevRight)} color={COVER_GOLD} />
                   </div>

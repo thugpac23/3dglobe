@@ -78,3 +78,27 @@ body {
   animation: passport-flip-bwd 0.62s cubic-bezier(0.4,0,0.2,1) forwards;
   transform-origin: right center;
 }
+
+@keyframes stamp-impact {
+  0%   { transform: translateY(-260%) scale(1.25);      opacity: 0; }
+  50%  { transform: translateY(0)     scale(1.0, 0.78); opacity: 1; }
+  65%  { transform: translateY(0)     scale(1.06, 0.93); opacity: 1; }
+  80%  { transform: translateY(0)     scale(0.97, 1.04); opacity: 1; }
+  100% { transform: translateY(0)     scale(1);          opacity: 1; }
+}
+.stamp-impact {
+  animation: stamp-impact 0.45s ease-out forwards;
+}
+
+@keyframes ink-ring-expand {
+  0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0.55; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+.ink-ring {
+  animation: ink-ring-expand 0.42s ease-out forwards;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
