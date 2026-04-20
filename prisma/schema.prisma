@@ -50,6 +50,19 @@ model UserProgress {
   @@map("user_progress")
 }
 
+model Avatar {
+  id          String @id @default(cuid())
+  user        User   @unique
+  hairStyle   String @default("short")
+  hairColor   String @default("#8B4513")
+  eyeColor    String @default("#4B5563")
+  skinColor   String @default("#FBBF8A")
+  outfit      String @default("casual")
+  accessories String @default("[]")
+
+  @@map("avatars")
+}
+
 enum User {
   tati
   iva
