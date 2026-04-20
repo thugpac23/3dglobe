@@ -8,14 +8,30 @@ datasource db {
 }
 
 model Country {
-  id       String     @id @default(cuid())
-  name     String
-  capital  String
-  isoCode  String     @unique
-  visits   Visit[]
-  wishlist Wishlist[]
+  id             String          @id @default(cuid())
+  name           String
+  capital        String
+  isoCode        String          @unique
+  visits         Visit[]
+  wishlist       Wishlist[]
+  passportStamps PassportStamp[]
 
   @@map("countries")
+}
+
+model PassportStamp {
+  id        String   @id @default(cuid())
+  user      User
+  countryId String
+  stampedAt DateTime @default(now())
+  page      Int      @default(0)
+  positionX Float    @default(50)
+  positionY Float    @default(50)
+  rotation  Float    @default(0)
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@unique([countryId, user])
+  @@map("passport_stamps")
 }
 
 model Visit {

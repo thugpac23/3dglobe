@@ -60,3 +60,21 @@ body {
   font-weight: bold;
   font-size: 1.1rem;
 }
+
+@keyframes passport-flip-fwd {
+  0%   { transform: perspective(900px) rotateY(0deg);    }
+  100% { transform: perspective(900px) rotateY(-180deg); }
+}
+@keyframes passport-flip-bwd {
+  0%   { transform: perspective(900px) rotateY(0deg);   }
+  100% { transform: perspective(900px) rotateY(180deg); }
+}
+
+.passport-flip-fwd {
+  animation: passport-flip-fwd 0.62s cubic-bezier(0.4,0,0.2,1) forwards;
+  transform-origin: left center;
+}
+.passport-flip-bwd {
+  animation: passport-flip-bwd 0.62s cubic-bezier(0.4,0,0.2,1) forwards;
+  transform-origin: right center;
+}
