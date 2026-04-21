@@ -11,6 +11,17 @@ import { fetchVisits, addVisit, removeVisit, fetchWishlist, addWishlist, removeW
 import { sounds, resumeAudio } from '@/lib/sounds';
 import VisitsTable from '@/components/VisitsTable';
 import countriesGeoJson from '@/data/countries.json';
+import { COUNTRY_FACTS } from '@/data/countryFacts';
+
+function getFlagEmoji(iso: string): string {
+  if (!iso || iso.length !== 2) return '🌍';
+  try {
+    return String.fromCodePoint(
+      0x1F1E6 + iso.toUpperCase().charCodeAt(0) - 65,
+      0x1F1E6 + iso.toUpperCase().charCodeAt(1) - 65,
+    );
+  } catch { return '🌍'; }
+}
 
 // Centroid labels for major countries
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,6 +65,9 @@ export default function KartaPage() {
   const [mapCenter, setMapCenter] = useState<[number, number]>([15, 45]);
   const [tooltip, setTooltip]   = useState<{ name: string; x: number; y: number } | null>(null);
   const [toasts, setToasts]     = useState<ToastMsg[]>([]);
+  const [selectedIso, setSelectedIso] = useState<string | null>(null);
+  const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
+  const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((text: string, ok = true) => {
     const id = Date.now();
@@ -88,9 +102,25 @@ export default function KartaPage() {
     return map;
   }, [wishlist]);
 
-  // Click a country on the map: add/remove visit or wishlist
+  // Click a country on the map: first click selects, second click confirms
   const handleCountryClick = useCallback(async (iso2: string, rawName: string) => {
     resumeAudio(); sounds.click();
+
+    if (iso2 !== selectedIso) {
+      setSelectedIso(iso2);
+      return;
+    }
+    setSelectedIso(null);
+
+    // Show fact popup on confirm
+    const fact = COUNTRY_FACTS[iso2];
+    if (fact) {
+      const name = BG_NAMES[iso2] ?? rawName;
+      if (factTimerRef.current) clearTimeout(factTimerRef.current);
+      setFactPopup({ iso: iso2, name, fact });
+      factTimerRef.current = setTimeout(() => setFactPopup(null), 6500);
+    }
+
     const bgName = BG_NAMES[iso2] ?? rawName;
 
     if (mode === 'visited') {
@@ -167,22 +197,23 @@ export default function KartaPage() {
         }
       }
     }
-  }, [mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast]);
+  }, [selectedIso, mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast]);
 
   function getColor(iso2: string): string {
+    if (iso2 === selectedIso) return '#FBBF24';
     if (mode === 'visited') {
       const e = visitsByCountry[iso2];
-      if (!e) return '#CBD5E1';
+      if (!e) return '#86efac';
       if (e.tati && e.iva) return '#FB923C';
       if (e.tati) return USER_COLOR.tati;
       if (e.iva) return USER_COLOR.iva;
-      return '#CBD5E1';
+      return '#86efac';
     } else {
       const e = wishlistByCountry[iso2];
-      if (!e) return '#CBD5E1';
+      if (!e) return '#86efac';
       if (e.tati && e.iva) return '#0D9488';
       if (e.tati || e.iva) return '#14B8A6';
-      return '#CBD5E1';
+      return '#86efac';
     }
   }
 
@@ -204,7 +235,7 @@ export default function KartaPage() {
       <div className="flex flex-wrap items-center gap-3 mb-3 max-w-7xl mx-auto">
         <div className="mr-2">
           <h1 className="text-xl font-extrabold text-slate-800 leading-tight">🗺️ Карта</h1>
-          <p className="text-slate-500 text-xs">Кликни на страна</p>
+          <p className="text-slate-500 text-xs">Кликни два пъти за потвърждение</p>
         </div>
 
         {/* Mode toggle */}
@@ -258,7 +289,7 @@ export default function KartaPage() {
               <LegendDot color="#0D9488" label="Заедно" />
             </>
           )}
-          <LegendDot color="#CBD5E1" label="Непосетено" />
+          <LegendDot color="#86efac" label="Непосетено" />
         </div>
       </div>
 
@@ -335,6 +366,44 @@ export default function KartaPage() {
               <MapZoomBtn label="+" onClick={zoomIn} />
               <MapZoomBtn label="−" onClick={zoomOut} />
             </div>
+
+            {/* Selection hint */}
+            {selectedIso && (
+              <div
+                className="absolute bottom-3 left-1/2 pointer-events-none z-20"
+                style={{ transform: 'translateX(-50%)' }}
+              >
+                <div
+                  className="px-4 py-1.5 rounded-full text-xs font-semibold text-white shadow-lg whitespace-nowrap"
+                  style={{ background: 'rgba(15,23,42,0.82)', backdropFilter: 'blur(4px)' }}
+                >
+                  {getFlagEmoji(selectedIso)} {BG_NAMES[selectedIso] ?? selectedIso} — кликни отново за потвърждение
+                </div>
+              </div>
+            )}
+
+            {/* Fact popup */}
+            {factPopup && (
+              <div
+                className="fact-popup-enter absolute bottom-14 left-1/2 z-30 pointer-events-auto"
+                style={{ transform: 'translateX(-50%)' }}
+              >
+                <div
+                  className="rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 max-w-xs"
+                  style={{ background: 'rgba(255,255,255,0.97)', border: '1.5px solid #e2e8f0', minWidth: 260 }}
+                >
+                  <span className="text-3xl leading-none mt-0.5">{getFlagEmoji(factPopup.iso)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-slate-800 text-sm mb-1">{factPopup.name}</div>
+                    <div className="text-slate-600 text-xs leading-snug">{factPopup.fact}</div>
+                  </div>
+                  <button
+                    className="text-slate-400 hover:text-slate-600 text-base leading-none mt-0.5 shrink-0"
+                    onClick={() => setFactPopup(null)}
+                  >✕</button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Mobile: tables below map */}
