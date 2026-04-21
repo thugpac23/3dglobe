@@ -102,3 +102,16 @@ body {
   border-radius: 50%;
   pointer-events: none;
 }
+
+@keyframes pulse-select {
+  0%, 100% { transform: translate(-50%,-50%) scale(1);    opacity: 0.85; }
+  50%       { transform: translate(-50%,-50%) scale(1.14); opacity: 0.45; }
+}
+
+@keyframes fact-popup-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1); }
+}
+.fact-popup-enter {
+  animation: fact-popup-in 0.22s ease-out forwards;
+}

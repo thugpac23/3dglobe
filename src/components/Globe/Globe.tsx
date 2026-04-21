@@ -27,8 +27,8 @@ const COLOR = {
   iva:      'rgba(255,80,160,0.94)',
   both:     'rgba(255,155,40,0.94)',
   wishlist: 'rgba(20,184,166,0.88)',
-  wishHover:'rgba(20,220,200,0.96)',
   hover:    'rgba(255,220,60,0.92)',
+  selected: 'rgba(255,255,255,0.97)',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,7 +71,7 @@ interface LabelDatum {
   lng: number;
   name: string;
   labelrank: number;
-  type: 'label' | 'flag';
+  type: 'label' | 'flag' | 'select-ring';
 }
 
 const allLabels: LabelDatum[] = polygonsData.flatMap((feature) => {
@@ -85,7 +85,6 @@ const allLabels: LabelDatum[] = polygonsData.flatMap((feature) => {
   return [{ lat, lng, name, labelrank, type: 'label' as const }];
 });
 
-// Centroid map for flag overlay
 const centroidByIso = new Map<string, [number, number]>();
 for (const feature of polygonsData) {
   const iso = feature.properties?.ISO_A2;
@@ -97,9 +96,11 @@ function getCapColor(
   visitsByCountry: VisitsByCountry,
   wishlistByCountry: WishlistByCountry,
   hoveredIso: string | null,
+  selectedIso: string | null,
   mode: AppMode,
 ): string {
-  if (iso === hoveredIso) return COLOR.hover;
+  if (iso === selectedIso) return COLOR.selected;
+  if (iso === hoveredIso)  return COLOR.hover;
   if (mode === 'wishlist') {
     const w = wishlistByCountry[iso];
     if (w && (w.tati || w.iva)) return COLOR.wishlist;
@@ -136,7 +137,19 @@ function makeTooltip(name: string, iso: string, visited: VisitsByCountry, wished
 function makeHtmlEl(d: object): HTMLElement {
   const datum = d as LabelDatum;
   const el = document.createElement('div');
-  if (datum.type === 'flag') {
+
+  if (datum.type === 'select-ring') {
+    el.style.cssText = [
+      'width:58px',
+      'height:58px',
+      'border-radius:50%',
+      'border:2px solid rgba(255,255,255,0.9)',
+      'box-shadow:0 0 16px rgba(255,255,255,0.55),0 0 32px rgba(255,255,255,0.2)',
+      'pointer-events:none',
+      'transform:translate(-50%,-50%)',
+      'animation:pulse-select 1.4s ease-in-out infinite',
+    ].join(';');
+  } else if (datum.type === 'flag') {
     el.textContent = datum.name;
     el.style.cssText = [
       'font-size:22px',
@@ -182,10 +195,11 @@ const ZoomBtn = ({ label, onClick }: { label: string; onClick: () => void }) => 
 
 export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCountryClick, fullscreen = false }: GlobeProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const globeRef = useRef<any>(null);
-  const [hoveredIso, setHoveredIso] = useState<string | null>(null);
-  const [dims, setDims] = useState({ w: 320, h: 320 });
-  const [cameraAlt, setCameraAlt] = useState(2.5);
+  const globeRef     = useRef<any>(null);
+  const [hoveredIso,  setHoveredIso]  = useState<string | null>(null);
+  const [selectedIso, setSelectedIso] = useState<string | null>(null);
+  const [dims, setDims]               = useState({ w: 320, h: 320 });
+  const [cameraAlt, setCameraAlt]     = useState(2.5);
 
   const globeMaterial = useMemo(() => new THREE.MeshPhongMaterial({
     color: new THREE.Color('#0e6494'),
@@ -219,7 +233,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     return () => clearInterval(id);
   }, []);
 
-  // Labels: only show after zoom in (altitude < 1.8)
+  // Labels: only show after zoom in
   const visibleLabels = useMemo<LabelDatum[]>(() => {
     if (cameraAlt > 2.0) return [];
     if (cameraAlt > 1.4) return allLabels.filter(l => l.labelrank <= 2);
@@ -227,18 +241,28 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     return allLabels.filter(l => l.labelrank <= 5);
   }, [cameraAlt]);
 
-  // Combine labels + flag emoji on hover
+  // Labels + hover flag + selection ring
   const htmlData = useMemo<LabelDatum[]>(() => {
     const base = [...visibleLabels];
-    if (hoveredIso) {
+    // Show hover flag only when not hovering the selected country
+    if (hoveredIso && hoveredIso !== selectedIso) {
       const coords = centroidByIso.get(hoveredIso);
-      const flag = getFlagEmoji(hoveredIso);
+      const flag   = getFlagEmoji(hoveredIso);
       if (coords && flag) {
         base.push({ lat: coords[1], lng: coords[0], name: flag, labelrank: -1, type: 'flag' });
       }
     }
+    // Selected country: flag + pulsing ring
+    if (selectedIso) {
+      const coords = centroidByIso.get(selectedIso);
+      const flag   = getFlagEmoji(selectedIso);
+      if (coords) {
+        if (flag) base.push({ lat: coords[1], lng: coords[0], name: flag, labelrank: -1, type: 'flag' });
+        base.push({ lat: coords[1], lng: coords[0], name: selectedIso, labelrank: -2, type: 'select-ring' });
+      }
+    }
     return base;
-  }, [visibleLabels, hoveredIso]);
+  }, [visibleLabels, hoveredIso, selectedIso]);
 
   const handleGlobeReady = useCallback(() => {
     const ctrl = globeRef.current?.controls();
@@ -254,42 +278,83 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
 
   const capColor = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;
-    return getCapColor(iso, visitsByCountry, wishlistByCountry, hoveredIso, mode);
-  }, [visitsByCountry, wishlistByCountry, hoveredIso, mode]);
+    return getCapColor(iso, visitsByCountry, wishlistByCountry, hoveredIso, selectedIso, mode);
+  }, [visitsByCountry, wishlistByCountry, hoveredIso, selectedIso, mode]);
 
+  // 3-level altitude: selected (0.08) > hovered (0.03) > default (0.012)
   const polygonAltitude = useCallback((d: object) => {
     const iso = (d as GlobePolygon).properties?.ISO_A2;
-    return iso === hoveredIso ? 0.03 : 0.012;
-  }, [hoveredIso]);
+    if (iso === selectedIso) return 0.08;
+    if (iso === hoveredIso)  return 0.03;
+    return 0.012;
+  }, [hoveredIso, selectedIso]);
+
+  // Golden side color on selected polygon enhances the 3D lift effect
+  const polygonSideColor = useCallback((d: object) => {
+    const iso = (d as GlobePolygon).properties?.ISO_A2;
+    if (iso === selectedIso) return 'rgba(255,200,50,0.85)';
+    return 'rgba(20,70,20,0.7)';
+  }, [selectedIso]);
 
   const handlePolygonHover = useCallback((polygon: object | null) => {
     const iso = (polygon as GlobePolygon | null)?.properties?.ISO_A2 || null;
     setHoveredIso(iso);
-    if (globeRef.current?.controls) {
+    // Only resume auto-rotate on un-hover if nothing is selected
+    if (globeRef.current?.controls && !selectedIso) {
       globeRef.current.controls().autoRotate = !iso;
     }
-  }, []);
+  }, [selectedIso]);
 
+  // Two-click: first click selects, second click on same country confirms
   const handlePolygonClick = useCallback((polygon: object) => {
     const poly = polygon as GlobePolygon;
-    const iso = poly.properties?.ISO_A2;
-    if (iso) onCountryClick(iso, poly.properties?.NAME || iso);
-  }, [onCountryClick]);
+    const iso  = poly.properties?.ISO_A2;
+    if (!iso) return;
+
+    if (iso === selectedIso) {
+      // ── Second click → confirm ──
+      onCountryClick(iso, poly.properties?.NAME || iso);
+      setSelectedIso(null);
+      if (globeRef.current?.controls) {
+        globeRef.current.controls().autoRotate = !hoveredIso;
+      }
+    } else {
+      // ── First click → select ──
+      setSelectedIso(iso);
+      if (globeRef.current?.controls) {
+        globeRef.current.controls().autoRotate = false;
+      }
+    }
+  }, [selectedIso, hoveredIso, onCountryClick]);
+
+  // Clicking empty globe area clears selection
+  const handleGlobeClick = useCallback(() => {
+    if (selectedIso) {
+      setSelectedIso(null);
+      if (globeRef.current?.controls && !hoveredIso) {
+        globeRef.current.controls().autoRotate = true;
+      }
+    }
+  }, [selectedIso, hoveredIso]);
 
   const polygonLabel = useCallback((d: object) => {
     const poly = d as GlobePolygon;
-    const iso = poly.properties?.ISO_A2;
+    const iso  = poly.properties?.ISO_A2;
     return makeTooltip(poly.properties?.NAME || iso, iso, visitsByCountry, wishlistByCountry, mode);
   }, [visitsByCountry, wishlistByCountry, mode]);
 
   function zoomIn() {
     const pov = globeRef.current?.pointOfView?.();
-    if (pov) globeRef.current.pointOfView({ ...pov, altitude: Math.max(0.3, pov.altitude * 0.65) }, 350);
+    if (!pov) return;
+    globeRef.current.pointOfView({ ...pov, altitude: Math.max(0.3, pov.altitude * 0.65) }, 380);
   }
   function zoomOut() {
     const pov = globeRef.current?.pointOfView?.();
-    if (pov) globeRef.current.pointOfView({ ...pov, altitude: Math.min(5, pov.altitude * 1.5) }, 350);
+    if (!pov) return;
+    globeRef.current.pointOfView({ ...pov, altitude: Math.min(5, pov.altitude * 1.5) }, 380);
   }
+
+  const selectedName = selectedIso ? (BG_NAMES[selectedIso] ?? selectedIso) : null;
 
   return (
     <div className="relative inline-block">
@@ -304,11 +369,12 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
         polygonsData={polygonsData}
         polygonAltitude={polygonAltitude}
         polygonCapColor={capColor}
-        polygonSideColor={() => 'rgba(20,70,20,0.7)'}
+        polygonSideColor={polygonSideColor}
         polygonStrokeColor={() => 'rgba(255,240,120,0.85)'}
         polygonLabel={polygonLabel}
         onPolygonClick={handlePolygonClick}
         onPolygonHover={handlePolygonHover}
+        onGlobeClick={handleGlobeClick}
         htmlElementsData={htmlData}
         htmlLat={(d: object) => (d as LabelDatum).lat}
         htmlLng={(d: object) => (d as LabelDatum).lng}
@@ -326,11 +392,32 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
         }}
         onGlobeReady={handleGlobeReady}
       />
+
       {/* Zoom buttons */}
       <div className="absolute flex flex-col gap-2 z-10" style={{ top: 16, right: 16 }}>
         <ZoomBtn label="+" onClick={zoomIn} />
         <ZoomBtn label="−" onClick={zoomOut} />
       </div>
+
+      {/* Selection confirmation hint */}
+      {selectedName && (
+        <div style={{
+          position: 'absolute', bottom: 14, left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.78)',
+          color: '#f1f5f9',
+          padding: '5px 16px',
+          borderRadius: 20,
+          fontSize: 12,
+          fontWeight: 600,
+          pointerEvents: 'none',
+          zIndex: 10,
+          whiteSpace: 'nowrap',
+          border: '1px solid rgba(255,255,255,0.14)',
+        }}>
+          {selectedName} — кликни отново за потвърждение
+        </div>
+      )}
     </div>
   );
 }

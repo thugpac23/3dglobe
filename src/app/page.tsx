@@ -14,6 +14,18 @@ import {
   fetchWishlist, addWishlist, removeWishlist,
 } from '@/lib/api';
 import { ACHIEVEMENTS } from '@/lib/xp';
+import { COUNTRY_FACTS } from '@/data/countryFacts';
+import { BG_NAMES } from '@/data/countryNamesBg';
+
+function getFlagEmoji(iso: string): string {
+  if (!iso || iso.length !== 2) return '🌍';
+  try {
+    return String.fromCodePoint(
+      0x1F1E6 + iso.toUpperCase().charCodeAt(0) - 65,
+      0x1F1E6 + iso.toUpperCase().charCodeAt(1) - 65,
+    );
+  } catch { return '🌍'; }
+}
 import XPBar from '@/components/XPBar/XPBar';
 import VisitsTable from '@/components/VisitsTable';
 
@@ -35,7 +47,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [globeOpen, setGlobeOpen] = useState(false);
+  const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
   const xpPopRef = useRef<HTMLDivElement>(null);
+  const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string, type: Toast['type']) => {
     const id = Date.now();
@@ -103,7 +117,17 @@ export default function Home() {
     } catch { /* silent fail — XP is non-critical */ }
   }, [showToast]);
 
+  const showFactPopup = useCallback((isoCode: string) => {
+    const fact = COUNTRY_FACTS[isoCode];
+    if (!fact) return;
+    const name = BG_NAMES[isoCode] ?? isoCode;
+    if (factTimerRef.current) clearTimeout(factTimerRef.current);
+    setFactPopup({ iso: isoCode, name, fact });
+    factTimerRef.current = setTimeout(() => setFactPopup(null), 6500);
+  }, []);
+
   const handleCountryClick = useCallback(async (isoCode: string, countryName: string) => {
+    showFactPopup(isoCode);
     if (mode === 'wishlist') {
       const onWishlist = wishlistByCountry[isoCode]?.[activeUser] ?? false;
       const displayName = USER_DISPLAY[activeUser];
@@ -188,7 +212,7 @@ export default function Home() {
         showToast('Грешка при запазване', 'remove');
       }
     }
-  }, [mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast, handleAwardXP]);
+  }, [mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast, handleAwardXP, showFactPopup]);
 
   const toastColors: Record<Toast['type'], string> = {
     add: '#059669', remove: '#DC2626',
@@ -319,7 +343,7 @@ export default function Home() {
             </div>
             {/* Close */}
             <button
-              onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(false); }}
+              onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(false); setFactPopup(null); }}
               className="ml-auto w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg transition-all"
               style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
               title="Затвори"
@@ -341,12 +365,45 @@ export default function Home() {
             />
           </div>
 
+          {/* Country fact popup */}
+          {factPopup && (
+            <div
+              className="fact-popup-enter"
+              style={{
+                position: 'absolute',
+                bottom: 44,
+                left: '50%',
+                zIndex: 60,
+                width: 'min(90vw, 400px)',
+                background: 'rgba(6,14,36,0.97)',
+                border: '1px solid rgba(80,140,230,0.35)',
+                borderRadius: 16,
+                padding: '14px 18px',
+                color: '#e2e8f0',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 22 }}>{getFlagEmoji(factPopup.iso)}</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#93c5fd' }}>{factPopup.name}</span>
+                <button
+                  onClick={() => setFactPopup(null)}
+                  style={{
+                    marginLeft: 'auto', background: 'none', border: 'none',
+                    color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+                  }}
+                >✕</button>
+              </div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: '#cbd5e1' }}>{factPopup.fact}</div>
+            </div>
+          )}
+
           {/* Footer hint */}
           <div className="text-center pb-2 text-xs shrink-0"
             style={{ color: 'rgba(255,255,255,0.3)' }}>
             {mode === 'visited'
-              ? `Кликни върху държава — добавя/премахва за ${USER_DISPLAY[activeUser]}`
-              : `Кликни върху държава — добавя/премахва от желаните на ${USER_DISPLAY[activeUser]}`}
+              ? `Кликни двукратно върху държава — добавя/премахва за ${USER_DISPLAY[activeUser]}`
+              : `Кликни двукратно върху държава — добавя/премахва от желаните на ${USER_DISPLAY[activeUser]}`}
           </div>
         </div>
       )}
