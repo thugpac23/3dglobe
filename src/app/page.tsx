@@ -413,7 +413,7 @@ export default function Home() {
         {[
           { color: '#F59E0B', label: `само ${USER_DISPLAY.tati}` },
           { color: '#EC4899', label: `само ${USER_DISPLAY.iva}` },
-          { color: '#F97316', label: 'двете заедно' },
+          { color: '#7C3AED', label: 'двете заедно' },
           { color: '#14B8A6', label: 'желано' },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">

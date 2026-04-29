@@ -25,7 +25,7 @@ const COLOR = {
   default:  'rgba(44,120,44,0.92)',
   tati:     'rgba(255,215,0,0.94)',
   iva:      'rgba(255,80,160,0.94)',
-  both:     'rgba(255,155,40,0.94)',
+  both:     'rgba(124,58,237,0.94)',
   wishlist: 'rgba(20,184,166,0.88)',
   hover:    'rgba(255,220,60,0.92)',
   selected: 'rgba(255,255,255,0.97)',
@@ -33,6 +33,14 @@ const COLOR = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const polygonsData = (countriesGeoJson as any).features as GlobePolygon[];
+
+const ADM_TO_ISO2: Record<string, string> = { FRA: 'FR', NOR: 'NO' };
+function resolveIso(properties: GlobePolygon['properties']): string {
+  const iso2 = properties?.ISO_A2;
+  if (iso2 && iso2 !== '-99') return iso2;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ADM_TO_ISO2[(properties as any)?.ADM0_A3] ?? '';
+}
 
 function featureCentroid(feature: GlobePolygon): [number, number] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,7 +83,8 @@ interface LabelDatum {
 }
 
 const allLabels: LabelDatum[] = polygonsData.flatMap((feature) => {
-  const iso = feature.properties?.ISO_A2;
+  const iso = resolveIso(feature.properties);
+  if (!iso) return [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const labelrank: number = (feature.properties as any)?.LABELRANK ?? 99;
   if (labelrank > 5) return [];
@@ -87,7 +96,7 @@ const allLabels: LabelDatum[] = polygonsData.flatMap((feature) => {
 
 const centroidByIso = new Map<string, [number, number]>();
 for (const feature of polygonsData) {
-  const iso = feature.properties?.ISO_A2;
+  const iso = resolveIso(feature.properties);
   if (iso) centroidByIso.set(iso, featureCentroid(feature));
 }
 
@@ -277,13 +286,13 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   }, []);
 
   const capColor = useCallback((d: object) => {
-    const iso = (d as GlobePolygon).properties?.ISO_A2;
+    const iso = resolveIso((d as GlobePolygon).properties);
     return getCapColor(iso, visitsByCountry, wishlistByCountry, hoveredIso, selectedIso, mode);
   }, [visitsByCountry, wishlistByCountry, hoveredIso, selectedIso, mode]);
 
   // 3-level altitude: selected (0.08) > hovered (0.03) > default (0.012)
   const polygonAltitude = useCallback((d: object) => {
-    const iso = (d as GlobePolygon).properties?.ISO_A2;
+    const iso = resolveIso((d as GlobePolygon).properties);
     if (iso === selectedIso) return 0.08;
     if (iso === hoveredIso)  return 0.03;
     return 0.012;
@@ -291,13 +300,13 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
 
   // Golden side color on selected polygon enhances the 3D lift effect
   const polygonSideColor = useCallback((d: object) => {
-    const iso = (d as GlobePolygon).properties?.ISO_A2;
+    const iso = resolveIso((d as GlobePolygon).properties);
     if (iso === selectedIso) return 'rgba(255,200,50,0.85)';
     return 'rgba(20,70,20,0.7)';
   }, [selectedIso]);
 
   const handlePolygonHover = useCallback((polygon: object | null) => {
-    const iso = (polygon as GlobePolygon | null)?.properties?.ISO_A2 || null;
+    const iso = polygon ? resolveIso((polygon as GlobePolygon).properties) : null;
     setHoveredIso(iso);
     // Only resume auto-rotate on un-hover if nothing is selected
     if (globeRef.current?.controls && !selectedIso) {
@@ -308,7 +317,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   // Two-click: first click selects, second click on same country confirms
   const handlePolygonClick = useCallback((polygon: object) => {
     const poly = polygon as GlobePolygon;
-    const iso  = poly.properties?.ISO_A2;
+    const iso  = resolveIso(poly.properties);
     if (!iso) return;
 
     if (iso === selectedIso) {
@@ -339,7 +348,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
 
   const polygonLabel = useCallback((d: object) => {
     const poly = d as GlobePolygon;
-    const iso  = poly.properties?.ISO_A2;
+    const iso  = resolveIso(poly.properties);
     return makeTooltip(poly.properties?.NAME || iso, iso, visitsByCountry, wishlistByCountry, mode);
   }, [visitsByCountry, wishlistByCountry, mode]);
 

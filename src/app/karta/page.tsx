@@ -26,6 +26,16 @@ function getFlagEmoji(iso: string): string {
 // Centroid labels for major countries
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const geoFeatures = (countriesGeoJson as any).features as any[];
+
+// Some countries have ISO_A2='-99' in Natural Earth data; resolve via ADM0_A3
+const ADM_TO_ISO2: Record<string, string> = { FRA: 'FR', NOR: 'NO' };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolveIso(props: any): string {
+  const iso2 = props?.ISO_A2 as string;
+  if (iso2 && iso2 !== '-99') return iso2;
+  return ADM_TO_ISO2[props?.ADM0_A3 as string] ?? '';
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function featureCentroid(f: any): [number, number] {
   const geom = f.geometry;
@@ -44,7 +54,8 @@ function featureCentroid(f: any): [number, number] {
 
 interface LabelEntry { iso: string; name: string; lng: number; lat: number; rank: number }
 const allLabelFeatures: LabelEntry[] = geoFeatures.flatMap(f => {
-  const iso = f.properties?.ISO_A2 as string;
+  const iso = resolveIso(f.properties);
+  if (!iso) return [];
   const rank = (f.properties?.LABELRANK ?? 99) as number;
   if (rank > 4) return [];
   const name = BG_NAMES[iso] ?? f.properties?.NAME ?? '';
@@ -203,23 +214,22 @@ export default function KartaPage() {
     if (iso2 === selectedIso) return '#FBBF24';
     if (mode === 'visited') {
       const e = visitsByCountry[iso2];
-      if (!e) return '#86efac';
-      if (e.tati && e.iva) return '#FB923C';
+      if (!e) return '#c8b78a';
+      if (e.tati && e.iva) return '#7C3AED';
       if (e.tati) return USER_COLOR.tati;
       if (e.iva) return USER_COLOR.iva;
-      return '#86efac';
+      return '#c8b78a';
     } else {
       const e = wishlistByCountry[iso2];
-      if (!e) return '#86efac';
+      if (!e) return '#c8b78a';
       if (e.tati && e.iva) return '#0D9488';
       if (e.tati || e.iva) return '#14B8A6';
-      return '#86efac';
+      return '#c8b78a';
     }
   }
 
-  // Label visibility based on zoom
+  // Label visibility based on zoom — rank 2 (major countries) always visible
   const visibleLabels = useMemo(() => {
-    if (mapZoom < 1.2) return [];
     if (mapZoom < 2) return allLabelFeatures.filter(l => l.rank <= 2);
     if (mapZoom < 4) return allLabelFeatures.filter(l => l.rank <= 3);
     return allLabelFeatures.filter(l => l.rank <= 4);
@@ -281,7 +291,7 @@ export default function KartaPage() {
             <>
               <LegendDot color={USER_COLOR.tati} label={USER_DISPLAY.tati} />
               <LegendDot color={USER_COLOR.iva}  label={USER_DISPLAY.iva} />
-              <LegendDot color="#FB923C" label="Заедно" />
+              <LegendDot color="#7C3AED" label="Заедно" />
             </>
           ) : (
             <>
@@ -289,7 +299,7 @@ export default function KartaPage() {
               <LegendDot color="#0D9488" label="Заедно" />
             </>
           )}
-          <LegendDot color="#86efac" label="Непосетено" />
+          <LegendDot color="#c8b78a" label="Непосетено" />
         </div>
       </div>
 
@@ -298,7 +308,7 @@ export default function KartaPage() {
 
         {/* Map column */}
         <div className="flex-1 min-w-0">
-          <div className="relative rounded-2xl overflow-hidden shadow-md" style={{ height: 520, background: '#bfdbfe' }}>
+          <div className="relative rounded-2xl overflow-hidden shadow-md" style={{ height: 520, background: '#1256a0' }}>
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
                 <div className="text-slate-400 text-sm">Зареждане…</div>
@@ -316,7 +326,8 @@ export default function KartaPage() {
                 <Geographies geography={countriesGeoJson}>
                   {({ geographies }) =>
                     geographies.map(geo => {
-                      const iso2 = geo.properties?.ISO_A2 as string;
+                      const iso2 = resolveIso(geo.properties);
+                      if (!iso2) return null;
                       const bgName = BG_NAMES[iso2] ?? geo.properties?.NAME ?? iso2;
                       const color = getColor(iso2);
                       return (
@@ -324,11 +335,11 @@ export default function KartaPage() {
                           key={geo.rsmKey}
                           geography={geo}
                           fill={color}
-                          stroke="#fff"
+                          stroke="rgba(255,255,255,0.55)"
                           strokeWidth={0.5 / mapZoom}
                           style={{
                             default: { outline: 'none', transition: 'fill 0.12s' },
-                            hover:   { outline: 'none', fill: mode === 'visited' ? '#38BDF8' : '#2DD4BF', cursor: 'pointer' },
+                            hover:   { outline: 'none', fill: mode === 'visited' ? '#60a5fa' : '#2DD4BF', cursor: 'pointer' },
                             pressed: { outline: 'none' },
                           }}
                           onClick={() => handleCountryClick(iso2, bgName)}
@@ -347,11 +358,11 @@ export default function KartaPage() {
                     <text
                       textAnchor="middle"
                       style={{ pointerEvents: 'none', userSelect: 'none' }}
-                      fontSize={lbl.rank <= 2 ? 5 : lbl.rank <= 3 ? 4 : 3.5}
+                      fontSize={(lbl.rank <= 2 ? 5 : lbl.rank <= 3 ? 4 : 3.5) / mapZoom}
                       fontWeight="700"
-                      fill="#1e293b"
-                      stroke="white"
-                      strokeWidth={0.8}
+                      fill="#ffffff"
+                      stroke="rgba(0,0,0,0.85)"
+                      strokeWidth={0.7 / mapZoom}
                       paintOrder="stroke"
                     >
                       {lbl.name}
