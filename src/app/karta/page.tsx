@@ -211,20 +211,21 @@ export default function KartaPage() {
   }, [selectedIso, mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast]);
 
   function getColor(iso2: string): string {
-    if (iso2 === selectedIso) return '#FBBF24';
+    // Transparent = satellite texture shows through; visited = semi-transparent overlay
+    if (iso2 === selectedIso) return 'rgba(251,191,36,0.75)';
     if (mode === 'visited') {
       const e = visitsByCountry[iso2];
-      if (!e) return '#c8b78a';
-      if (e.tati && e.iva) return '#7C3AED';
-      if (e.tati) return USER_COLOR.tati;
-      if (e.iva) return USER_COLOR.iva;
-      return '#c8b78a';
+      if (!e) return 'rgba(0,0,0,0)';
+      if (e.tati && e.iva) return 'rgba(124,58,237,0.78)';
+      if (e.tati) return 'rgba(245,158,11,0.78)';
+      if (e.iva) return 'rgba(236,72,153,0.78)';
+      return 'rgba(0,0,0,0)';
     } else {
       const e = wishlistByCountry[iso2];
-      if (!e) return '#c8b78a';
-      if (e.tati && e.iva) return '#0D9488';
-      if (e.tati || e.iva) return '#14B8A6';
-      return '#c8b78a';
+      if (!e) return 'rgba(0,0,0,0)';
+      if (e.tati && e.iva) return 'rgba(13,148,136,0.78)';
+      if (e.tati || e.iva) return 'rgba(20,184,166,0.78)';
+      return 'rgba(0,0,0,0)';
     }
   }
 
@@ -299,7 +300,7 @@ export default function KartaPage() {
               <LegendDot color="#0D9488" label="Заедно" />
             </>
           )}
-          <LegendDot color="#c8b78a" label="Непосетено" />
+          <LegendDot color="rgba(255,255,255,0.18)" label="Непосетено" />
         </div>
       </div>
 
@@ -308,7 +309,8 @@ export default function KartaPage() {
 
         {/* Map column */}
         <div className="flex-1 min-w-0">
-          <div className="relative rounded-2xl overflow-hidden shadow-md" style={{ height: 520, background: '#1256a0' }}>
+          <div className="relative rounded-2xl overflow-hidden shadow-md"
+               style={{ height: 520, background: 'url("/earth-satellite.jpg") center/cover no-repeat, #0a1628' }}>
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
                 <div className="text-slate-400 text-sm">Зареждане…</div>
@@ -335,11 +337,11 @@ export default function KartaPage() {
                           key={geo.rsmKey}
                           geography={geo}
                           fill={color}
-                          stroke="rgba(255,255,255,0.55)"
+                          stroke="rgba(255,255,255,0.22)"
                           strokeWidth={0.5 / mapZoom}
                           style={{
-                            default: { outline: 'none', transition: 'fill 0.12s' },
-                            hover:   { outline: 'none', fill: mode === 'visited' ? '#60a5fa' : '#2DD4BF', cursor: 'pointer' },
+                            default: { outline: 'none', transition: 'fill 0.15s' },
+                            hover:   { outline: 'none', fill: mode === 'visited' ? 'rgba(96,165,250,0.45)' : 'rgba(45,212,191,0.45)', cursor: 'pointer' },
                             pressed: { outline: 'none' },
                           }}
                           onClick={() => handleCountryClick(iso2, bgName)}
