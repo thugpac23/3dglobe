@@ -54,6 +54,17 @@ export interface XPResult {
   newAchievements: string[];
 }
 
+export interface AvatarConfig {
+  id: string;
+  user: UserType;
+  hairStyle: 'short' | 'long' | 'curly' | 'ponytail';
+  hairColor: string;
+  eyeColor: string;
+  skinColor: string;
+  outfit: 'casual' | 'travel' | 'explorer' | 'summer' | 'winter' | 'sporty' | 'adventure' | 'beach' | 'city';
+  accessories: string[];
+}
+
 export interface GlobePolygon {
   properties: {
     ISO_A2: string;

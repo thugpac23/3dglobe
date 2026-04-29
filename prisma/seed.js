@@ -216,8 +216,21 @@ async function main() {
       update: {},
       create: { user, xp: 0, level: 1, achievements: '[]' },
     });
+    await prisma.avatar.upsert({
+      where: { user },
+      update: {},
+      create: {
+        user,
+        hairStyle: user === 'tati' ? 'short' : 'long',
+        hairColor: user === 'tati' ? '#8B4513' : '#1a1a1a',
+        eyeColor:  '#4B5563',
+        skinColor: '#FBBF8A',
+        outfit: 'casual',
+        accessories: '[]',
+      },
+    });
   }
-  console.log('UserProgress records ready.');
+  console.log('UserProgress + Avatar records ready.');
 }
 
 main()

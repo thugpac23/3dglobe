@@ -7,12 +7,25 @@ import {
   VisitsByCountry, WishlistByCountry,
   UserProgress, USER_DISPLAY, USER_COLOR,
 } from '@/types';
+import { sounds, resumeAudio } from '@/lib/sounds';
 import {
   fetchVisits, addVisit, removeVisit,
   fetchProgress, addXP,
   fetchWishlist, addWishlist, removeWishlist,
 } from '@/lib/api';
 import { ACHIEVEMENTS } from '@/lib/xp';
+import { COUNTRY_FACTS } from '@/data/countryFacts';
+import { BG_NAMES } from '@/data/countryNamesBg';
+
+function getFlagEmoji(iso: string): string {
+  if (!iso || iso.length !== 2) return '🌍';
+  try {
+    return String.fromCodePoint(
+      0x1F1E6 + iso.toUpperCase().charCodeAt(0) - 65,
+      0x1F1E6 + iso.toUpperCase().charCodeAt(1) - 65,
+    );
+  } catch { return '🌍'; }
+}
 import XPBar from '@/components/XPBar/XPBar';
 import VisitsTable from '@/components/VisitsTable';
 
@@ -33,7 +46,10 @@ export default function Home() {
   const [mode, setMode] = useState<AppMode>('visited');
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [globeOpen, setGlobeOpen] = useState(false);
+  const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
   const xpPopRef = useRef<HTMLDivElement>(null);
+  const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string, type: Toast['type']) => {
     const id = Date.now();
@@ -101,7 +117,17 @@ export default function Home() {
     } catch { /* silent fail — XP is non-critical */ }
   }, [showToast]);
 
+  const showFactPopup = useCallback((isoCode: string) => {
+    const fact = COUNTRY_FACTS[isoCode];
+    if (!fact) return;
+    const name = BG_NAMES[isoCode] ?? isoCode;
+    if (factTimerRef.current) clearTimeout(factTimerRef.current);
+    setFactPopup({ iso: isoCode, name, fact });
+    factTimerRef.current = setTimeout(() => setFactPopup(null), 6500);
+  }, []);
+
   const handleCountryClick = useCallback(async (isoCode: string, countryName: string) => {
+    showFactPopup(isoCode);
     if (mode === 'wishlist') {
       const onWishlist = wishlistByCountry[isoCode]?.[activeUser] ?? false;
       const displayName = USER_DISPLAY[activeUser];
@@ -186,7 +212,7 @@ export default function Home() {
         showToast('Грешка при запазване', 'remove');
       }
     }
-  }, [mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast, handleAwardXP]);
+  }, [mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast, handleAwardXP, showFactPopup]);
 
   const toastColors: Record<Toast['type'], string> = {
     add: '#059669', remove: '#DC2626',
@@ -240,23 +266,145 @@ export default function Home() {
           : `Добави дестинация в списъка на ${USER_DISPLAY[activeUser]}`}
       </p>
 
-      {/* Globe */}
-      {loading ? (
-        <div className="flex items-center justify-center" style={{ height: '55vh' }}>
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-3 border-sky-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-slate-500">Зареждане…</span>
+      {/* Globe preview card */}
+      <div className="w-full max-w-2xl mt-4 px-2">
+        <button
+          onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
+          disabled={loading}
+          className="w-full rounded-2xl overflow-hidden shadow-xl cursor-pointer transition-all hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99]"
+          style={{ background: 'linear-gradient(135deg, #0c5680 0%, #071d30 100%)', border: '2px solid rgba(14,100,148,0.4)' }}
+        >
+          <div className="flex items-center justify-between px-5 py-4 text-white">
+            <div className="flex items-center gap-4">
+              <span className="text-5xl drop-shadow-lg">{loading ? '⏳' : '🌍'}</span>
+              <div className="text-left">
+                <div className="font-extrabold text-lg tracking-tight">Интерактивен глобус</div>
+                {loading ? (
+                  <div className="text-sm opacity-60 mt-0.5">Зареждане…</div>
+                ) : (
+                  <div className="text-sm opacity-70 mt-0.5">
+                    {USER_DISPLAY.tati}: {visitCount.tati + visitCount.both} · {USER_DISPLAY.iva}: {visitCount.iva + visitCount.both}
+                    {visitCount.both > 0 && ` · Заедно: ${visitCount.both}`}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-1 opacity-60">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+              <span className="text-xs font-semibold">Отвори</span>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex justify-center mt-1" style={{ filter: 'drop-shadow(0 8px 32px rgba(14,100,148,0.25))' }}>
-          <Globe
-            visitsByCountry={visitsByCountry}
-            wishlistByCountry={wishlistByCountry}
-            activeUser={activeUser}
-            mode={mode}
-            onCountryClick={handleCountryClick}
-          />
+        </button>
+      </div>
+
+      {/* Fullscreen globe modal */}
+      {globeOpen && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgba(4,12,24,0.96)', backdropFilter: 'blur(6px)' }}
+        >
+          {/* Modal header */}
+          <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
+            style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(80,140,230,0.15)' }}>
+            {/* User tabs */}
+            {(['tati', 'iva'] as UserType[]).map(u => (
+              <button
+                key={u}
+                onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
+                className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
+                style={{
+                  background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.07)',
+                  color: activeUser === u ? 'white' : 'rgba(255,255,255,0.5)',
+                  border: `1.5px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.1)'}`,
+                }}
+              >
+                {USER_DISPLAY[u]}
+              </button>
+            ))}
+            {/* Mode toggle */}
+            <div className="ml-2 flex rounded-full overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              {(['visited', 'wishlist'] as AppMode[]).map(m => (
+                <button
+                  key={m}
+                  onClick={() => { resumeAudio(); sounds.click(); setMode(m); }}
+                  className="px-3 py-1 text-xs font-semibold transition-all"
+                  style={{
+                    background: mode === m ? USER_COLOR[activeUser] : 'transparent',
+                    color: mode === m ? 'white' : 'rgba(255,255,255,0.45)',
+                    borderRadius: '9999px',
+                  }}
+                >
+                  {m === 'visited' ? '🗺️ Посетено' : '⭐ Желано'}
+                </button>
+              ))}
+            </div>
+            {/* Close */}
+            <button
+              onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(false); setFactPopup(null); }}
+              className="ml-auto w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg transition-all"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
+              title="Затвори"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Globe */}
+          <div className="flex-1 flex items-center justify-center overflow-hidden"
+            style={{ filter: 'drop-shadow(0 0 40px rgba(14,100,148,0.4))' }}>
+            <Globe
+              visitsByCountry={visitsByCountry}
+              wishlistByCountry={wishlistByCountry}
+              activeUser={activeUser}
+              mode={mode}
+              onCountryClick={handleCountryClick}
+              fullscreen
+            />
+          </div>
+
+          {/* Country fact popup */}
+          {factPopup && (
+            <div
+              className="fact-popup-enter"
+              style={{
+                position: 'absolute',
+                bottom: 44,
+                left: '50%',
+                zIndex: 60,
+                width: 'min(90vw, 400px)',
+                background: 'rgba(6,14,36,0.97)',
+                border: '1px solid rgba(80,140,230,0.35)',
+                borderRadius: 16,
+                padding: '14px 18px',
+                color: '#e2e8f0',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 22 }}>{getFlagEmoji(factPopup.iso)}</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#93c5fd' }}>{factPopup.name}</span>
+                <button
+                  onClick={() => setFactPopup(null)}
+                  style={{
+                    marginLeft: 'auto', background: 'none', border: 'none',
+                    color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+                  }}
+                >✕</button>
+              </div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: '#cbd5e1' }}>{factPopup.fact}</div>
+            </div>
+          )}
+
+          {/* Footer hint */}
+          <div className="text-center pb-2 text-xs shrink-0"
+            style={{ color: 'rgba(255,255,255,0.3)' }}>
+            {mode === 'visited'
+              ? `Кликни двукратно върху държава — добавя/премахва за ${USER_DISPLAY[activeUser]}`
+              : `Кликни двукратно върху държава — добавя/премахва от желаните на ${USER_DISPLAY[activeUser]}`}
+          </div>
         </div>
       )}
 
@@ -265,7 +413,7 @@ export default function Home() {
         {[
           { color: '#F59E0B', label: `само ${USER_DISPLAY.tati}` },
           { color: '#EC4899', label: `само ${USER_DISPLAY.iva}` },
-          { color: '#F97316', label: 'двете заедно' },
+          { color: '#7C3AED', label: 'двете заедно' },
           { color: '#14B8A6', label: 'желано' },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
