@@ -26,10 +26,12 @@ function getFlagEmoji(iso: string): string {
     );
   } catch { return '🌍'; }
 }
+import Link from 'next/link';
 import XPBar from '@/components/XPBar/XPBar';
 import VisitsTable from '@/components/VisitsTable';
 
 const Globe = dynamic(() => import('@/components/Globe'), { ssr: false });
+const MapEmbed = dynamic(() => import('@/components/MapEmbed/MapEmbed'), { ssr: false });
 
 interface Toast { id: number; message: string; type: 'add' | 'remove' | 'xp' | 'level' | 'achievement' }
 
@@ -408,8 +410,26 @@ export default function Home() {
         </div>
       )}
 
+      {/* Embedded map */}
+      <div className="w-full max-w-2xl mt-5 px-2">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-base font-bold text-slate-700">🗺️ Карта на посещенията</h2>
+          <Link href="/karta" className="text-xs font-semibold text-sky-600 hover:text-sky-700">
+            Пълна карта →
+          </Link>
+        </div>
+        <MapEmbed
+          visitsByCountry={visitsByCountry}
+          wishlistByCountry={wishlistByCountry}
+          mode={mode}
+          onCountryClick={handleCountryClick}
+          loading={loading}
+          height={300}
+        />
+      </div>
+
       {/* Legend */}
-      <div className="flex flex-wrap justify-center gap-3 mt-1 px-4">
+      <div className="flex flex-wrap justify-center gap-3 mt-4 px-4">
         {[
           { color: '#F59E0B', label: `само ${USER_DISPLAY.tati}` },
           { color: '#EC4899', label: `само ${USER_DISPLAY.iva}` },
