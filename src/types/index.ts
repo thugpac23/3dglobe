@@ -57,7 +57,7 @@ export interface XPResult {
 export interface AvatarConfig {
   id: string;
   user: UserType;
-  hairStyle: 'short' | 'long' | 'curly' | 'ponytail';
+  hairStyle: 'short' | 'long' | 'curly' | 'ponytail' | 'bald';
   hairColor: string;
   eyeColor: string;
   skinColor: string;
