@@ -94,32 +94,41 @@ function DraggableStamp({ stamp, color, onSave, getPage, animEpoch, index }: {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, [animEpoch, index]);
 
+  function startDrag(pageEl: HTMLDivElement, startX: number, startY: number) {
+    dragging.current  = true;
+    lastMouse.current = { x: startX, y: startY };
+    resumeAudio();
+  }
+
+  function moveDrag(pageEl: HTMLDivElement, clientX: number, clientY: number) {
+    if (!dragging.current || !outerRef.current) return;
+    const rect = pageEl.getBoundingClientRect();
+    const dx = ((clientX - lastMouse.current.x) / rect.width)  * 100;
+    const dy = ((clientY - lastMouse.current.y) / rect.height) * 100;
+    lastMouse.current = { x: clientX, y: clientY };
+    pos.current.x = Math.max(7, Math.min(93, pos.current.x + dx));
+    pos.current.y = Math.max(7, Math.min(93, pos.current.y + dy));
+    outerRef.current.style.left = `${pos.current.x}%`;
+    outerRef.current.style.top  = `${pos.current.y}%`;
+  }
+
+  function endDrag() {
+    if (!dragging.current) return;
+    dragging.current = false;
+    sounds.stamp();
+    onSave(stamp.id, pos.current.x, pos.current.y);
+  }
+
   function onMouseDown(e: React.MouseEvent) {
     const pageEl = getPage();
     if (!pageEl) return;
-    const page: HTMLDivElement = pageEl;
+    const page = pageEl;
     e.preventDefault();
-    dragging.current  = true;
-    lastMouse.current = { x: e.clientX, y: e.clientY };
-    resumeAudio();
+    startDrag(page, e.clientX, e.clientY);
 
-    function onMove(ev: MouseEvent) {
-      if (!dragging.current || !outerRef.current) return;
-      const rect = page.getBoundingClientRect();
-      const dx = ((ev.clientX - lastMouse.current.x) / rect.width)  * 100;
-      const dy = ((ev.clientY - lastMouse.current.y) / rect.height) * 100;
-      lastMouse.current = { x: ev.clientX, y: ev.clientY };
-      pos.current.x = Math.max(7, Math.min(93, pos.current.x + dx));
-      pos.current.y = Math.max(7, Math.min(93, pos.current.y + dy));
-      outerRef.current.style.left = `${pos.current.x}%`;
-      outerRef.current.style.top  = `${pos.current.y}%`;
-    }
-
+    function onMove(ev: MouseEvent) { moveDrag(page, ev.clientX, ev.clientY); }
     function onUp() {
-      if (!dragging.current) return;
-      dragging.current = false;
-      sounds.stamp();
-      onSave(stamp.id, pos.current.x, pos.current.y);
+      endDrag();
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     }
@@ -127,10 +136,33 @@ function DraggableStamp({ stamp, color, onSave, getPage, animEpoch, index }: {
     document.addEventListener('mouseup', onUp);
   }
 
+  function onTouchStart(e: React.TouchEvent) {
+    const pageEl = getPage();
+    if (!pageEl || e.touches.length !== 1) return;
+    e.preventDefault();
+    const page = pageEl;
+    const t = e.touches[0];
+    startDrag(page, t.clientX, t.clientY);
+
+    function onMove(ev: TouchEvent) {
+      if (ev.touches.length !== 1) return;
+      ev.preventDefault();
+      moveDrag(page, ev.touches[0].clientX, ev.touches[0].clientY);
+    }
+    function onEnd() {
+      endDrag();
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+    }
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+  }
+
   return (
     <div
       ref={outerRef}
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
