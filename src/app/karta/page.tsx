@@ -12,6 +12,7 @@ import { sounds, resumeAudio } from '@/lib/sounds';
 import VisitsTable from '@/components/VisitsTable';
 import countriesGeoJson from '@/data/countries.json';
 import { COUNTRY_FACTS } from '@/data/countryFacts';
+import { CAPITALS } from '@/data/capitals';
 
 function getFlagEmoji(iso: string): string {
   if (!iso || iso.length !== 2) return '🌍';
@@ -23,7 +24,6 @@ function getFlagEmoji(iso: string): string {
   } catch { return '🌍'; }
 }
 
-// Centroid labels for major countries
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const geoFeatures = (countriesGeoJson as any).features as any[];
 
@@ -52,6 +52,24 @@ function featureCentroid(f: any): [number, number] {
   return [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
 }
 
+// ── Biome-based natural earth colors (satellite-style without an image) ──
+const ARCTIC_ISOS  = new Set(['GL','AQ','IS','SJ','FO']);
+const DESERT_ISOS  = new Set(['DZ','EG','LY','MA','MR','ML','NE','TD','SD','ER','SO','DJ',
+  'SA','YE','OM','AE','QA','KW','BH','IQ','IR','AF','PK','UZ','TM','KG','TJ','MN','KZ','NA']);
+const SAVANNA_ISOS = new Set(['NG','GH','BF','TG','BJ','SN','GM','GW',
+  'KE','TZ','UG','RW','BI','AO','ZM','MW','MZ','ZW','ZA','LS','SZ','ET','SS']);
+const TROPICAL_ISOS = new Set(['BR','CO','VE','GY','SR','EC','PE',
+  'CD','CG','GA','GQ','CM','CF','GN','SL','LR','CI',
+  'ID','MY','PH','BN','TH','KH','LA','MM','VN','SG','TL','PG']);
+
+function getUnvisitedColor(iso: string): string {
+  if (ARCTIC_ISOS.has(iso))   return '#B0C8D4'; // icy blue-grey
+  if (DESERT_ISOS.has(iso))   return '#C4A36A'; // sandy tan
+  if (SAVANNA_ISOS.has(iso))  return '#7BA554'; // savanna olive
+  if (TROPICAL_ISOS.has(iso)) return '#1A5E30'; // dense tropical forest
+  return '#4A8050';                              // temperate default
+}
+
 interface LabelEntry { iso: string; name: string; lng: number; lat: number; rank: number }
 const allLabelFeatures: LabelEntry[] = geoFeatures.flatMap(f => {
   const iso = resolveIso(f.properties);
@@ -66,6 +84,8 @@ const allLabelFeatures: LabelEntry[] = geoFeatures.flatMap(f => {
 
 interface ToastMsg { id: number; text: string; ok: boolean }
 
+type FilterUser = 'tati' | 'iva' | 'both' | null;
+
 export default function KartaPage() {
   const [visits, setVisits]     = useState<Visit[]>([]);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
@@ -78,6 +98,7 @@ export default function KartaPage() {
   const [toasts, setToasts]     = useState<ToastMsg[]>([]);
   const [selectedIso, setSelectedIso] = useState<string | null>(null);
   const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
+  const [filterUser, setFilterUser] = useState<FilterUser>(null);
   const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((text: string, ok = true) => {
@@ -92,6 +113,9 @@ export default function KartaPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  // Reset filter when mode changes
+  useEffect(() => { setFilterUser(null); }, [mode]);
 
   const visitsByCountry = useMemo<VisitsByCountry>(() => {
     const map: VisitsByCountry = {};
@@ -211,22 +235,30 @@ export default function KartaPage() {
   }, [selectedIso, mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast]);
 
   function getColor(iso2: string): string {
-    // Transparent = satellite texture shows through; visited = semi-transparent overlay
-    if (iso2 === selectedIso) return 'rgba(251,191,36,0.75)';
-    if (mode === 'visited') {
-      const e = visitsByCountry[iso2];
-      if (!e) return 'rgba(0,0,0,0)';
-      if (e.tati && e.iva) return 'rgba(124,58,237,0.78)';
-      if (e.tati) return 'rgba(245,158,11,0.78)';
-      if (e.iva) return 'rgba(236,72,153,0.78)';
-      return 'rgba(0,0,0,0)';
-    } else {
-      const e = wishlistByCountry[iso2];
-      if (!e) return 'rgba(0,0,0,0)';
-      if (e.tati && e.iva) return 'rgba(13,148,136,0.78)';
-      if (e.tati || e.iva) return 'rgba(20,184,166,0.78)';
-      return 'rgba(0,0,0,0)';
+    if (iso2 === selectedIso) return '#FBBF24';
+    const natural = getUnvisitedColor(iso2);
+    const DIM = '#2A4030'; // dimmed color when a filter is active
+
+    const data = mode === 'visited' ? visitsByCountry[iso2] : wishlistByCountry[iso2];
+
+    if (!data) {
+      // Unvisited/not-on-list: dim if a filter is active
+      return filterUser ? DIM : natural;
     }
+
+    // Check if this country passes the active filter
+    const passes = !filterUser
+      || (filterUser === 'tati' && data.tati)
+      || (filterUser === 'iva'  && data.iva)
+      || (filterUser === 'both' && data.tati && data.iva);
+
+    if (!passes) return DIM;
+
+    // Full user colors (same in visited and wishlist modes)
+    if (data.tati && data.iva) return '#7C3AED';  // purple — both
+    if (data.tati) return '#F59E0B';               // amber — Tati
+    if (data.iva)  return '#EC4899';               // pink  — Iva
+    return natural;
   }
 
   // Label visibility based on zoom — rank 2 (major countries) always visible
@@ -238,6 +270,12 @@ export default function KartaPage() {
 
   function zoomIn()  { setMapZoom(z => Math.min(z * 1.5, 12)); }
   function zoomOut() { setMapZoom(z => Math.max(z / 1.5, 1)); }
+
+  const FILTER_OPTS: { key: FilterUser & string; label: string; color: string }[] = [
+    { key: 'tati', label: USER_DISPLAY.tati, color: USER_COLOR.tati },
+    { key: 'iva',  label: USER_DISPLAY.iva,  color: USER_COLOR.iva  },
+    { key: 'both', label: 'Двамата',          color: '#7C3AED'        },
+  ];
 
   return (
     <main className="min-h-screen px-3 py-4">
@@ -288,19 +326,10 @@ export default function KartaPage() {
 
         {/* Legend */}
         <div className="hidden sm:flex gap-3 ml-auto text-xs text-slate-500">
-          {mode === 'visited' ? (
-            <>
-              <LegendDot color={USER_COLOR.tati} label={USER_DISPLAY.tati} />
-              <LegendDot color={USER_COLOR.iva}  label={USER_DISPLAY.iva} />
-              <LegendDot color="#7C3AED" label="Заедно" />
-            </>
-          ) : (
-            <>
-              <LegendDot color="#14B8A6" label="Желано" />
-              <LegendDot color="#0D9488" label="Заедно" />
-            </>
-          )}
-          <LegendDot color="rgba(255,255,255,0.18)" label="Непосетено" />
+          <LegendDot color={USER_COLOR.tati} label={USER_DISPLAY.tati} />
+          <LegendDot color={USER_COLOR.iva}  label={USER_DISPLAY.iva} />
+          <LegendDot color="#7C3AED" label="Заедно" />
+          <LegendDot color="#4A8050" label="Непосетено" />
         </div>
       </div>
 
@@ -309,15 +338,14 @@ export default function KartaPage() {
 
         {/* Map column */}
         <div className="flex-1 min-w-0">
-          <div className="relative rounded-2xl overflow-hidden shadow-md"
-               style={{ height: 520, background: 'url("/earth-satellite.jpg") center/cover no-repeat, #0a1628' }}>
+          <div className="relative rounded-2xl overflow-hidden shadow-md" style={{ height: 520, background: '#1256a0' }}>
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
                 <div className="text-slate-400 text-sm">Зареждане…</div>
               </div>
             )}
 
-            <ComposableMap projection="geoNaturalEarth1" style={{ width: '100%', height: '100%' }}>
+            <ComposableMap projection="geoNaturalEarth1" style={{ width: '100%', height: '100%', background: 'transparent' }}>
               <ZoomableGroup
                 zoom={mapZoom}
                 center={mapCenter}
@@ -337,15 +365,15 @@ export default function KartaPage() {
                           key={geo.rsmKey}
                           geography={geo}
                           fill={color}
-                          stroke="rgba(255,255,255,0.22)"
+                          stroke="rgba(255,255,255,0.45)"
                           strokeWidth={0.5 / mapZoom}
                           style={{
                             default: { outline: 'none', transition: 'fill 0.15s' },
-                            hover:   { outline: 'none', fill: mode === 'visited' ? 'rgba(96,165,250,0.45)' : 'rgba(45,212,191,0.45)', cursor: 'pointer' },
+                            hover:   { outline: 'none', fill: '#93C5FD', cursor: 'pointer' },
                             pressed: { outline: 'none' },
                           }}
                           onClick={() => handleCountryClick(iso2, bgName)}
-                          onMouseEnter={(e) => setTooltip({ name: bgName, x: e.clientX, y: e.clientY })}
+                          onMouseEnter={(e) => setTooltip({ name: `${getFlagEmoji(iso2)} ${bgName}`, x: e.clientX, y: e.clientY })}
                           onMouseMove={(e) => setTooltip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)}
                           onMouseLeave={() => setTooltip(null)}
                         />
@@ -371,6 +399,24 @@ export default function KartaPage() {
                     </text>
                   </Marker>
                 ))}
+
+                {/* Capital city markers */}
+                {CAPITALS.map(cap => {
+                  const isMarked = mode === 'visited'
+                    ? !!(visitsByCountry[cap.isoCode])
+                    : !!(wishlistByCountry[cap.isoCode]);
+                  return (
+                    <Marker key={cap.isoCode} coordinates={[cap.lng, cap.lat]}>
+                      <circle
+                        r={(isMarked ? 2.8 : 1.5) / mapZoom}
+                        fill={isMarked ? 'rgba(255,225,60,0.95)' : 'rgba(255,255,255,0.28)'}
+                        stroke="rgba(0,0,0,0.45)"
+                        strokeWidth={0.5 / mapZoom}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    </Marker>
+                  );
+                })}
               </ZoomableGroup>
             </ComposableMap>
 
@@ -434,6 +480,35 @@ export default function KartaPage() {
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
             {mode === 'visited' ? '🗺️ Посетени страни' : '⭐ Желани дестинации'}
           </div>
+
+          {/* Map visual filter */}
+          <div className="flex flex-wrap gap-1.5 px-1">
+            <span className="text-xs text-slate-400 w-full">Филтър на картата:</span>
+            {FILTER_OPTS.map(({ key, label, color }) => (
+              <button
+                key={key}
+                onClick={() => setFilterUser(f => f === key ? null : key)}
+                className="px-3 py-1 rounded-full text-xs font-bold transition-all"
+                style={{
+                  background: filterUser === key ? color : 'white',
+                  color: filterUser === key ? 'white' : '#64748b',
+                  border: `1.5px solid ${filterUser === key ? color : '#E2E8F0'}`,
+                  boxShadow: filterUser === key ? `0 2px 8px ${color}40` : 'none',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            {filterUser && (
+              <button
+                onClick={() => setFilterUser(null)}
+                className="px-2 py-1 rounded-full text-xs text-slate-400 border border-slate-200 hover:border-slate-400 transition-all"
+              >
+                ✕ Всички
+              </button>
+            )}
+          </div>
+
           <VisitsTable
             visitsByCountry={visitsByCountry}
             wishlistByCountry={wishlistByCountry}

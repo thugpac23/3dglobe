@@ -185,6 +185,9 @@ export default function AvatarSVG({ avatar, size = 80, label }: Props) {
             <path d="M68 34 Q80 26 78 44 Q74 52 68 46" fill={hairColor} />
           </>
         )}
+        {hair === 'bald' && (
+          <ellipse cx="44" cy="30" rx="5" ry="3" fill="white" opacity="0.25" transform="rotate(-30 44 30)" />
+        )}
 
         {/* ── Eyes ── */}
         <circle cx="41" cy="46" r="4"   fill="white" />

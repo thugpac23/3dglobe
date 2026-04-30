@@ -8,9 +8,9 @@ import { useState, useEffect } from 'react';
 const ITEMS = [
   { href: '/',             icon: '🌍', label: 'Глобус' },
   { href: '/karta',        icon: '🗺️', label: 'Карта' },
-  { href: '/postizheniya', icon: '🏅', label: 'Постижения' },
   { href: '/pasport',      icon: '📕', label: 'Паспорт' },
   { href: '/igra',         icon: '🎮', label: 'Игра' },
+  { href: '/postizheniya', icon: '🏅', label: 'Постижения' },
   { href: '/avatar',       icon: '🧑', label: 'Моят герой' },
 ];
 

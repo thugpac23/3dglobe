@@ -403,7 +403,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
       />
 
       {/* Zoom buttons */}
-      <div className="absolute flex flex-col gap-2 z-10" style={{ top: 16, right: 16 }}>
+      <div className="absolute flex flex-col gap-2 z-30" style={{ top: 16, right: 16, pointerEvents: 'auto' }}>
         <ZoomBtn label="+" onClick={zoomIn} />
         <ZoomBtn label="−" onClick={zoomOut} />
       </div>

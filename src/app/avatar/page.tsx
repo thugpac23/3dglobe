@@ -10,6 +10,7 @@ const HAIR_STYLES: { value: AvatarConfig['hairStyle']; label: string }[] = [
   { value: 'long',     label: 'Дълга' },
   { value: 'curly',    label: 'Къдрава' },
   { value: 'ponytail', label: 'Опашка' },
+  { value: 'bald',     label: 'Плешив' },
 ];
 const HAIR_COLORS = ['#8B4513','#1a1a1a','#F59E0B','#DC2626','#7C3AED','#D1D5DB','#F97316'];
 const EYE_COLORS  = ['#4B5563','#1E40AF','#065F46','#92400E','#7C3AED','#DB2777'];
