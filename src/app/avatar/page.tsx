@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { UserType, AvatarConfig, USER_DISPLAY, USER_COLOR } from '@/types';
+import { UserType, AvatarConfig, FaceType, Expression, USER_DISPLAY, USER_COLOR } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
 
 const Avatar3D = dynamic(() => import('@/components/Avatar3D/Avatar3D'), { ssr: false });
@@ -12,7 +12,7 @@ const HAIR_STYLES: { value: AvatarConfig['hairStyle']; label: string }[] = [
   { value: 'long',     label: 'Дълга'   },
   { value: 'curly',    label: 'Къдрава' },
   { value: 'ponytail', label: 'Опашка'  },
-  { value: 'bald',     label: 'Плешив'  },
+  { value: 'bald',     label: 'Без коса' },
 ];
 const HAIR_COLORS = ['#8B4513','#1a1a1a','#F59E0B','#DC2626','#7C3AED','#D1D5DB','#F97316'];
 const EYE_COLORS  = ['#4B5563','#1E40AF','#065F46','#92400E','#7C3AED','#DB2777'];
@@ -35,6 +35,21 @@ const OUTFITS: { value: AvatarConfig['outfit']; label: string; emoji: string }[]
   { value: 'scuba',     label: 'Гмуркане',     emoji: '🤿' },
 ];
 
+const FACE_TYPES: { value: FaceType; label: string; emoji: string }[] = [
+  { value: 'standard', label: 'Стандартно', emoji: '🙂' },
+  { value: 'round',    label: 'Заоблено',   emoji: '😊' },
+  { value: 'long',     label: 'Издължено',  emoji: '😐' },
+  { value: 'child',    label: 'Детско',     emoji: '🧒' },
+  { value: 'angular',  label: 'Ъгловато',   emoji: '😤' },
+];
+
+const EXPRESSIONS: { value: Expression; label: string; emoji: string }[] = [
+  { value: 'smile',     label: 'Усмивка',   emoji: '😊' },
+  { value: 'neutral',   label: 'Неутрално', emoji: '😐' },
+  { value: 'surprised', label: 'Изненадан', emoji: '😮' },
+  { value: 'thinking',  label: 'Мислещ',    emoji: '🤔' },
+];
+
 const ACCESSORIES_LIST = [
   { id: 'hat',            label: 'Цилиндър',           emoji: '🎩' },
   { id: 'glasses',        label: 'Очила',              emoji: '👓' },
@@ -55,6 +70,7 @@ const ACCESSORIES_LIST = [
 const DEFAULT_AVATAR: Omit<AvatarConfig, 'id' | 'user'> = {
   hairStyle: 'short', hairColor: '#8B4513', eyeColor: '#4B5563',
   skinColor: '#FBBF8A', outfit: 'casual', accessories: [],
+  faceType: 'standard', expression: 'smile',
 };
 
 export default function AvatarPage() {
@@ -175,6 +191,26 @@ export default function AvatarPage() {
             <div className="flex gap-2 flex-wrap">
               {SKIN_COLORS.map(c => (
                 <ColorDot key={c} color={c} active={av.skinColor === c} onClick={() => update('skinColor', c)} />
+              ))}
+            </div>
+          </Section>
+
+          <Section label="Форма на лицето">
+            <div className="flex flex-wrap gap-2">
+              {FACE_TYPES.map(f => (
+                <ChoiceBtn key={f.value} active={av.faceType === f.value} color={USER_COLOR[activeUser]} onClick={() => update('faceType', f.value)}>
+                  {f.emoji} {f.label}
+                </ChoiceBtn>
+              ))}
+            </div>
+          </Section>
+
+          <Section label="Израз на лицето">
+            <div className="flex flex-wrap gap-2">
+              {EXPRESSIONS.map(e => (
+                <ChoiceBtn key={e.value} active={av.expression === e.value} color={USER_COLOR[activeUser]} onClick={() => update('expression', e.value)}>
+                  {e.emoji} {e.label}
+                </ChoiceBtn>
               ))}
             </div>
           </Section>

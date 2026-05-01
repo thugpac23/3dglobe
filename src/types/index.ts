@@ -1,5 +1,7 @@
 export type UserType = 'tati' | 'iva';
 export type AppMode = 'visited' | 'wishlist';
+export type FaceType   = 'standard' | 'round' | 'long' | 'child' | 'angular';
+export type Expression = 'smile' | 'neutral' | 'surprised' | 'thinking';
 
 export const USER_DISPLAY: Record<UserType, string> = {
   tati: 'Тати',
@@ -63,6 +65,8 @@ export interface AvatarConfig {
   skinColor: string;
   outfit: 'casual' | 'travel' | 'explorer' | 'summer' | 'winter' | 'sporty' | 'adventure' | 'beach' | 'city' | 'formal' | 'safari' | 'ninja' | 'royal' | 'scuba';
   accessories: string[];
+  faceType?: FaceType;
+  expression?: Expression;
 }
 
 export interface GlobePolygon {

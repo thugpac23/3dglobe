@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { UserType, USER_COLOR, USER_DISPLAY } from '@/types';
+import { useState, useCallback, useEffect } from 'react';
+import dynamic from 'next/dynamic';
+import { UserType, AvatarConfig, Expression, USER_COLOR, USER_DISPLAY } from '@/types';
 import { addXP } from '@/lib/api';
 import { sounds, resumeAudio } from '@/lib/sounds';
+
+const Avatar3D = dynamic(() => import('@/components/Avatar3D/Avatar3D'), { ssr: false });
 
 interface Country {
   name: string;
@@ -279,6 +282,16 @@ export default function IgraPage() {
   const [score, setScore] = useState(0);
   const [round, setRound] = useState(0);
   const [xpEarned, setXpEarned] = useState(0);
+  const [avatarCfg, setAvatarCfg] = useState<Partial<AvatarConfig>>({});
+
+  useEffect(() => {
+    fetch('/api/avatar').then(r => r.json()).then(data => {
+      if (data[activeUser]) setAvatarCfg(data[activeUser] as Partial<AvatarConfig>);
+    }).catch(() => {});
+  }, [activeUser]);
+
+  const quizExpression: Expression | undefined =
+    phase === 'answered' ? (selected === question?.correct ? 'smile' : 'thinking') : undefined;
 
   const startGame = useCallback(() => {
     resumeAudio(); sounds.click();
@@ -430,13 +443,27 @@ export default function IgraPage() {
           </div>
 
           {phase === 'answered' && (
-            <button
-              onClick={nextQuestion}
-              className="w-full mt-5 py-3 rounded-2xl font-bold text-white transition-all"
-              style={{ background: USER_COLOR[activeUser] }}
-            >
-              {round + 1 >= TOTAL_ROUNDS ? 'Виж резултата' : 'Следващ въпрос →'}
-            </button>
+            <div className="mt-5 flex items-center gap-4">
+              {/* Mini avatar reaction */}
+              <div className="shrink-0 flex flex-col items-center">
+                <Avatar3D
+                  avatar={{ ...avatarCfg, user: activeUser }}
+                  width={80}
+                  height={108}
+                  expression={quizExpression}
+                />
+                <span className="text-lg mt-0.5">
+                  {selected === question?.correct ? '🎉' : '🤔'}
+                </span>
+              </div>
+              <button
+                onClick={nextQuestion}
+                className="flex-1 py-3 rounded-2xl font-bold text-white transition-all"
+                style={{ background: USER_COLOR[activeUser] }}
+              >
+                {round + 1 >= TOTAL_ROUNDS ? 'Виж резултата' : 'Следващ въпрос →'}
+              </button>
+            </div>
           )}
         </div>
       )}
