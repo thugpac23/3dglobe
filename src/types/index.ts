@@ -61,7 +61,7 @@ export interface AvatarConfig {
   hairColor: string;
   eyeColor: string;
   skinColor: string;
-  outfit: 'casual' | 'travel' | 'explorer' | 'summer' | 'winter' | 'sporty' | 'adventure' | 'beach' | 'city';
+  outfit: 'casual' | 'travel' | 'explorer' | 'summer' | 'winter' | 'sporty' | 'adventure' | 'beach' | 'city' | 'formal' | 'safari' | 'ninja' | 'royal' | 'scuba';
   accessories: string[];
 }
 
