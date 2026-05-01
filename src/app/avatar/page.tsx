@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { UserType, AvatarConfig, USER_DISPLAY, USER_COLOR } from '@/types';
-import AvatarSVG from '@/components/AvatarSVG/AvatarSVG';
 import { sounds, resumeAudio } from '@/lib/sounds';
+
+const Avatar3D = dynamic(() => import('@/components/Avatar3D/Avatar3D'), { ssr: false });
 
 const HAIR_STYLES: { value: AvatarConfig['hairStyle']; label: string }[] = [
   { value: 'short',    label: 'Кратка'  },
@@ -64,28 +66,6 @@ export default function AvatarPage() {
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
 
-  // Drag-to-rotate state
-  const [rotation, setRotation]   = useState(0);
-  const [dragging, setDragging]   = useState(false);
-  const dragRef   = useRef(false);
-  const lastXRef  = useRef(0);
-
-  function startRotation(x: number) {
-    dragRef.current = true;
-    lastXRef.current = x;
-    setDragging(true);
-  }
-  function moveRotation(x: number) {
-    if (!dragRef.current) return;
-    const dx = x - lastXRef.current;
-    lastXRef.current = x;
-    setRotation(r => ((r + dx * 0.9) % 360 + 360) % 360);
-  }
-  function endRotation() {
-    dragRef.current = false;
-    setDragging(false);
-  }
-
   useEffect(() => {
     fetch('/api/avatar').then(r => r.json()).then(data => {
       if (data.tati) setAvatars(prev => ({
@@ -137,7 +117,7 @@ export default function AvatarPage() {
         {(['tati','iva'] as UserType[]).map(u => (
           <button
             key={u}
-            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setRotation(0); }}
+            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); }}
             className="px-5 py-2 rounded-full font-bold text-sm transition-all"
             style={{
               background: activeUser === u ? USER_COLOR[u] : 'white',
@@ -155,31 +135,9 @@ export default function AvatarPage() {
         {/* 3D rotating preview */}
         <div
           className="flex flex-col items-center gap-2 p-5 rounded-2xl bg-white shadow-md min-w-[150px] select-none"
-          style={{ border: `2px solid ${USER_COLOR[activeUser]}30`, cursor: dragging ? 'grabbing' : 'grab' }}
-          onMouseDown={e => startRotation(e.clientX)}
-          onMouseMove={e => moveRotation(e.clientX)}
-          onMouseUp={endRotation}
-          onMouseLeave={endRotation}
-          onTouchStart={e => startRotation(e.touches[0].clientX)}
-          onTouchMove={e => { e.preventDefault(); moveRotation(e.touches[0].clientX); }}
-          onTouchEnd={endRotation}
+          style={{ border: `2px solid ${USER_COLOR[activeUser]}30` }}
         >
-          {/* 3D card flip */}
-          <div style={{
-            position: 'relative',
-            width: 110,
-            height: 154,
-            transformStyle: 'preserve-3d',
-            transform: `perspective(500px) rotateY(${rotation}deg)`,
-            transition: dragging ? 'none' : 'transform 0.35s ease',
-          }}>
-            <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden' }}>
-              <AvatarSVG avatar={{ ...av, user: activeUser }} size={110} view="front" />
-            </div>
-            <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-              <AvatarSVG avatar={{ ...av, user: activeUser }} size={110} view="back" />
-            </div>
-          </div>
+          <Avatar3D avatar={{ ...av, user: activeUser }} width={220} height={300} />
           <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
           <span className="text-xs text-slate-400">← Завърти →</span>
         </div>
