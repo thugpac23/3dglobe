@@ -17,6 +17,7 @@ const COVER_DARK = '#3e0a13';
 const COVER_GOLD = '#C9A227';
 const PW = 220;
 const PH = 320;
+const BOOK_W = PW * 2 + 10; // 450px total spread width
 const STAMPS_PER_PAGE = 6;
 
 function getFlagEmoji(iso: string): string {
@@ -313,8 +314,16 @@ export default function PasportPage() {
   const [loading, setLoading]       = useState(true);
   const [spreadIdx, setSpreadIdx]   = useState(0);
   const [flipping, setFlipping]     = useState<'fwd' | 'bwd' | null>(null);
+  const [bookScale, setBookScale]   = useState(1);
   // Incremented each time stamps should (re-)animate on the visible spread
   const [animEpoch, setAnimEpoch]   = useState(0);
+
+  useEffect(() => {
+    const update = () => setBookScale(Math.min(1, (window.innerWidth - 32) / BOOK_W));
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -400,11 +409,13 @@ export default function PasportPage() {
       ) : (
         <>
           {/* ── Book spread ── */}
-          <div style={{ display: 'flex', justifyContent: 'center', perspective: 1200, marginBottom: 28 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', perspective: 1200, marginBottom: 28, height: PH * bookScale + 8, overflow: 'visible' }}>
             <div style={{
               position: 'relative', display: 'flex',
               boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 4px 16px rgba(0,0,0,0.25)',
               borderRadius: 4,
+              transformOrigin: 'top center',
+              transform: `scale(${bookScale})`,
             }}>
 
               {/* LEFT PAGE */}
