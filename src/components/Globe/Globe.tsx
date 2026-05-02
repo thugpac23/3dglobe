@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import * as THREE from 'three';
 import { VisitsByCountry, GlobePolygon, CapitalCity, USER_DISPLAY } from '@/types';
 import { BG_NAMES } from '@/data/countryNamesBg';
 import { CAPITALS } from '@/data/capitals';
@@ -21,14 +20,16 @@ interface GlobeProps {
   fullscreen?: boolean;
 }
 
+const GLOBE_TEXTURE = '/earth-satellite.jpg';
+
 const COLOR = {
-  default:  'rgba(44,120,44,0.92)',
-  tati:     'rgba(255,215,0,0.94)',
-  iva:      'rgba(255,80,160,0.94)',
-  both:     'rgba(124,58,237,0.94)',
-  wishlist: 'rgba(20,184,166,0.88)',
-  hover:    'rgba(255,220,60,0.92)',
-  selected: 'rgba(255,255,255,0.97)',
+  default:  'rgba(0,0,0,0)',            // transparent — Earth texture shows through
+  tati:     'rgba(255,215,0,0.86)',
+  iva:      'rgba(255,80,160,0.86)',
+  both:     'rgba(124,58,237,0.86)',
+  wishlist: 'rgba(20,184,166,0.82)',
+  hover:    'rgba(255,220,60,0.78)',
+  selected: 'rgba(255,255,255,0.92)',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,7 +170,7 @@ function makeHtmlEl(d: object): HTMLElement {
       'user-select:none',
     ].join(';');
   } else {
-    const sz = datum.labelrank <= 2 ? 11 : datum.labelrank <= 3 ? 9 : 8;
+    const sz = datum.labelrank <= 2 ? 14 : datum.labelrank <= 3 ? 12 : 10;
     el.textContent = datum.name;
     el.style.cssText = [
       'color:rgba(255,255,255,0.95)',
@@ -210,13 +211,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   const [dims, setDims]               = useState({ w: 320, h: 320 });
   const [cameraAlt, setCameraAlt]     = useState(2.5);
 
-  const globeMaterial = useMemo(() => new THREE.MeshPhongMaterial({
-    color: new THREE.Color('#0e6494'),
-    emissive: new THREE.Color('#071d30'),
-    emissiveIntensity: 0.35,
-    shininess: 6,
-    specular: new THREE.Color('#1a4a6e'),
-  }), []);
+  // No custom globeMaterial — using globeImageUrl texture instead
 
   // Resize
   useEffect(() => {
@@ -242,11 +237,11 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     return () => clearInterval(id);
   }, []);
 
-  // Labels: only show after zoom in
+  // Labels: show sooner so they're visible on mobile without deep zoom
   const visibleLabels = useMemo<LabelDatum[]>(() => {
-    if (cameraAlt > 2.0) return [];
-    if (cameraAlt > 1.4) return allLabels.filter(l => l.labelrank <= 2);
-    if (cameraAlt > 0.9) return allLabels.filter(l => l.labelrank <= 3);
+    if (cameraAlt > 2.8) return [];
+    if (cameraAlt > 1.8) return allLabels.filter(l => l.labelrank <= 2);
+    if (cameraAlt > 1.2) return allLabels.filter(l => l.labelrank <= 3);
     return allLabels.filter(l => l.labelrank <= 5);
   }, [cameraAlt]);
 
@@ -298,11 +293,11 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     return 0.012;
   }, [hoveredIso, selectedIso]);
 
-  // Golden side color on selected polygon enhances the 3D lift effect
+  // Side color: golden on selected, transparent elsewhere (texture shows)
   const polygonSideColor = useCallback((d: object) => {
     const iso = resolveIso((d as GlobePolygon).properties);
     if (iso === selectedIso) return 'rgba(255,200,50,0.85)';
-    return 'rgba(20,70,20,0.7)';
+    return 'rgba(0,0,0,0)';
   }, [selectedIso]);
 
   const handlePolygonHover = useCallback((polygon: object | null) => {
@@ -372,7 +367,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
         width={dims.w}
         height={dims.h}
         backgroundColor="rgba(0,0,0,0)"
-        globeMaterial={globeMaterial}
+        globeImageUrl={GLOBE_TEXTURE}
         atmosphereColor="#5dade2"
         atmosphereAltitude={0.25}
         polygonsData={polygonsData}
