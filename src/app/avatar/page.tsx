@@ -7,28 +7,47 @@ import { sounds, resumeAudio } from '@/lib/sounds';
 
 const AvatarRPM = dynamic(() => import('@/components/AvatarRPM/AvatarRPM'), { ssr: false });
 
-// Ready Player Me subdomain — use the public demo endpoint (no registration required).
-// Replace with your own RPM subdomain (e.g. "mygame.readyplayer.me") for production.
-const RPM_IFRAME_BASE = 'https://demo.readyplayer.me/avatar';
+// Public RPM demo endpoint — replace with your own partner subdomain for production.
+const RPM_BASE = 'https://demo.readyplayer.me/avatar';
 
 interface AvatarRecord {
   avatarUrl: string | null;
 }
 
-function getRpmUrl(user: UserType): string {
+/** Build RPM URL for the given user gender */
+function rpmUrl(user: UserType, redirectUrl?: string): string {
   const gender = user === 'tati' ? 'male' : 'female';
-  return `${RPM_IFRAME_BASE}?frameApi&clearCache&gender=${gender}&bodyType=fullbody`;
+  let url = `${RPM_BASE}?frameApi&clearCache&gender=${gender}&bodyType=fullbody`;
+  if (redirectUrl) url += `&redirectUrl=${encodeURIComponent(redirectUrl)}`;
+  return url;
+}
+
+/**
+ * On iOS Safari, third-party iframes are blocked by ITP and camera
+ * permissions inside iframes are disabled. Detect this case so we can
+ * open RPM in a full tab instead.
+ */
+function needsRedirectMode(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(ua as string & { MSStream?: unknown }).MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 768;
+  return isIOS || isSafari || isSmallScreen;
 }
 
 export default function AvatarPage() {
-  const [activeUser, setActiveUser]     = useState<UserType>('tati');
-  const [avatars, setAvatars]           = useState<Record<UserType, AvatarRecord>>({ tati: { avatarUrl: null }, iva: { avatarUrl: null } });
-  const [showCreator, setShowCreator]   = useState(false);
-  const [saving, setSaving]             = useState(false);
-  const [saved,  setSaved]              = useState(false);
+  const [activeUser, setActiveUser]   = useState<UserType>('tati');
+  const [avatars, setAvatars]         = useState<Record<UserType, AvatarRecord>>({
+    tati: { avatarUrl: null },
+    iva:  { avatarUrl: null },
+  });
+  const [showCreator, setShowCreator] = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [saved,  setSaved]            = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // ── Load persisted avatar URLs ──────────────────────────────────────────────
+  // ── Load persisted avatar URLs on mount ────────────────────────────────────
   useEffect(() => {
     fetch('/api/avatar').then(r => r.json()).then(data => {
       setAvatars({
@@ -38,10 +57,30 @@ export default function AvatarPage() {
     }).catch(() => {});
   }, []);
 
-  // ── Listen for RPM avatar export message ────────────────────────────────────
+  // ── Handle redirect return from RPM (mobile/Safari flow) ──────────────────
+  // RPM redirects back to /avatar?avatarUrl=…  or  /avatar?id=…
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const returnedUrl = params.get('avatarUrl');
+    const returnedId  = params.get('id');
+    const url = returnedUrl ?? (returnedId ? `https://models.readyplayer.me/${returnedId}.glb` : null);
+
+    if (url) {
+      const user = (sessionStorage.getItem('rpm_user') as UserType | null) ?? 'tati';
+      sessionStorage.removeItem('rpm_user');
+      // Clean the URL params without triggering navigation
+      window.history.replaceState({}, '', '/avatar');
+      // Optimistically update UI then persist
+      setAvatars(prev => ({ ...prev, [user]: { avatarUrl: url } }));
+      setActiveUser(user);
+      persistAvatar(user, url);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Listen for postMessage from iframe (desktop flow) ─────────────────────
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // RPM sends the payload as a JSON string or object
       let data = event.data as unknown;
       if (typeof data === 'string') {
         try { data = JSON.parse(data); } catch { return; }
@@ -52,7 +91,8 @@ export default function AvatarPage() {
         const url = (d?.data as Record<string, string>)?.url;
         if (url) {
           setShowCreator(false);
-          saveAvatar(activeUser, url);
+          setAvatars(prev => ({ ...prev, [activeUser]: { avatarUrl: url } }));
+          persistAvatar(activeUser, url);
         }
       }
     };
@@ -61,7 +101,7 @@ export default function AvatarPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUser]);
 
-  // ── Subscribe to RPM events once iframe loads ──────────────────────────────
+  // ── Subscribe RPM iframe to events once it loads ───────────────────────────
   const onIframeLoad = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage(
       JSON.stringify({ target: 'readyplayerme', type: 'subscribe', eventName: 'v1.avatar.exported' }),
@@ -69,8 +109,8 @@ export default function AvatarPage() {
     );
   }, []);
 
-  // ── Persist avatar URL ──────────────────────────────────────────────────────
-  const saveAvatar = useCallback(async (user: UserType, avatarUrl: string) => {
+  // ── Persist avatar URL to DB ───────────────────────────────────────────────
+  const persistAvatar = useCallback(async (user: UserType, avatarUrl: string) => {
     setSaving(true);
     resumeAudio(); sounds.add();
     try {
@@ -79,12 +119,27 @@ export default function AvatarPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user, avatarUrl }),
       });
-      setAvatars(prev => ({ ...prev, [user]: { avatarUrl } }));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch { /* ignore */ }
     setSaving(false);
   }, []);
+
+  // ── Open avatar creator ────────────────────────────────────────────────────
+  const openCreator = useCallback(() => {
+    resumeAudio(); sounds.click();
+
+    if (needsRedirectMode()) {
+      // iOS / Safari / mobile: open RPM in a new full tab so the browser
+      // can grant camera permission properly. RPM redirects back with ?avatarUrl=
+      sessionStorage.setItem('rpm_user', activeUser);
+      const returnUrl = `${window.location.origin}/avatar`;
+      window.open(rpmUrl(activeUser, returnUrl), '_blank', 'noopener');
+    } else {
+      // Desktop: render RPM inside the full-screen iframe modal
+      setShowCreator(true);
+    }
+  }, [activeUser]);
 
   const current = avatars[activeUser];
   const color   = USER_COLOR[activeUser];
@@ -114,7 +169,7 @@ export default function AvatarPage() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-6 items-start">
-        {/* ── Avatar preview ──────────────────────────────────────────────── */}
+        {/* ── Avatar preview ─────────────────────────────────────────────── */}
         <div
           className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white shadow-md"
           style={{ border: `2px solid ${color}28`, minWidth: 200 }}
@@ -128,15 +183,21 @@ export default function AvatarPage() {
           ) : (
             <div
               className="flex flex-col items-center justify-center gap-3 rounded-xl"
-              style={{ width: 240, height: 320, background: `linear-gradient(135deg, ${color}12, ${color}22)`, border: `2px dashed ${color}44` }}
+              style={{
+                width: 240, height: 320,
+                background: `linear-gradient(135deg, ${color}12, ${color}22)`,
+                border: `2px dashed ${color}44`,
+              }}
             >
               <span style={{ fontSize: 52 }}>🧑‍🚀</span>
-              <span className="text-slate-500 text-sm text-center px-4 leading-snug">Все още нямаш герой.<br/>Натисни <strong>Създай</strong>!</span>
+              <span className="text-slate-500 text-sm text-center px-4 leading-snug">
+                Все още нямаш герой.<br/>Натисни <strong>Създай</strong>!
+              </span>
             </div>
           )}
         </div>
 
-        {/* ── Actions + info ──────────────────────────────────────────────── */}
+        {/* ── Actions + info ─────────────────────────────────────────────── */}
         <div className="flex-1 space-y-4">
           <div
             className="rounded-2xl p-4"
@@ -151,27 +212,18 @@ export default function AvatarPage() {
           </div>
 
           <button
-            onClick={() => { resumeAudio(); sounds.click(); setShowCreator(true); }}
+            onClick={openCreator}
             className="w-full py-3 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
             style={{ background: color, boxShadow: `0 4px 16px ${color}40` }}
           >
             {current.avatarUrl ? '✏️ Промени героя' : '✨ Създай герой'}
           </button>
 
-          {current.avatarUrl && (
-            <button
-              onClick={() => saveAvatar(activeUser, current.avatarUrl!)}
-              disabled={saving}
-              className="w-full py-2.5 rounded-2xl font-bold text-sm transition-all border-2"
-              style={{
-                background: saved ? '#D1FAE5' : 'white',
-                color: saved ? '#065F46' : '#64748b',
-                borderColor: saved ? '#059669' : '#E2E8F0',
-                opacity: saving ? 0.6 : 1,
-              }}
-            >
-              {saved ? '✓ Запазено!' : saving ? 'Запазване…' : '💾 Запази отново'}
-            </button>
+          {saving && (
+            <p className="text-center text-xs text-slate-400 animate-pulse">Запазване…</p>
+          )}
+          {saved && (
+            <p className="text-center text-xs font-semibold text-emerald-600">✓ Героят е запазен!</p>
           )}
 
           {/* Feature list */}
@@ -182,20 +234,21 @@ export default function AvatarPage() {
               '✅ Мъжки / женски avatar',
               '✅ Завъртане и приближаване',
               '✅ Автоматично запазване в базата',
-            ].map(t => (
-              <p key={t}>{t}</p>
-            ))}
+            ].map(t => <p key={t}>{t}</p>)}
           </div>
         </div>
       </div>
 
-      {/* ── RPM iframe creator modal ─────────────────────────────────────────── */}
+      {/* ── Desktop iframe creator modal ────────────────────────────────────── */}
       {showCreator && (
         <div
-          className="fixed inset-0 z-50 flex flex-col"
-          style={{ background: 'rgba(0,0,0,0.72)' }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 50,
+            display: 'grid',
+            gridTemplateRows: 'auto auto 1fr',
+          }}
         >
-          {/* Modal header */}
+          {/* Header */}
           <div
             className="flex items-center justify-between px-4 py-3 text-white font-bold text-sm"
             style={{ background: color }}
@@ -210,22 +263,25 @@ export default function AvatarPage() {
             </button>
           </div>
 
-          {/* Instructions bar */}
+          {/* Hint bar */}
           <div
             className="flex items-center gap-2 px-4 py-2 text-xs font-medium"
             style={{ background: `${color}22`, color: '#334155' }}
           >
             <span>💡</span>
-            <span>Персонализирай герой и натисни <strong>„Next"</strong> → <strong>„Done"</strong>, за да запазиш.</span>
+            <span>
+              Персонализирай героя и натисни <strong>„Next"</strong> → <strong>„Done"</strong>, за да запазиш.
+            </span>
           </div>
 
-          {/* RPM iframe fills remaining space */}
+          {/* RPM iframe */}
           <iframe
             ref={iframeRef}
-            src={getRpmUrl(activeUser)}
+            src={rpmUrl(activeUser)}
             onLoad={onIframeLoad}
-            allow="camera *; microphone *"
-            className="flex-1 w-full border-0"
+            allow="camera *; microphone *; xr-spatial-tracking; gyroscope; accelerometer"
+            allowFullScreen
+            style={{ width: '100%', height: '100%', border: 'none', background: '#111' }}
             title="Ready Player Me avatar creator"
           />
         </div>
