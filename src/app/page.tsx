@@ -26,7 +26,6 @@ function getFlagEmoji(iso: string): string {
     );
   } catch { return '🌍'; }
 }
-import Link from 'next/link';
 import XPBar from '@/components/XPBar/XPBar';
 import VisitsTable from '@/components/VisitsTable';
 
@@ -49,6 +48,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [globeOpen, setGlobeOpen] = useState(false);
+  const [mapOpen, setMapOpen]     = useState(false);
   const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
   const xpPopRef = useRef<HTMLDivElement>(null);
   const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,6 +74,17 @@ export default function Home() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (mapOpen)   { setMapOpen(false);   setFactPopup(null); }
+        if (globeOpen) { setGlobeOpen(false); setFactPopup(null); }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [globeOpen, mapOpen]);
 
   const visitsByCountry = useMemo<VisitsByCountry>(() => {
     const map: VisitsByCountry = {};
@@ -410,23 +421,144 @@ export default function Home() {
         </div>
       )}
 
-      {/* Embedded map */}
-      <div className="w-full max-w-2xl mt-5 px-2">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base font-bold text-slate-700">🗺️ Карта на посещенията</h2>
-          <Link href="/karta" className="text-xs font-semibold text-sky-600 hover:text-sky-700">
-            Пълна карта →
-          </Link>
-        </div>
-        <MapEmbed
-          visitsByCountry={visitsByCountry}
-          wishlistByCountry={wishlistByCountry}
-          mode={mode}
-          onCountryClick={handleCountryClick}
-          loading={loading}
-          height={300}
-        />
+      {/* Map preview card */}
+      <div className="w-full max-w-2xl mt-3 px-2">
+        <button
+          onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
+          disabled={loading}
+          className="w-full rounded-2xl overflow-hidden shadow-xl cursor-pointer transition-all hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99]"
+          style={{ background: 'linear-gradient(135deg, #0c3a18 0%, #071d0a 100%)', border: '2px solid rgba(30,100,50,0.5)' }}
+        >
+          <div className="flex items-center justify-between px-5 py-4 text-white">
+            <div className="flex items-center gap-4">
+              <span className="text-5xl drop-shadow-lg">{loading ? '⏳' : '🗺️'}</span>
+              <div className="text-left">
+                <div className="font-extrabold text-lg tracking-tight">Карта на пътешествията</div>
+                {loading ? (
+                  <div className="text-sm opacity-60 mt-0.5">Зареждане…</div>
+                ) : (
+                  <div className="text-sm opacity-70 mt-0.5">
+                    {USER_DISPLAY.tati}: {visitCount.tati + visitCount.both} · {USER_DISPLAY.iva}: {visitCount.iva + visitCount.both}
+                    {visitCount.both > 0 && ` · Заедно: ${visitCount.both}`}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-1 opacity-60">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+              <span className="text-xs font-semibold">Отвори</span>
+            </div>
+          </div>
+        </button>
       </div>
+
+      {/* Fullscreen map modal */}
+      {mapOpen && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgba(4,12,24,0.96)', backdropFilter: 'blur(6px)' }}
+        >
+          {/* Modal header */}
+          <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
+            style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(30,120,60,0.2)' }}>
+            {(['tati', 'iva'] as UserType[]).map(u => (
+              <button
+                key={u}
+                onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
+                className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
+                style={{
+                  background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.07)',
+                  color: activeUser === u ? 'white' : 'rgba(255,255,255,0.5)',
+                  border: `1.5px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.1)'}`,
+                }}
+              >
+                {USER_DISPLAY[u]}
+              </button>
+            ))}
+            <div className="ml-2 flex rounded-full overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              {(['visited', 'wishlist'] as AppMode[]).map(m => (
+                <button
+                  key={m}
+                  onClick={() => { resumeAudio(); sounds.click(); setMode(m); }}
+                  className="px-3 py-1 text-xs font-semibold transition-all"
+                  style={{
+                    background: mode === m ? USER_COLOR[activeUser] : 'transparent',
+                    color: mode === m ? 'white' : 'rgba(255,255,255,0.45)',
+                    borderRadius: '9999px',
+                  }}
+                >
+                  {m === 'visited' ? '🗺️ Посетено' : '⭐ Желано'}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => { resumeAudio(); sounds.click(); setMapOpen(false); setFactPopup(null); }}
+              className="ml-auto w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg transition-all"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
+              title="Затвори"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Map fills remaining space */}
+          <div className="flex-1 overflow-hidden">
+            <MapEmbed
+              visitsByCountry={visitsByCountry}
+              wishlistByCountry={wishlistByCountry}
+              mode={mode}
+              onCountryClick={handleCountryClick}
+              loading={loading}
+              fullscreen
+            />
+          </div>
+
+          {/* Country fact popup */}
+          {factPopup && (
+            <div
+              className="fact-popup-enter"
+              style={{
+                position: 'absolute',
+                bottom: 44,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 60,
+                width: 'min(90vw, 400px)',
+                background: 'rgba(6,14,36,0.97)',
+                border: '1px solid rgba(80,140,230,0.35)',
+                borderRadius: 16,
+                padding: '14px 18px',
+                color: '#e2e8f0',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 22 }}>{getFlagEmoji(factPopup.iso)}</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#93c5fd' }}>{factPopup.name}</span>
+                <button
+                  onClick={() => setFactPopup(null)}
+                  style={{
+                    marginLeft: 'auto', background: 'none', border: 'none',
+                    color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+                  }}
+                >✕</button>
+              </div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: '#cbd5e1' }}>{factPopup.fact}</div>
+            </div>
+          )}
+
+          {/* Footer hint */}
+          <div className="text-center py-2 text-xs shrink-0"
+            style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(6,18,36,0.7)' }}>
+            {mode === 'visited'
+              ? `Кликни върху държава — добавя/премахва за ${USER_DISPLAY[activeUser]}`
+              : `Кликни върху държава — добавя/премахва от желаните на ${USER_DISPLAY[activeUser]}`}
+          </div>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap justify-center gap-3 mt-4 px-4">

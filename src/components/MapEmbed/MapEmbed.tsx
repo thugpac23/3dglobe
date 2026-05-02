@@ -7,7 +7,7 @@ import { BG_NAMES } from '@/data/countryNamesBg';
 import { CAPITALS } from '@/data/capitals';
 import countriesGeoJson from '@/data/countries.json';
 import {
-  resolveIso, getNaturalEarthColor, getOverlayColor, getVisitingUsers,
+  resolveIso, getOverlayColor, getVisitingUsers,
   visibleLabelsAtZoom, USER_FILL,
 } from '@/lib/mapHelpers';
 
@@ -28,10 +28,11 @@ interface Props {
   onCountryClick: (iso2: string, name: string) => void;
   loading?: boolean;
   height?: number;
+  fullscreen?: boolean;
 }
 
 export default function MapEmbed({
-  visitsByCountry, wishlistByCountry, mode, onCountryClick, loading, height = 300,
+  visitsByCountry, wishlistByCountry, mode, onCountryClick, loading, height = 300, fullscreen = false,
 }: Props) {
   const [mapZoom, setMapZoom]     = useState(1);
   const [mapCenter, setMapCenter] = useState<[number, number]>([15, 45]);
@@ -47,8 +48,17 @@ export default function MapEmbed({
 
   const labels = visibleLabelsAtZoom(mapZoom);
 
+  const containerStyle: React.CSSProperties = {
+    height: fullscreen ? '100%' : height,
+    borderRadius: fullscreen ? 0 : 16,
+    backgroundImage: 'url(/earth-satellite.jpg)',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+  };
+
   return (
-    <div className="relative rounded-2xl overflow-hidden shadow-md" style={{ height, background: '#1256a0' }}>
+    <div className="relative overflow-hidden shadow-md" style={containerStyle}>
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
           <div className="text-white text-sm opacity-50">Зареждане…</div>
@@ -69,7 +79,7 @@ export default function MapEmbed({
           <Geographies geography={countriesGeoJson}>
             {({ geographies }) => (
               <>
-                {/* Base layer: natural earth colors */}
+                {/* Base layer: near-transparent land (click target + subtle border) */}
                 {geographies.map(geo => {
                   const iso2 = resolveIso(geo.properties);
                   if (!iso2) return null;
@@ -78,12 +88,12 @@ export default function MapEmbed({
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
-                      fill={getNaturalEarthColor(iso2)}
-                      stroke="rgba(255,255,255,0.85)"
+                      fill="rgba(30,90,30,0.18)"
+                      stroke="rgba(255,255,255,0.7)"
                       strokeWidth={1.1 / mapZoom}
                       style={{
                         default: { outline: 'none', transition: 'fill 0.15s' },
-                        hover:   { outline: 'none', fill: '#93C5FD', cursor: 'pointer' },
+                        hover:   { outline: 'none', fill: 'rgba(147,197,253,0.55)', cursor: 'pointer' },
                         pressed: { outline: 'none' },
                       }}
                       onClick={() => onCountryClick(iso2, bgName)}
@@ -104,7 +114,7 @@ export default function MapEmbed({
                       key={`ov-${geo.rsmKey}`}
                       geography={geo}
                       fill={overlay}
-                      stroke="rgba(255,255,255,0.85)"
+                      stroke="rgba(255,255,255,0.7)"
                       strokeWidth={1.1 / mapZoom}
                       style={{
                         default: { outline: 'none', pointerEvents: 'none' },
@@ -205,10 +215,10 @@ export default function MapEmbed({
             onClick={fn}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-base font-bold transition-all hover:scale-110 active:scale-95"
             style={{
-              background: 'rgba(255,255,255,0.9)',
-              color: '#334155',
-              border: '1px solid rgba(0,0,0,0.12)',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              background: 'rgba(6,18,40,0.85)',
+              color: 'rgba(180,210,255,0.9)',
+              border: '1px solid rgba(80,140,230,0.25)',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
             }}
           >
             {label}
@@ -220,7 +230,7 @@ export default function MapEmbed({
       {tooltip && (
         <div
           className="pointer-events-none fixed z-50 px-3 py-1.5 rounded-lg shadow-lg text-xs font-semibold text-white"
-          style={{ left: tooltip.x + 12, top: tooltip.y - 36, background: 'rgba(15,23,42,0.92)' }}
+          style={{ left: tooltip.x + 12, top: tooltip.y - 36, background: 'rgba(6,14,36,0.97)', border: '1px solid rgba(80,140,230,0.3)' }}
         >
           {tooltip.name}
         </div>
