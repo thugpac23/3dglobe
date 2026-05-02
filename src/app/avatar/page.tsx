@@ -1,139 +1,105 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { UserType, AvatarConfig, FaceType, Expression, USER_DISPLAY, USER_COLOR } from '@/types';
+import { UserType, USER_DISPLAY, USER_COLOR } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
 
-const Avatar3D = dynamic(() => import('@/components/Avatar3D/Avatar3D'), { ssr: false });
+const AvatarRPM = dynamic(() => import('@/components/AvatarRPM/AvatarRPM'), { ssr: false });
 
-const HAIR_STYLES: { value: AvatarConfig['hairStyle']; label: string }[] = [
-  { value: 'short',    label: 'Кратка'  },
-  { value: 'long',     label: 'Дълга'   },
-  { value: 'curly',    label: 'Къдрава' },
-  { value: 'ponytail', label: 'Опашка'  },
-  { value: 'bald',     label: 'Без коса' },
-];
-const HAIR_COLORS = ['#8B4513','#1a1a1a','#F59E0B','#DC2626','#7C3AED','#D1D5DB','#F97316'];
-const EYE_COLORS  = ['#4B5563','#1E40AF','#065F46','#92400E','#7C3AED','#DB2777'];
-const SKIN_COLORS = ['#FBBF8A','#F5CBA7','#C68642','#8D5524','#FFDAB9'];
+// Ready Player Me subdomain — use the public demo endpoint (no registration required).
+// Replace with your own RPM subdomain (e.g. "mygame.readyplayer.me") for production.
+const RPM_IFRAME_BASE = 'https://demo.readyplayer.me/avatar';
 
-const OUTFITS: { value: AvatarConfig['outfit']; label: string; emoji: string }[] = [
-  { value: 'casual',    label: 'Ежедневно',    emoji: '👕' },
-  { value: 'travel',    label: 'Пътна яке',    emoji: '🧥' },
-  { value: 'explorer',  label: 'Изследовател', emoji: '🦺' },
-  { value: 'summer',    label: 'Лятно',        emoji: '🌞' },
-  { value: 'winter',    label: 'Зимно',        emoji: '🧣' },
-  { value: 'sporty',    label: 'Спортно',      emoji: '🏃' },
-  { value: 'adventure', label: 'Приключение',  emoji: '🧗' },
-  { value: 'beach',     label: 'Плажно',       emoji: '🏖️' },
-  { value: 'city',      label: 'Градско',      emoji: '🏙️' },
-  { value: 'formal',    label: 'Официално',    emoji: '🤵' },
-  { value: 'safari',    label: 'Сафари',       emoji: '🌍' },
-  { value: 'ninja',     label: 'Нинджа',       emoji: '🥷' },
-  { value: 'royal',     label: 'Кралско',      emoji: '👑' },
-  { value: 'scuba',     label: 'Гмуркане',     emoji: '🤿' },
-];
+interface AvatarRecord {
+  avatarUrl: string | null;
+}
 
-const FACE_TYPES: { value: FaceType; label: string; emoji: string }[] = [
-  { value: 'standard', label: 'Стандартно', emoji: '🙂' },
-  { value: 'round',    label: 'Заоблено',   emoji: '😊' },
-  { value: 'long',     label: 'Издължено',  emoji: '😐' },
-  { value: 'child',    label: 'Детско',     emoji: '🧒' },
-  { value: 'angular',  label: 'Ъгловато',   emoji: '😤' },
-];
-
-const EXPRESSIONS: { value: Expression; label: string; emoji: string }[] = [
-  { value: 'smile',     label: 'Усмивка',   emoji: '😊' },
-  { value: 'neutral',   label: 'Неутрално', emoji: '😐' },
-  { value: 'surprised', label: 'Изненадан', emoji: '😮' },
-  { value: 'thinking',  label: 'Мислещ',    emoji: '🤔' },
-];
-
-const ACCESSORIES_LIST = [
-  { id: 'hat',            label: 'Цилиндър',           emoji: '🎩' },
-  { id: 'glasses',        label: 'Очила',              emoji: '👓' },
-  { id: 'backpack',       label: 'Раница',             emoji: '🎒' },
-  { id: 'cap',            label: 'Шапка с козирка',    emoji: '🧢' },
-  { id: 'sunglasses',     label: 'Слънчеви очила',     emoji: '🕶️' },
-  { id: 'travel-backpack',label: 'Туристическа раница',emoji: '🏕️' },
-  { id: 'camera',         label: 'Фотоапарат',         emoji: '📷' },
-  { id: 'scarf',          label: 'Шал',                emoji: '🧣' },
-  { id: 'headphones',     label: 'Слушалки',           emoji: '🎧' },
-  { id: 'crown',          label: 'Корона',             emoji: '👑' },
-  { id: 'medal',          label: 'Медал',              emoji: '🏅' },
-  { id: 'binoculars',     label: 'Бинокъл',            emoji: '🔭' },
-  { id: 'umbrella',       label: 'Чадър',              emoji: '☂️' },
-  { id: 'map',            label: 'Карта',              emoji: '🗺️' },
-];
-
-const DEFAULT_AVATAR: Omit<AvatarConfig, 'id' | 'user'> = {
-  hairStyle: 'short', hairColor: '#8B4513', eyeColor: '#4B5563',
-  skinColor: '#FBBF8A', outfit: 'casual', accessories: [],
-  faceType: 'standard', expression: 'smile',
-};
+function getRpmUrl(user: UserType): string {
+  const gender = user === 'tati' ? 'male' : 'female';
+  return `${RPM_IFRAME_BASE}?frameApi&clearCache&gender=${gender}&bodyType=fullbody`;
+}
 
 export default function AvatarPage() {
-  const [activeUser, setActiveUser] = useState<UserType>('tati');
-  const [avatars, setAvatars] = useState<Record<UserType, Omit<AvatarConfig,'id'|'user'>>>({
-    tati: { ...DEFAULT_AVATAR },
-    iva:  { ...DEFAULT_AVATAR, hairStyle: 'long', hairColor: '#1a1a1a' },
-  });
-  const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
+  const [activeUser, setActiveUser]     = useState<UserType>('tati');
+  const [avatars, setAvatars]           = useState<Record<UserType, AvatarRecord>>({ tati: { avatarUrl: null }, iva: { avatarUrl: null } });
+  const [showCreator, setShowCreator]   = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [saved,  setSaved]              = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // ── Load persisted avatar URLs ──────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/avatar').then(r => r.json()).then(data => {
-      if (data.tati) setAvatars(prev => ({
-        ...prev,
-        tati: { hairStyle: data.tati.hairStyle, hairColor: data.tati.hairColor, eyeColor: data.tati.eyeColor, skinColor: data.tati.skinColor, outfit: data.tati.outfit, accessories: data.tati.accessories },
-        iva:  { hairStyle: data.iva.hairStyle,  hairColor: data.iva.hairColor,  eyeColor: data.iva.eyeColor,  skinColor: data.iva.skinColor,  outfit: data.iva.outfit,  accessories: data.iva.accessories },
-      }));
+      setAvatars({
+        tati: { avatarUrl: data.tati?.avatarUrl ?? null },
+        iva:  { avatarUrl: data.iva?.avatarUrl  ?? null },
+      });
     }).catch(() => {});
   }, []);
 
-  const update = useCallback(<K extends keyof Omit<AvatarConfig,'id'|'user'>>(key: K, val: Omit<AvatarConfig,'id'|'user'>[K]) => {
-    resumeAudio(); sounds.click();
-    setAvatars(prev => ({ ...prev, [activeUser]: { ...prev[activeUser], [key]: val } }));
+  // ── Listen for RPM avatar export message ────────────────────────────────────
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // RPM sends the payload as a JSON string or object
+      let data = event.data as unknown;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch { return; }
+      }
+      const d = data as Record<string, unknown>;
+      if (d?.source !== 'readyplayerme') return;
+      if (d?.eventName === 'v1.avatar.exported') {
+        const url = (d?.data as Record<string, string>)?.url;
+        if (url) {
+          setShowCreator(false);
+          saveAvatar(activeUser, url);
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUser]);
 
-  const toggleAccessory = useCallback((id: string) => {
-    resumeAudio(); sounds.click();
-    setAvatars(prev => {
-      const cur = prev[activeUser].accessories;
-      const next = cur.includes(id) ? cur.filter(a => a !== id) : [...cur, id];
-      return { ...prev, [activeUser]: { ...prev[activeUser], accessories: next } };
-    });
-  }, [activeUser]);
+  // ── Subscribe to RPM events once iframe loads ──────────────────────────────
+  const onIframeLoad = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ target: 'readyplayerme', type: 'subscribe', eventName: 'v1.avatar.exported' }),
+      '*',
+    );
+  }, []);
 
-  const save = useCallback(async () => {
+  // ── Persist avatar URL ──────────────────────────────────────────────────────
+  const saveAvatar = useCallback(async (user: UserType, avatarUrl: string) => {
     setSaving(true);
     resumeAudio(); sounds.add();
     try {
       await fetch('/api/avatar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: activeUser, ...avatars[activeUser] }),
+        body: JSON.stringify({ user, avatarUrl }),
       });
+      setAvatars(prev => ({ ...prev, [user]: { avatarUrl } }));
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => setSaved(false), 2500);
     } catch { /* ignore */ }
     setSaving(false);
-  }, [activeUser, avatars]);
+  }, []);
 
-  const av = avatars[activeUser];
+  const current = avatars[activeUser];
+  const color   = USER_COLOR[activeUser];
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-extrabold text-slate-800 mb-1">🧑 Моят герой</h1>
-      <p className="text-slate-500 text-sm mb-5">Персонализирай своя пътешественик</p>
+      <p className="text-slate-500 text-sm mb-5">Създай и персонализирай своя 3D герой</p>
 
       {/* User tabs */}
       <div className="flex gap-2 mb-6">
-        {(['tati','iva'] as UserType[]).map(u => (
+        {(['tati', 'iva'] as UserType[]).map(u => (
           <button
             key={u}
-            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); }}
+            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
             className="px-5 py-2 rounded-full font-bold text-sm transition-all"
             style={{
               background: activeUser === u ? USER_COLOR[u] : 'white',
@@ -147,146 +113,123 @@ export default function AvatarPage() {
         ))}
       </div>
 
-      <div className="flex gap-6 items-start flex-wrap">
-        {/* 3D rotating preview */}
+      <div className="flex flex-col sm:flex-row gap-6 items-start">
+        {/* ── Avatar preview ──────────────────────────────────────────────── */}
         <div
-          className="flex flex-col items-center gap-2 p-5 rounded-2xl bg-white shadow-md min-w-[150px] select-none"
-          style={{ border: `2px solid ${USER_COLOR[activeUser]}30` }}
+          className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white shadow-md"
+          style={{ border: `2px solid ${color}28`, minWidth: 200 }}
         >
-          <Avatar3D avatar={{ ...av, user: activeUser }} width={220} height={300} />
-          <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
-          <span className="text-xs text-slate-400">← Завърти →</span>
+          {current.avatarUrl ? (
+            <>
+              <AvatarRPM avatarUrl={current.avatarUrl} width={240} height={320} />
+              <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
+              <span className="text-xs text-slate-400">Завърти / Приближи</span>
+            </>
+          ) : (
+            <div
+              className="flex flex-col items-center justify-center gap-3 rounded-xl"
+              style={{ width: 240, height: 320, background: `linear-gradient(135deg, ${color}12, ${color}22)`, border: `2px dashed ${color}44` }}
+            >
+              <span style={{ fontSize: 52 }}>🧑‍🚀</span>
+              <span className="text-slate-500 text-sm text-center px-4 leading-snug">Все още нямаш герой.<br/>Натисни <strong>Създай</strong>!</span>
+            </div>
+          )}
         </div>
 
-        {/* Controls */}
-        <div className="flex-1 min-w-[220px] space-y-4">
-
-          <Section label="Прическа">
-            <div className="flex flex-wrap gap-2">
-              {HAIR_STYLES.map(h => (
-                <ChoiceBtn key={h.value} active={av.hairStyle === h.value} color={USER_COLOR[activeUser]} onClick={() => update('hairStyle', h.value)}>
-                  {h.label}
-                </ChoiceBtn>
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Цвят на косата">
-            <div className="flex gap-2 flex-wrap">
-              {HAIR_COLORS.map(c => (
-                <ColorDot key={c} color={c} active={av.hairColor === c} onClick={() => update('hairColor', c)} />
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Цвят на очите">
-            <div className="flex gap-2 flex-wrap">
-              {EYE_COLORS.map(c => (
-                <ColorDot key={c} color={c} active={av.eyeColor === c} onClick={() => update('eyeColor', c)} />
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Цвят на кожата">
-            <div className="flex gap-2 flex-wrap">
-              {SKIN_COLORS.map(c => (
-                <ColorDot key={c} color={c} active={av.skinColor === c} onClick={() => update('skinColor', c)} />
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Форма на лицето">
-            <div className="flex flex-wrap gap-2">
-              {FACE_TYPES.map(f => (
-                <ChoiceBtn key={f.value} active={av.faceType === f.value} color={USER_COLOR[activeUser]} onClick={() => update('faceType', f.value)}>
-                  {f.emoji} {f.label}
-                </ChoiceBtn>
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Израз на лицето">
-            <div className="flex flex-wrap gap-2">
-              {EXPRESSIONS.map(e => (
-                <ChoiceBtn key={e.value} active={av.expression === e.value} color={USER_COLOR[activeUser]} onClick={() => update('expression', e.value)}>
-                  {e.emoji} {e.label}
-                </ChoiceBtn>
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Облекло">
-            <div className="flex gap-2 flex-wrap">
-              {OUTFITS.map(o => (
-                <ChoiceBtn key={o.value} active={av.outfit === o.value} color={USER_COLOR[activeUser]} onClick={() => update('outfit', o.value)}>
-                  {o.emoji} {o.label}
-                </ChoiceBtn>
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Аксесоари">
-            <div className="flex gap-2 flex-wrap">
-              {ACCESSORIES_LIST.map(a => (
-                <ChoiceBtn key={a.id} active={av.accessories.includes(a.id)} color={USER_COLOR[activeUser]} onClick={() => toggleAccessory(a.id)}>
-                  {a.emoji} {a.label}
-                </ChoiceBtn>
-              ))}
-            </div>
-          </Section>
+        {/* ── Actions + info ──────────────────────────────────────────────── */}
+        <div className="flex-1 space-y-4">
+          <div
+            className="rounded-2xl p-4"
+            style={{ background: `${color}0e`, border: `1.5px solid ${color}28` }}
+          >
+            <p className="font-bold text-slate-700 mb-1" style={{ color }}>
+              🎨 Ready Player Me
+            </p>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Използвай безплатния 3D avatar creator. Избери прическа, дрехи, аксесоари и цвят на кожата — резултатът се запазва автоматично.
+            </p>
+          </div>
 
           <button
-            onClick={save}
-            disabled={saving}
-            className="w-full py-3 rounded-2xl font-bold text-white text-sm transition-all"
-            style={{ background: saved ? '#059669' : USER_COLOR[activeUser], opacity: saving ? 0.7 : 1 }}
+            onClick={() => { resumeAudio(); sounds.click(); setShowCreator(true); }}
+            className="w-full py-3 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{ background: color, boxShadow: `0 4px 16px ${color}40` }}
           >
-            {saved ? '✓ Запазено!' : saving ? 'Запазване…' : '💾 Запази героя'}
+            {current.avatarUrl ? '✏️ Промени героя' : '✨ Създай герой'}
           </button>
+
+          {current.avatarUrl && (
+            <button
+              onClick={() => saveAvatar(activeUser, current.avatarUrl!)}
+              disabled={saving}
+              className="w-full py-2.5 rounded-2xl font-bold text-sm transition-all border-2"
+              style={{
+                background: saved ? '#D1FAE5' : 'white',
+                color: saved ? '#065F46' : '#64748b',
+                borderColor: saved ? '#059669' : '#E2E8F0',
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saved ? '✓ Запазено!' : saving ? 'Запазване…' : '💾 Запази отново'}
+            </button>
+          )}
+
+          {/* Feature list */}
+          <div className="space-y-1.5 text-xs text-slate-500">
+            {[
+              '✅ Реалистичен 3D модел',
+              '✅ Персонализирани дрехи и прическа',
+              '✅ Мъжки / женски avatar',
+              '✅ Завъртане и приближаване',
+              '✅ Автоматично запазване в базата',
+            ].map(t => (
+              <p key={t}>{t}</p>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* ── RPM iframe creator modal ─────────────────────────────────────────── */}
+      {showCreator && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'rgba(0,0,0,0.72)' }}
+        >
+          {/* Modal header */}
+          <div
+            className="flex items-center justify-between px-4 py-3 text-white font-bold text-sm"
+            style={{ background: color }}
+          >
+            <span>🎨 Създай герой — {USER_DISPLAY[activeUser]}</span>
+            <button
+              onClick={() => setShowCreator(false)}
+              className="text-white text-xl font-bold leading-none hover:opacity-75 transition-opacity"
+              aria-label="Затвори"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Instructions bar */}
+          <div
+            className="flex items-center gap-2 px-4 py-2 text-xs font-medium"
+            style={{ background: `${color}22`, color: '#334155' }}
+          >
+            <span>💡</span>
+            <span>Персонализирай герой и натисни <strong>„Next"</strong> → <strong>„Done"</strong>, за да запазиш.</span>
+          </div>
+
+          {/* RPM iframe fills remaining space */}
+          <iframe
+            ref={iframeRef}
+            src={getRpmUrl(activeUser)}
+            onLoad={onIframeLoad}
+            allow="camera *; microphone *"
+            className="flex-1 w-full border-0"
+            title="Ready Player Me avatar creator"
+          />
+        </div>
+      )}
     </main>
-  );
-}
-
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{label}</p>
-      {children}
-    </div>
-  );
-}
-
-function ChoiceBtn({ children, active, color, onClick }: { children: React.ReactNode; active: boolean; color: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-      style={{
-        background: active ? color : 'white',
-        color: active ? 'white' : '#64748b',
-        border: `1.5px solid ${active ? color : '#E2E8F0'}`,
-        boxShadow: active ? `0 2px 8px ${color}40` : '0 1px 3px rgba(0,0,0,0.06)',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ColorDot({ color, active, onClick }: { color: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-8 h-8 rounded-full transition-all"
-      style={{
-        background: color,
-        border: active ? '3px solid #1e293b' : '2px solid rgba(0,0,0,0.15)',
-        transform: active ? 'scale(1.2)' : 'scale(1)',
-        boxShadow: active ? '0 0 0 2px white, 0 0 0 4px ' + color : 'none',
-      }}
-      title={color}
-    />
   );
 }

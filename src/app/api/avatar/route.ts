@@ -3,8 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { UserType } from '@/types';
 
 const DEFAULTS = {
-  tati: { hairStyle: 'short', hairColor: '#8B4513', eyeColor: '#4B5563', skinColor: '#FBBF8A', outfit: 'casual', accessories: '[]' },
-  iva:  { hairStyle: 'long',  hairColor: '#1a1a1a', eyeColor: '#4B5563', skinColor: '#FBBF8A', outfit: 'casual', accessories: '[]' },
+  tati: { hairStyle: 'short', hairColor: '#8B4513', eyeColor: '#4B5563', skinColor: '#FBBF8A', outfit: 'casual', accessories: '[]', avatarUrl: null },
+  iva:  { hairStyle: 'long',  hairColor: '#1a1a1a', eyeColor: '#4B5563', skinColor: '#FBBF8A', outfit: 'casual', accessories: '[]', avatarUrl: null },
 };
 
 async function getOrCreate(user: UserType) {
@@ -29,19 +29,20 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as { user: UserType; [k: string]: unknown };
-    const { user, hairStyle, hairColor, eyeColor, skinColor, outfit, accessories } = body;
+    const { user, hairStyle, hairColor, eyeColor, skinColor, outfit, accessories, avatarUrl } = body;
     if (!user || !['tati', 'iva'].includes(user)) {
       return NextResponse.json({ error: 'Invalid user' }, { status: 400 });
     }
     const updated = await prisma.avatar.upsert({
       where: { user },
       update: {
-        ...(hairStyle !== undefined && { hairStyle: String(hairStyle) }),
-        ...(hairColor !== undefined && { hairColor: String(hairColor) }),
-        ...(eyeColor  !== undefined && { eyeColor:  String(eyeColor) }),
-        ...(skinColor !== undefined && { skinColor: String(skinColor) }),
-        ...(outfit    !== undefined && { outfit:    String(outfit) }),
+        ...(hairStyle  !== undefined && { hairStyle:  String(hairStyle) }),
+        ...(hairColor  !== undefined && { hairColor:  String(hairColor) }),
+        ...(eyeColor   !== undefined && { eyeColor:   String(eyeColor) }),
+        ...(skinColor  !== undefined && { skinColor:  String(skinColor) }),
+        ...(outfit     !== undefined && { outfit:     String(outfit) }),
         ...(accessories !== undefined && { accessories: JSON.stringify(accessories) }),
+        ...(avatarUrl  !== undefined && { avatarUrl:  avatarUrl === null ? null : String(avatarUrl) }),
       },
       create: { user, ...DEFAULTS[user] },
     });
