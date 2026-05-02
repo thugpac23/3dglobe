@@ -2,11 +2,11 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { UserType, AvatarConfig, Expression, USER_COLOR, USER_DISPLAY } from '@/types';
+import { UserType, USER_COLOR, USER_DISPLAY } from '@/types';
 import { addXP } from '@/lib/api';
 import { sounds, resumeAudio } from '@/lib/sounds';
 
-const Avatar3D = dynamic(() => import('@/components/Avatar3D/Avatar3D'), { ssr: false });
+const AvatarRPM = dynamic(() => import('@/components/AvatarRPM/AvatarRPM'), { ssr: false });
 
 interface Country {
   name: string;
@@ -282,16 +282,15 @@ export default function IgraPage() {
   const [score, setScore] = useState(0);
   const [round, setRound] = useState(0);
   const [xpEarned, setXpEarned] = useState(0);
-  const [avatarCfg, setAvatarCfg] = useState<Partial<AvatarConfig>>({});
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/avatar').then(r => r.json()).then(data => {
-      if (data[activeUser]) setAvatarCfg(data[activeUser] as Partial<AvatarConfig>);
+      setAvatarUrl((data[activeUser]?.avatarUrl as string | null) ?? null);
     }).catch(() => {});
   }, [activeUser]);
 
-  const quizExpression: Expression | undefined =
-    phase === 'answered' ? (selected === question?.correct ? 'smile' : 'thinking') : undefined;
+  const isCorrectAnswer = phase === 'answered' && selected === question?.correct;
 
   const startGame = useCallback(() => {
     resumeAudio(); sounds.click();
@@ -444,17 +443,19 @@ export default function IgraPage() {
 
           {phase === 'answered' && (
             <div className="mt-5 flex items-center gap-4">
-              {/* Mini avatar reaction */}
-              <div className="shrink-0 flex flex-col items-center">
-                <Avatar3D
-                  avatar={{ ...avatarCfg, user: activeUser }}
-                  width={80}
-                  height={108}
-                  expression={quizExpression}
-                />
-                <span className="text-lg mt-0.5">
-                  {selected === question?.correct ? '🎉' : '🤔'}
-                </span>
+              {/* Avatar or emoji reaction */}
+              <div className="shrink-0 flex flex-col items-center gap-1">
+                {avatarUrl ? (
+                  <AvatarRPM avatarUrl={avatarUrl} width={80} height={106} />
+                ) : (
+                  <div
+                    className="flex items-center justify-center rounded-2xl text-4xl"
+                    style={{ width: 80, height: 106, background: `${USER_COLOR[activeUser]}18` }}
+                  >
+                    {isCorrectAnswer ? '🎉' : '🤔'}
+                  </div>
+                )}
+                <span className="text-base">{isCorrectAnswer ? '🎉' : '🤔'}</span>
               </div>
               <button
                 onClick={nextQuestion}

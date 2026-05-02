@@ -67,14 +67,15 @@ model UserProgress {
 }
 
 model Avatar {
-  id          String @id @default(cuid())
-  user        User   @unique
-  hairStyle   String @default("short")
-  hairColor   String @default("#8B4513")
-  eyeColor    String @default("#4B5563")
-  skinColor   String @default("#FBBF8A")
-  outfit      String @default("casual")
-  accessories String @default("[]")
+  id          String  @id @default(cuid())
+  user        User    @unique
+  hairStyle   String  @default("short")
+  hairColor   String  @default("#8B4513")
+  eyeColor    String  @default("#4B5563")
+  skinColor   String  @default("#FBBF8A")
+  outfit      String  @default("casual")
+  accessories String  @default("[]")
+  avatarUrl   String?
 
   @@map("avatars")
 }
