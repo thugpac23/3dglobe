@@ -94,6 +94,7 @@ export default function KartaPage() {
   const [activeUser, setActiveUser] = useState<UserType>('tati');
   const [mapZoom, setMapZoom]   = useState(1);
   const [mapCenter, setMapCenter] = useState<[number, number]>([15, 45]);
+  const [isMobile, setIsMobile] = useState(false);
   const [tooltip, setTooltip]   = useState<{ name: string; x: number; y: number } | null>(null);
   const [toasts, setToasts]     = useState<ToastMsg[]>([]);
   const [selectedIso, setSelectedIso] = useState<string | null>(null);
@@ -105,6 +106,13 @@ export default function KartaPage() {
     const id = Date.now();
     setToasts(p => [...p, { id, text, ok }]);
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 2800);
+  }, []);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
   useEffect(() => {
@@ -261,14 +269,15 @@ export default function KartaPage() {
     return natural;
   }
 
-  // Label visibility based on zoom — rank 2 (major countries) always visible
+  // Label visibility: show labels a bit sooner, prevent premature disappear
   const visibleLabels = useMemo(() => {
-    if (mapZoom < 2) return allLabelFeatures.filter(l => l.rank <= 2);
-    if (mapZoom < 4) return allLabelFeatures.filter(l => l.rank <= 3);
+    if (mapZoom < 1.5) return allLabelFeatures.filter(l => l.rank <= 2);
+    if (mapZoom < 3.5) return allLabelFeatures.filter(l => l.rank <= 3);
     return allLabelFeatures.filter(l => l.rank <= 4);
   }, [mapZoom]);
 
-  function zoomIn()  { setMapZoom(z => Math.min(z * 1.5, 12)); }
+  // Extra zoom depth: max 20 instead of 12 (adds ~2 more deep-zoom steps)
+  function zoomIn()  { setMapZoom(z => Math.min(z * 1.5, 20)); }
   function zoomOut() { setMapZoom(z => Math.max(z / 1.5, 1)); }
 
   const FILTER_OPTS: { key: FilterUser & string; label: string; color: string }[] = [
@@ -351,7 +360,7 @@ export default function KartaPage() {
                 center={mapCenter}
                 onMoveEnd={({ zoom, coordinates }) => { setMapZoom(zoom); setMapCenter(coordinates); }}
                 minZoom={1}
-                maxZoom={12}
+                maxZoom={20}
               >
                 <Geographies geography={countriesGeoJson}>
                   {({ geographies }) =>
@@ -388,11 +397,20 @@ export default function KartaPage() {
                     <text
                       textAnchor="middle"
                       style={{ pointerEvents: 'none', userSelect: 'none' }}
-                      fontSize={(lbl.rank <= 2 ? 5 : lbl.rank <= 3 ? 4 : 3.5) / mapZoom}
+                      fontSize={
+                        // Mobile: larger base so labels are readable (~12px screen size).
+                        // screen px = (base/zoom) × (containerPx/svgViewBox) × zoom = base × containerRatio
+                        // mobile containerRatio ≈ 0.47 → base=26 → ~12px
+                        // desktop containerRatio ≈ 1.5  → base=8  → ~12px
+                        (isMobile
+                          ? (lbl.rank <= 2 ? 26 : lbl.rank <= 3 ? 18 : 13)
+                          : (lbl.rank <= 2 ? 8  : lbl.rank <= 3 ? 6  : 4.5)
+                        ) / mapZoom
+                      }
                       fontWeight="700"
                       fill="#ffffff"
-                      stroke="rgba(0,0,0,0.85)"
-                      strokeWidth={0.7 / mapZoom}
+                      stroke="rgba(0,0,0,0.9)"
+                      strokeWidth={(isMobile ? 2.2 : 0.7) / mapZoom}
                       paintOrder="stroke"
                     >
                       {lbl.name}
