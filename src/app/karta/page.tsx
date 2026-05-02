@@ -13,6 +13,10 @@ import VisitsTable from '@/components/VisitsTable';
 import countriesGeoJson from '@/data/countries.json';
 import { COUNTRY_FACTS } from '@/data/countryFacts';
 import { CAPITALS } from '@/data/capitals';
+import {
+  resolveIso, getNaturalEarthColor, getOverlayColor, getVisitingUsers,
+  visibleLabelsAtZoom, USER_FILL,
+} from '@/lib/mapHelpers';
 
 function getFlagEmoji(iso: string): string {
   if (!iso || iso.length !== 2) return '🌍';
@@ -24,63 +28,8 @@ function getFlagEmoji(iso: string): string {
   } catch { return '🌍'; }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const geoFeatures = (countriesGeoJson as any).features as any[];
-
-// Some countries have ISO_A2='-99' in Natural Earth data; resolve via ADM0_A3
-const ADM_TO_ISO2: Record<string, string> = { FRA: 'FR', NOR: 'NO' };
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function resolveIso(props: any): string {
-  const iso2 = props?.ISO_A2 as string;
-  if (iso2 && iso2 !== '-99') return iso2;
-  return ADM_TO_ISO2[props?.ADM0_A3 as string] ?? '';
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function featureCentroid(f: any): [number, number] {
-  const geom = f.geometry;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let ring: [number, number][] = [];
-  if (geom.type === 'Polygon') ring = geom.coordinates[0];
-  else if (geom.type === 'MultiPolygon') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ring = geom.coordinates.reduce((a: any, b: any) => a[0].length >= b[0].length ? a : b)[0];
-  }
-  if (!ring.length) return [0, 0];
-  const lons = ring.map((c) => c[0]);
-  const lats = ring.map((c) => c[1]);
-  return [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
-}
-
-// ── Biome-based natural earth colors (satellite-style without an image) ──
-const ARCTIC_ISOS  = new Set(['GL','AQ','IS','SJ','FO']);
-const DESERT_ISOS  = new Set(['DZ','EG','LY','MA','MR','ML','NE','TD','SD','ER','SO','DJ',
-  'SA','YE','OM','AE','QA','KW','BH','IQ','IR','AF','PK','UZ','TM','KG','TJ','MN','KZ','NA']);
-const SAVANNA_ISOS = new Set(['NG','GH','BF','TG','BJ','SN','GM','GW',
-  'KE','TZ','UG','RW','BI','AO','ZM','MW','MZ','ZW','ZA','LS','SZ','ET','SS']);
-const TROPICAL_ISOS = new Set(['BR','CO','VE','GY','SR','EC','PE',
-  'CD','CG','GA','GQ','CM','CF','GN','SL','LR','CI',
-  'ID','MY','PH','BN','TH','KH','LA','MM','VN','SG','TL','PG']);
-
-function getUnvisitedColor(iso: string): string {
-  if (ARCTIC_ISOS.has(iso))   return '#B0C8D4'; // icy blue-grey
-  if (DESERT_ISOS.has(iso))   return '#C4A36A'; // sandy tan
-  if (SAVANNA_ISOS.has(iso))  return '#7BA554'; // savanna olive
-  if (TROPICAL_ISOS.has(iso)) return '#1A5E30'; // dense tropical forest
-  return '#4A8050';                              // temperate default
-}
-
-interface LabelEntry { iso: string; name: string; lng: number; lat: number; rank: number }
-const allLabelFeatures: LabelEntry[] = geoFeatures.flatMap(f => {
-  const iso = resolveIso(f.properties);
-  if (!iso) return [];
-  const rank = (f.properties?.LABELRANK ?? 99) as number;
-  if (rank > 4) return [];
-  const name = BG_NAMES[iso] ?? f.properties?.NAME ?? '';
-  if (!name) return [];
-  const [lng, lat] = featureCentroid(f);
-  return [{ iso, name, lng, lat, rank }];
-});
+// Map utilities + label data are imported from @/lib/mapHelpers (shared
+// across karta page, MapEmbed, and Globe so all three stay in sync).
 
 interface ToastMsg { id: number; text: string; ok: boolean }
 
@@ -242,39 +191,30 @@ export default function KartaPage() {
     }
   }, [selectedIso, mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast]);
 
-  function getColor(iso2: string): string {
+  // Selected country: yellow ring; unfiltered countries dim when filter active.
+  // Returns color for BASE layer (natural earth biome).
+  function getBaseFill(iso2: string): string {
     if (iso2 === selectedIso) return '#FBBF24';
-    const natural = getUnvisitedColor(iso2);
-    const DIM = '#2A4030'; // dimmed color when a filter is active
-
     const data = mode === 'visited' ? visitsByCountry[iso2] : wishlistByCountry[iso2];
+    if (filterUser && !data) return '#2A4030'; // dim unrelated countries
+    return getNaturalEarthColor(iso2);
+  }
 
-    if (!data) {
-      // Unvisited/not-on-list: dim if a filter is active
-      return filterUser ? DIM : natural;
-    }
-
-    // Check if this country passes the active filter
+  // Returns semi-transparent overlay color (or null) — applied on top of base
+  function getOverlay(iso2: string): string | null {
+    if (iso2 === selectedIso) return null; // selection takes precedence
+    const data = mode === 'visited' ? visitsByCountry[iso2] : wishlistByCountry[iso2];
+    if (!data) return null;
     const passes = !filterUser
       || (filterUser === 'tati' && data.tati)
       || (filterUser === 'iva'  && data.iva)
       || (filterUser === 'both' && data.tati && data.iva);
-
-    if (!passes) return DIM;
-
-    // Full user colors (same in visited and wishlist modes)
-    if (data.tati && data.iva) return '#7C3AED';  // purple — both
-    if (data.tati) return '#F59E0B';               // amber — Tati
-    if (data.iva)  return '#EC4899';               // pink  — Iva
-    return natural;
+    if (!passes) return null;
+    return getOverlayColor(iso2, visitsByCountry, wishlistByCountry, mode);
   }
 
-  // Label visibility: show labels a bit sooner, prevent premature disappear
-  const visibleLabels = useMemo(() => {
-    if (mapZoom < 1.5) return allLabelFeatures.filter(l => l.rank <= 2);
-    if (mapZoom < 3.5) return allLabelFeatures.filter(l => l.rank <= 3);
-    return allLabelFeatures.filter(l => l.rank <= 4);
-  }, [mapZoom]);
+  // Labels: tiered by zoom; ALL countries shown at deep zoom (no missing names)
+  const visibleLabels = useMemo(() => visibleLabelsAtZoom(mapZoom), [mapZoom]);
 
   // Extra zoom depth: max 20 instead of 12 (adds ~2 more deep-zoom steps)
   function zoomIn()  { setMapZoom(z => Math.min(z * 1.5, 20)); }
@@ -363,48 +303,67 @@ export default function KartaPage() {
                 maxZoom={20}
               >
                 <Geographies geography={countriesGeoJson}>
-                  {({ geographies }) =>
-                    geographies.map(geo => {
-                      const iso2 = resolveIso(geo.properties);
-                      if (!iso2) return null;
-                      const bgName = BG_NAMES[iso2] ?? geo.properties?.NAME ?? iso2;
-                      const color = getColor(iso2);
-                      return (
-                        <Geography
-                          key={geo.rsmKey}
-                          geography={geo}
-                          fill={color}
-                          stroke="rgba(255,255,255,0.45)"
-                          strokeWidth={0.5 / mapZoom}
-                          style={{
-                            default: { outline: 'none', transition: 'fill 0.15s' },
-                            hover:   { outline: 'none', fill: '#93C5FD', cursor: 'pointer' },
-                            pressed: { outline: 'none' },
-                          }}
-                          onClick={() => handleCountryClick(iso2, bgName)}
-                          onMouseEnter={(e) => setTooltip({ name: `${getFlagEmoji(iso2)} ${bgName}`, x: e.clientX, y: e.clientY })}
-                          onMouseMove={(e) => setTooltip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)}
-                          onMouseLeave={() => setTooltip(null)}
-                        />
-                      );
-                    })
-                  }
+                  {({ geographies }) => (
+                    <>
+                      {/* Base layer: natural earth colors + interactions */}
+                      {geographies.map(geo => {
+                        const iso2 = resolveIso(geo.properties);
+                        if (!iso2) return null;
+                        const bgName = BG_NAMES[iso2] ?? geo.properties?.NAME ?? iso2;
+                        return (
+                          <Geography
+                            key={geo.rsmKey}
+                            geography={geo}
+                            fill={getBaseFill(iso2)}
+                            stroke="rgba(255,255,255,0.85)"
+                            strokeWidth={1.1 / mapZoom}
+                            style={{
+                              default: { outline: 'none', transition: 'fill 0.15s' },
+                              hover:   { outline: 'none', fill: '#93C5FD', cursor: 'pointer' },
+                              pressed: { outline: 'none' },
+                            }}
+                            onClick={() => handleCountryClick(iso2, bgName)}
+                            onMouseEnter={(e) => setTooltip({ name: `${getFlagEmoji(iso2)} ${bgName}`, x: e.clientX, y: e.clientY })}
+                            onMouseMove={(e) => setTooltip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)}
+                            onMouseLeave={() => setTooltip(null)}
+                          />
+                        );
+                      })}
+                      {/* Overlay layer: semi-transparent user colors on visited/wishlist */}
+                      {geographies.map(geo => {
+                        const iso2 = resolveIso(geo.properties);
+                        if (!iso2) return null;
+                        const overlay = getOverlay(iso2);
+                        if (!overlay) return null;
+                        return (
+                          <Geography
+                            key={`ov-${geo.rsmKey}`}
+                            geography={geo}
+                            fill={overlay}
+                            stroke="rgba(255,255,255,0.85)"
+                            strokeWidth={1.1 / mapZoom}
+                            style={{
+                              default: { outline: 'none', pointerEvents: 'none' },
+                              hover:   { outline: 'none', pointerEvents: 'none' },
+                              pressed: { outline: 'none', pointerEvents: 'none' },
+                            }}
+                          />
+                        );
+                      })}
+                    </>
+                  )}
                 </Geographies>
 
-                {/* Country name labels — visible only when zoomed in */}
+                {/* Country name labels */}
                 {visibleLabels.map(lbl => (
                   <Marker key={lbl.iso} coordinates={[lbl.lng, lbl.lat]}>
                     <text
                       textAnchor="middle"
                       style={{ pointerEvents: 'none', userSelect: 'none' }}
                       fontSize={
-                        // Mobile: larger base so labels are readable (~12px screen size).
-                        // screen px = (base/zoom) × (containerPx/svgViewBox) × zoom = base × containerRatio
-                        // mobile containerRatio ≈ 0.47 → base=26 → ~12px
-                        // desktop containerRatio ≈ 1.5  → base=8  → ~12px
                         (isMobile
-                          ? (lbl.rank <= 2 ? 26 : lbl.rank <= 3 ? 18 : 13)
-                          : (lbl.rank <= 2 ? 8  : lbl.rank <= 3 ? 6  : 4.5)
+                          ? (lbl.rank <= 2 ? 26 : lbl.rank <= 3 ? 18 : lbl.rank <= 4 ? 13 : 11)
+                          : (lbl.rank <= 2 ? 8  : lbl.rank <= 3 ? 6  : lbl.rank <= 4 ? 4.5 : 3.5)
                         ) / mapZoom
                       }
                       fontWeight="700"
@@ -417,6 +376,41 @@ export default function KartaPage() {
                     </text>
                   </Marker>
                 ))}
+
+                {/* Avatar markers — small colored badges for visited countries */}
+                {visibleLabels.map(lbl => {
+                  const users = getVisitingUsers(lbl.iso, visitsByCountry, wishlistByCountry, mode);
+                  if (users.length === 0) return null;
+                  const r       = (isMobile ? 8 : 3.2) / mapZoom;
+                  const fontSz  = (isMobile ? 9 : 3.6) / mapZoom;
+                  const stroke  = (isMobile ? 1.2 : 0.5) / mapZoom;
+                  const offsetY = (isMobile ? 22 : 7) / mapZoom; // below the label
+                  return (
+                    <Marker key={`av-${lbl.iso}`} coordinates={[lbl.lng, lbl.lat]}>
+                      <g transform={`translate(0, ${offsetY})`} style={{ pointerEvents: 'none' }}>
+                        {users.map((u, i) => {
+                          const dx = (users.length === 1 ? 0 : (i === 0 ? -r * 1.05 : r * 1.05));
+                          const fill = users.length === 2 ? USER_FILL.both : USER_FILL[u];
+                          return (
+                            <g key={u} transform={`translate(${dx}, 0)`}>
+                              <circle r={r} fill={fill} stroke="white" strokeWidth={stroke} />
+                              <text
+                                textAnchor="middle"
+                                dominantBaseline="central"
+                                fontSize={fontSz}
+                                fontWeight="800"
+                                fill="white"
+                                style={{ userSelect: 'none' }}
+                              >
+                                {u === 'tati' ? 'Т' : 'И'}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </g>
+                    </Marker>
+                  );
+                })}
 
                 {/* Capital city markers */}
                 {CAPITALS.map(cap => {

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { VisitsByCountry, GlobePolygon, CapitalCity, USER_DISPLAY } from '@/types';
 import { BG_NAMES } from '@/data/countryNamesBg';
 import { CAPITALS } from '@/data/capitals';
+import { USER_FILL_GLOBE } from '@/lib/mapHelpers';
 import dynamic from 'next/dynamic';
 import countriesGeoJson from '@/data/countries.json';
 
@@ -22,14 +23,16 @@ interface GlobeProps {
 
 const GLOBE_TEXTURE = '/earth-satellite.jpg';
 
+// Unified color palette — orange/pink/purple matching the map.
+// Semi-transparent so the satellite texture remains visible underneath.
 const COLOR = {
-  default:  'rgba(0,0,0,0)',            // transparent — Earth texture shows through
-  tati:     'rgba(255,215,0,0.86)',
-  iva:      'rgba(255,80,160,0.86)',
-  both:     'rgba(124,58,237,0.86)',
-  wishlist: 'rgba(20,184,166,0.82)',
-  hover:    'rgba(255,220,60,0.78)',
-  selected: 'rgba(255,255,255,0.92)',
+  default:  'rgba(0,0,0,0)',
+  tati:     USER_FILL_GLOBE.tati,
+  iva:      USER_FILL_GLOBE.iva,
+  both:     USER_FILL_GLOBE.both,
+  wishlist: USER_FILL_GLOBE.wishlist,
+  hover:    'rgba(255,220,60,0.65)',
+  selected: 'rgba(255,255,255,0.85)',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,7 +91,8 @@ const allLabels: LabelDatum[] = polygonsData.flatMap((feature) => {
   if (!iso) return [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const labelrank: number = (feature.properties as any)?.LABELRANK ?? 99;
-  if (labelrank > 5) return [];
+  // No rank filter at data level — all countries with names are eligible.
+  // Visibility is controlled by camera altitude in visibleLabels useMemo.
   const name = BG_NAMES[iso] ?? feature.properties?.NAME ?? '';
   if (!name) return [];
   const [lng, lat] = featureCentroid(feature);
@@ -237,12 +241,13 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     return () => clearInterval(id);
   }, []);
 
-  // Labels: show sooner so they're visible on mobile without deep zoom
+  // Labels: tiered by zoom — all countries shown at deep zoom (no missing names)
   const visibleLabels = useMemo<LabelDatum[]>(() => {
     if (cameraAlt > 2.8) return [];
     if (cameraAlt > 1.8) return allLabels.filter(l => l.labelrank <= 2);
     if (cameraAlt > 1.2) return allLabels.filter(l => l.labelrank <= 3);
-    return allLabels.filter(l => l.labelrank <= 5);
+    if (cameraAlt > 0.7) return allLabels.filter(l => l.labelrank <= 5);
+    return allLabels; // deep zoom → every labeled country
   }, [cameraAlt]);
 
   // Labels + hover flag + selection ring
@@ -374,7 +379,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
         polygonAltitude={polygonAltitude}
         polygonCapColor={capColor}
         polygonSideColor={polygonSideColor}
-        polygonStrokeColor={() => 'rgba(255,240,120,0.85)'}
+        polygonStrokeColor={() => 'rgba(255,255,255,0.95)'}
         polygonLabel={polygonLabel}
         onPolygonClick={handlePolygonClick}
         onPolygonHover={handlePolygonHover}
