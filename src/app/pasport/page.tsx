@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { UserType, USER_DISPLAY } from '@/types';
+import dynamic from 'next/dynamic';
+import { UserType, USER_DISPLAY, AvatarConfig } from '@/types';
 import { BG_NAMES } from '@/data/countryNamesBg';
 import { sounds, resumeAudio } from '@/lib/sounds';
+
+const Avatar3D = dynamic(() => import('@/components/Avatar3D/Avatar3D'), { ssr: false });
 
 interface StampCountry { name: string; isoCode: string; capital: string; }
 interface Stamp {
@@ -272,14 +275,34 @@ function StaticStampsPage({ stamps, color }: { stamps: Stamp[]; color: string })
   );
 }
 
-function InfoPage({ user, count }: { user: UserType; count: number }) {
+function InfoPage({ user, count, avatarConfig }: {
+  user: UserType;
+  count: number;
+  avatarConfig?: Partial<AvatarConfig> | null;
+}) {
   return (
     <div style={{
+      position: 'relative',
       width: '100%', height: '100%',
       background: 'linear-gradient(160deg, #fffdf5 0%, #faf6e8 60%, #f2edd8 100%)',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', gap: 8, padding: 24,
     }}>
+      {/* Passport photo — top-right corner */}
+      <div style={{
+        position: 'absolute', top: 14, right: 14,
+        width: 60, height: 78,
+        border: '3px solid white',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.22)',
+        overflow: 'hidden',
+        background: '#d8e8f4',
+      }}>
+        {avatarConfig
+          ? <Avatar3D avatar={{ ...avatarConfig, user }} expression={avatarConfig.expression ?? 'smile'} width={60} height={78} />
+          : <div style={{ width: 60, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🧑</div>
+        }
+      </div>
+
       <div style={{ fontSize: 34, lineHeight: 1 }}>🌹</div>
       <div style={{
         fontSize: 8.5, fontWeight: 800, letterSpacing: '0.2em', color: COVER_GOLD,
@@ -309,20 +332,28 @@ function spreadToPages(idx: number): [number | 'info', number] {
 }
 
 export default function PasportPage() {
-  const [activeUser, setActiveUser] = useState<UserType>('tati');
-  const [stamps, setStamps]         = useState<Stamp[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [spreadIdx, setSpreadIdx]   = useState(0);
-  const [flipping, setFlipping]     = useState<'fwd' | 'bwd' | null>(null);
-  const [bookScale, setBookScale]   = useState(1);
+  const [activeUser, setActiveUser]   = useState<UserType>('tati');
+  const [stamps, setStamps]           = useState<Stamp[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [spreadIdx, setSpreadIdx]     = useState(0);
+  const [flipping, setFlipping]       = useState<'fwd' | 'bwd' | null>(null);
+  const [bookScale, setBookScale]     = useState(1);
+  const [avatarConfigs, setAvatarConfigs] = useState<Record<UserType, Partial<AvatarConfig> | null>>({ tati: null, iva: null });
   // Incremented each time stamps should (re-)animate on the visible spread
-  const [animEpoch, setAnimEpoch]   = useState(0);
+  const [animEpoch, setAnimEpoch]     = useState(0);
 
   useEffect(() => {
     const update = () => setBookScale(Math.min(1, (window.innerWidth - 32) / BOOK_W));
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/avatar')
+      .then(r => r.json())
+      .then(data => setAvatarConfigs({ tati: data.tati ?? null, iva: data.iva ?? null }))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -426,7 +457,7 @@ export default function PasportPage() {
                 boxShadow: 'inset -8px 0 22px rgba(0,0,0,0.10)',
               }}>
                 {curLeft === 'info'
-                  ? <InfoPage user={activeUser} count={stamps.length} />
+                  ? <InfoPage user={activeUser} count={stamps.length} avatarConfig={avatarConfigs[activeUser]} />
                   : <StampsPage stamps={byPage(curLeft)} color={COVER_GOLD} onSave={savePosition} animEpoch={animEpoch} />}
                 {curLeft !== 'info' && (
                   <div style={{
@@ -471,7 +502,7 @@ export default function PasportPage() {
                     </div>
                     <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
                       {nextLeft === 'info'
-                        ? <InfoPage user={activeUser} count={stamps.length} />
+                        ? <InfoPage user={activeUser} count={stamps.length} avatarConfig={avatarConfigs[activeUser]} />
                         : <StaticStampsPage stamps={byPage(nextLeft as number)} color={COVER_GOLD} />}
                     </div>
                   </div>
@@ -492,7 +523,7 @@ export default function PasportPage() {
                 >
                   <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden' }}>
                     {curLeft === 'info'
-                      ? <InfoPage user={activeUser} count={stamps.length} />
+                      ? <InfoPage user={activeUser} count={stamps.length} avatarConfig={avatarConfigs[activeUser]} />
                       : <StaticStampsPage stamps={byPage(curLeft as number)} color={COVER_GOLD} />}
                   </div>
                   <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
