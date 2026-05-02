@@ -75,6 +75,8 @@ model Avatar {
   skinColor   String  @default("#FBBF8A")
   outfit      String  @default("casual")
   accessories String  @default("[]")
+  faceType    String  @default("standard")
+  expression  String  @default("smile")
   avatarUrl   String?
 
   @@map("avatars")
