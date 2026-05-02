@@ -73,8 +73,8 @@ function buildCharacter(
   const acc     = avatar.accessories ?? [];
   const isMale  = avatar.user !== 'iva';
 
-  const skinM  = mat(skinHex, { roughness: 0.58 });
-  const hairM  = mat(hairHex, { roughness: 0.78 });
+  const skinM  = mat(skinHex, { roughness: 0.52, metalness: 0.02 });
+  const hairM  = mat(hairHex, { roughness: 0.72, metalness: 0.01 });
   const eyeM   = mat(eyeHex,  { roughness: 0.28 });
   const whiteM = mat(0xffffff, { roughness: 0.22 });
   const darkM  = mat(0x2D2D2D, { roughness: 0.82 });
@@ -152,25 +152,28 @@ function buildCharacter(
     g.add(belt);
   }
 
-  // ── SHOULDERS ──
+  // ── SHOULDERS ── flattened spheres → deltoid silhouette, not round balls
   for (const sx of [-1, 1]) {
-    const sho = mesh(new THREE.SphereGeometry(0.146, 10, 10), topM);
+    const sho = mesh(new THREE.SphereGeometry(0.152, 10, 10), topM);
+    sho.scale.set(1.0, 0.60, 0.88);
     sho.position.set(sx * 0.37, 1.04, 0);
     g.add(sho);
   }
 
-  // ── ARMS ──
+  // ── ARMS ── increased taper shoulder→elbow and elbow→wrist
   const armTopM = ['explorer','summer','beach'].includes(outfit) ? skinM : topM;
   for (const sx of [-1, 1]) {
-    const ua = mesh(new THREE.CylinderGeometry(0.096, 0.086, 0.38, 10), armTopM);
+    const ua = mesh(new THREE.CylinderGeometry(0.104, 0.076, 0.38, 10), armTopM);
     ua.position.set(sx * 0.49, 0.82, 0);
     ua.rotation.z = sx * 0.27;
     g.add(ua);
-    const fa = mesh(new THREE.CylinderGeometry(0.076, 0.066, 0.36, 10), skinM);
+    const fa = mesh(new THREE.CylinderGeometry(0.080, 0.056, 0.36, 10), skinM);
     fa.position.set(sx * 0.62, 0.5, 0);
     fa.rotation.z = sx * 0.17;
     g.add(fa);
-    const hand = mesh(new THREE.SphereGeometry(0.08, 10, 10), skinM);
+    // Hand: slightly flattened palm shape
+    const hand = mesh(new THREE.SphereGeometry(0.082, 10, 10), skinM);
+    hand.scale.set(1.0, 0.76, 0.86);
     hand.position.set(sx * 0.72, 0.32, 0);
     g.add(hand);
   }
@@ -349,39 +352,72 @@ function buildCharacter(
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // HAIR
+  // HAIR — all geometry sits outside head sphere (r=0.32).
+  //
+  // Cap math: SphereGeometry thetaLength PI*0.31 (55.8° from crown).
+  //   Front bottom edge: y = 0.338*cos(55.8°) = 0.190  → above eyebrows (y≈0.128) ✓
+  //                      z = 0.338*sin(55.8°) = 0.280  → behind eyebrows (z=0.286) ✓
+  // This eliminates the cap-over-forehead clipping entirely.
   // ──────────────────────────────────────────────────────────────────────────
   if (hair !== 'bald') {
-    // Top cap — radius slightly outside head (0.32 → 0.336), 50% sphere from top
+    // Shared top dome — sits above hairline, never touches forehead/eyes
+    const capR     = 0.338;
+    const capAngle = Math.PI * 0.31;
     const cap = mesh(
-      new THREE.SphereGeometry(0.336, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5),
+      new THREE.SphereGeometry(capR, 16, 10, 0, Math.PI * 2, 0, capAngle),
       hairM,
     );
     headGroup.add(cap);
 
-    if (hair === 'long') {
-      // Side curtains: pushed out to x=±0.345 and back z=-0.04 to avoid head clipping
+    if (hair === 'short') {
+      // Side pieces fill from cap edge (y≈0.19) down to ear level (y≈0)
       for (const sx of [-1, 1]) {
-        const strand = mesh(new THREE.CylinderGeometry(0.08, 0.054, 0.52, 8), hairM);
-        strand.position.set(sx * 0.345, -0.35, -0.04);
-        headGroup.add(strand);
+        const side = mesh(new THREE.SphereGeometry(0.138, 10, 8), hairM);
+        side.scale.set(0.54, 0.88, 0.74);
+        side.position.set(sx * 0.303, 0.07, -0.03);
+        headGroup.add(side);
       }
-      // Back curtain: clearly behind head center (z=-0.29)
-      const back = mesh(new THREE.CylinderGeometry(0.17, 0.1, 0.48, 10), hairM);
-      back.position.set(0, -0.32, -0.3);
+      // Back coverage from nape to cap
+      const back = mesh(new THREE.SphereGeometry(0.200, 10, 8), hairM);
+      back.scale.set(1.32, 0.70, 0.64);
+      back.position.set(0, 0.01, -0.268);
       headGroup.add(back);
     }
 
+    if (hair === 'long') {
+      // Temple bridges: connect cap seamlessly to long side strands
+      for (const sx of [-1, 1]) {
+        const temple = mesh(new THREE.SphereGeometry(0.128, 10, 8), hairM);
+        temple.scale.set(0.58, 1.06, 0.72);
+        temple.position.set(sx * 0.308, 0.04, -0.02);
+        headGroup.add(temple);
+        // Long draping strand — x=0.352 clears head equator (r=0.32) ✓
+        const strand = mesh(new THREE.CylinderGeometry(0.086, 0.050, 0.54, 8), hairM);
+        strand.position.set(sx * 0.352, -0.38, -0.04);
+        headGroup.add(strand);
+      }
+      // Back upper mass bridges cap to curtain
+      const backUpper = mesh(new THREE.SphereGeometry(0.210, 10, 8), hairM);
+      backUpper.scale.set(1.28, 0.74, 0.74);
+      backUpper.position.set(0, -0.01, -0.278);
+      headGroup.add(backUpper);
+      // Back curtain
+      const backCurtain = mesh(new THREE.CylinderGeometry(0.175, 0.098, 0.50, 10), hairM);
+      backCurtain.position.set(0, -0.32, -0.298);
+      headGroup.add(backCurtain);
+    }
+
     if (hair === 'curly') {
-      // Curls placed outside head+cap boundary (min dist ≈ 0.46 from headGroup center)
-      const curls: [number, number, number][] = [
-        [-0.38, 0.22, 0.0],  [0.38, 0.22, 0.0 ],
-        [-0.42, 0.0,  0.0],  [0.42, 0.0,  0.0 ],
-        [-0.22, 0.3, -0.2],  [0.22, 0.3, -0.2 ],
-        [  0,   0.38, 0.0],
-        [-0.3, -0.06,-0.28], [0.3, -0.06,-0.28],
+      // All positions verified outside head sphere (r=0.32)
+      const curlPos: [number, number, number][] = [
+        [-0.38, 0.22, 0.02], [ 0.38, 0.22, 0.02],  // sides upper
+        [-0.42, 0.02, 0.01], [ 0.42, 0.02, 0.01],  // sides mid
+        [-0.22, 0.30,-0.19], [ 0.22, 0.30,-0.19],  // back-upper diagonal
+        [  0,   0.36, 0.04],                         // crown
+        [-0.29,-0.06,-0.30], [ 0.29,-0.06,-0.30],  // back lower
+        [  0,   0.08,-0.34],                         // back mid
       ];
-      for (const [x, y, z] of curls) {
+      for (const [x, y, z] of curlPos) {
         const curl = mesh(new THREE.SphereGeometry(0.108, 10, 10), hairM);
         curl.position.set(x, y, z);
         headGroup.add(curl);
@@ -389,14 +425,28 @@ function buildCharacter(
     }
 
     if (hair === 'ponytail') {
-      const tail = mesh(new THREE.CylinderGeometry(0.066, 0.04, 0.46, 8), hairM);
-      tail.position.set(0, -0.2, -0.3);
-      tail.rotation.x = 0.52;
-      headGroup.add(tail);
-      const band = mesh(new THREE.TorusGeometry(0.066, 0.022, 6, 12), mat(0xDC2626, { roughness: 0.62 }));
-      band.position.set(0, -0.08, -0.28);
+      // Neat side pieces (keeps temples tidy)
+      for (const sx of [-1, 1]) {
+        const side = mesh(new THREE.SphereGeometry(0.120, 10, 8), hairM);
+        side.scale.set(0.52, 0.82, 0.70);
+        side.position.set(sx * 0.296, 0.06, -0.02);
+        headGroup.add(side);
+      }
+      // Back volume anchors the tail
+      const backV = mesh(new THREE.SphereGeometry(0.182, 10, 8), hairM);
+      backV.scale.set(1.30, 0.68, 0.70);
+      backV.position.set(0, -0.01, -0.272);
+      headGroup.add(backV);
+      // Band — z=-0.335 clears head sphere at y=-0.09 (head z-extent=0.306 there) ✓
+      const band = mesh(new THREE.TorusGeometry(0.068, 0.022, 6, 12), mat(0xDC2626, { roughness: 0.62 }));
+      band.position.set(0, -0.09, -0.335);
       band.rotation.x = Math.PI / 2;
       headGroup.add(band);
+      // Ponytail
+      const tail = mesh(new THREE.CylinderGeometry(0.066, 0.038, 0.48, 8), hairM);
+      tail.position.set(0, -0.22, -0.348);
+      tail.rotation.x = 0.48;
+      headGroup.add(tail);
     }
   } else {
     // Bald shine
