@@ -14,26 +14,38 @@ interface AvatarRecord {
   avatarUrl: string | null;
 }
 
-/** Build RPM URL for the given user gender */
-function rpmUrl(user: UserType, redirectUrl?: string): string {
+/**
+ * Two distinct RPM URL modes:
+ *  - iframe/frameApi mode: for desktop, embedded in our modal
+ *  - redirect mode: for mobile — navigates the current page to RPM,
+ *    which redirects back with ?avatarUrl= when done.
+ *    NOTE: do NOT mix frameApi with redirectUrl — they are mutually exclusive.
+ */
+function rpmIframeUrl(user: UserType): string {
   const gender = user === 'tati' ? 'male' : 'female';
-  let url = `${RPM_BASE}?frameApi&clearCache&gender=${gender}&bodyType=fullbody`;
-  if (redirectUrl) url += `&redirectUrl=${encodeURIComponent(redirectUrl)}`;
-  return url;
+  return `${RPM_BASE}?frameApi&clearCache&gender=${gender}&bodyType=fullbody`;
+}
+
+function rpmRedirectUrl(user: UserType, returnUrl: string): string {
+  const gender = user === 'tati' ? 'male' : 'female';
+  // No frameApi here — redirect mode is a separate flow
+  return `${RPM_BASE}?gender=${gender}&bodyType=fullbody&redirectUrl=${encodeURIComponent(returnUrl)}`;
 }
 
 /**
- * On iOS Safari, third-party iframes are blocked by ITP and camera
- * permissions inside iframes are disabled. Detect this case so we can
- * open RPM in a full tab instead.
+ * On iOS (all browsers — Chrome/Safari/Firefox all use WebKit on iOS)
+ * third-party iframes are blocked and camera permissions inside iframes
+ * are disabled. Use same-window redirect navigation instead.
+ * window.open() is also unreliable on iOS (blocked as popup).
  */
 function needsRedirectMode(): boolean {
-  if (typeof navigator === 'undefined') return false;
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return false;
   const ua = navigator.userAgent;
-  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(ua as string & { MSStream?: unknown }).MSStream;
-  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 768;
-  return isIOS || isSafari || isSmallScreen;
+  // Any iOS device (iPhone/iPad/iPod) regardless of browser brand
+  const isIOS = /iPad|iPhone|iPod/.test(ua);
+  // Narrow viewport = mobile
+  const isMobile = window.innerWidth < 768;
+  return isIOS || isMobile;
 }
 
 export default function AvatarPage() {
@@ -57,22 +69,20 @@ export default function AvatarPage() {
     }).catch(() => {});
   }, []);
 
-  // ── Handle redirect return from RPM (mobile/Safari flow) ──────────────────
-  // RPM redirects back to /avatar?avatarUrl=…  or  /avatar?id=…
+  // ── Handle redirect return from RPM (mobile flow) ─────────────────────────
+  // RPM may return: ?avatarUrl=…  or  ?avatarId=…  or  ?id=…
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const returnedUrl = params.get('avatarUrl');
-    const returnedId  = params.get('id');
-    const url = returnedUrl ?? (returnedId ? `https://models.readyplayer.me/${returnedId}.glb` : null);
+    const directUrl = params.get('avatarUrl');
+    const avatarId  = params.get('avatarId') ?? params.get('id');
+    const url = directUrl ?? (avatarId ? `https://models.readyplayer.me/${avatarId}.glb` : null);
 
     if (url) {
       const user = (sessionStorage.getItem('rpm_user') as UserType | null) ?? 'tati';
       sessionStorage.removeItem('rpm_user');
-      // Clean the URL params without triggering navigation
       window.history.replaceState({}, '', '/avatar');
-      // Optimistically update UI then persist
-      setAvatars(prev => ({ ...prev, [user]: { avatarUrl: url } }));
       setActiveUser(user);
+      setAvatars(prev => ({ ...prev, [user]: { avatarUrl: url } }));
       persistAvatar(user, url);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,13 +140,14 @@ export default function AvatarPage() {
     resumeAudio(); sounds.click();
 
     if (needsRedirectMode()) {
-      // iOS / Safari / mobile: open RPM in a new full tab so the browser
-      // can grant camera permission properly. RPM redirects back with ?avatarUrl=
+      // Mobile / iOS: same-window navigation avoids popup blockers and
+      // iOS iframe restrictions. Store which user we're creating for so
+      // we can restore it when RPM redirects back.
       sessionStorage.setItem('rpm_user', activeUser);
       const returnUrl = `${window.location.origin}/avatar`;
-      window.open(rpmUrl(activeUser, returnUrl), '_blank', 'noopener');
+      window.location.href = rpmRedirectUrl(activeUser, returnUrl);
     } else {
-      // Desktop: render RPM inside the full-screen iframe modal
+      // Desktop: full-screen iframe modal
       setShowCreator(true);
     }
   }, [activeUser]);
@@ -274,10 +285,10 @@ export default function AvatarPage() {
             </span>
           </div>
 
-          {/* RPM iframe */}
+          {/* RPM iframe — desktop only, uses frameApi/postMessage mode */}
           <iframe
             ref={iframeRef}
-            src={rpmUrl(activeUser)}
+            src={rpmIframeUrl(activeUser)}
             onLoad={onIframeLoad}
             allow="camera *; microphone *; xr-spatial-tracking; gyroscope; accelerometer"
             allowFullScreen
