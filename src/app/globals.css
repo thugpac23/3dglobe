@@ -115,3 +115,20 @@ body {
 .fact-popup-enter {
   animation: fact-popup-in 0.22s ease-out forwards;
 }
+
+/* Leaflet map tooltip */
+.wmap-tip {
+  background: rgba(6,14,36,0.97) !important;
+  border: 1px solid rgba(80,140,230,0.3) !important;
+  border-radius: 8px !important;
+  color: #e2e8f0 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+  padding: 5px 10px !important;
+  white-space: nowrap;
+}
+.wmap-tip::before { display: none !important; }
+.leaflet-control-attribution { display: none !important; }
+.leaflet-container { font-family: -apple-system, sans-serif; }

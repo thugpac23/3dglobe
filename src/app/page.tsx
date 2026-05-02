@@ -29,8 +29,8 @@ function getFlagEmoji(iso: string): string {
 import XPBar from '@/components/XPBar/XPBar';
 import VisitsTable from '@/components/VisitsTable';
 
-const Globe = dynamic(() => import('@/components/Globe'), { ssr: false });
-const MapEmbed = dynamic(() => import('@/components/MapEmbed/MapEmbed'), { ssr: false });
+const Globe    = dynamic(() => import('@/components/Globe'), { ssr: false });
+const WorldMap = dynamic(() => import('@/components/WorldMap/WorldMap'), { ssr: false });
 
 interface Toast { id: number; message: string; type: 'add' | 'remove' | 'xp' | 'level' | 'achievement' }
 
@@ -279,37 +279,34 @@ export default function Home() {
           : `Добави дестинация в списъка на ${USER_DISPLAY[activeUser]}`}
       </p>
 
-      {/* Globe preview card */}
+      {/* Globe section */}
       <div className="w-full max-w-2xl mt-4 px-2">
-        <button
-          onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
-          disabled={loading}
-          className="w-full rounded-2xl overflow-hidden shadow-xl cursor-pointer transition-all hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99]"
-          style={{ background: 'linear-gradient(135deg, #0c5680 0%, #071d30 100%)', border: '2px solid rgba(14,100,148,0.4)' }}
-        >
-          <div className="flex items-center justify-between px-5 py-4 text-white">
-            <div className="flex items-center gap-4">
-              <span className="text-5xl drop-shadow-lg">{loading ? '⏳' : '🌍'}</span>
-              <div className="text-left">
-                <div className="font-extrabold text-lg tracking-tight">Интерактивен глобус</div>
-                {loading ? (
-                  <div className="text-sm opacity-60 mt-0.5">Зареждане…</div>
-                ) : (
-                  <div className="text-sm opacity-70 mt-0.5">
-                    {USER_DISPLAY.tati}: {visitCount.tati + visitCount.both} · {USER_DISPLAY.iva}: {visitCount.iva + visitCount.both}
-                    {visitCount.both > 0 && ` · Заедно: ${visitCount.both}`}
-                  </div>
-                )}
-              </div>
+        <div className="flex items-center justify-between mb-1.5">
+          <h2 className="text-base font-bold text-slate-700">🌍 Интерактивен глобус</h2>
+          <button
+            onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
+            className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline transition-colors"
+          >
+            Покажи на цял екран →
+          </button>
+        </div>
+        <div className="rounded-2xl overflow-hidden shadow-xl flex justify-center items-start"
+          style={{ background: '#040c18', maxHeight: 370 }}>
+          {!loading && (
+            <Globe
+              visitsByCountry={visitsByCountry}
+              wishlistByCountry={wishlistByCountry}
+              activeUser={activeUser}
+              mode={mode}
+              onCountryClick={handleCountryClick}
+            />
+          )}
+          {loading && (
+            <div className="flex items-center justify-center text-white opacity-40 text-sm" style={{ height: 200 }}>
+              Зареждане…
             </div>
-            <div className="flex flex-col items-center gap-1 opacity-60">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-              </svg>
-              <span className="text-xs font-semibold">Отвори</span>
-            </div>
-          </div>
-        </button>
+          )}
+        </div>
       </div>
 
       {/* Fullscreen globe modal */}
@@ -421,37 +418,31 @@ export default function Home() {
         </div>
       )}
 
-      {/* Map preview card */}
-      <div className="w-full max-w-2xl mt-3 px-2">
-        <button
-          onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
-          disabled={loading}
-          className="w-full rounded-2xl overflow-hidden shadow-xl cursor-pointer transition-all hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99]"
-          style={{ background: 'linear-gradient(135deg, #0c3a18 0%, #071d0a 100%)', border: '2px solid rgba(30,100,50,0.5)' }}
-        >
-          <div className="flex items-center justify-between px-5 py-4 text-white">
-            <div className="flex items-center gap-4">
-              <span className="text-5xl drop-shadow-lg">{loading ? '⏳' : '🗺️'}</span>
-              <div className="text-left">
-                <div className="font-extrabold text-lg tracking-tight">Карта на пътешествията</div>
-                {loading ? (
-                  <div className="text-sm opacity-60 mt-0.5">Зареждане…</div>
-                ) : (
-                  <div className="text-sm opacity-70 mt-0.5">
-                    {USER_DISPLAY.tati}: {visitCount.tati + visitCount.both} · {USER_DISPLAY.iva}: {visitCount.iva + visitCount.both}
-                    {visitCount.both > 0 && ` · Заедно: ${visitCount.both}`}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col items-center gap-1 opacity-60">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-              </svg>
-              <span className="text-xs font-semibold">Отвори</span>
-            </div>
+      {/* Map section */}
+      <div className="w-full max-w-2xl mt-5 px-2">
+        <div className="flex items-center justify-between mb-1.5">
+          <h2 className="text-base font-bold text-slate-700">🗺️ Карта на пътешествията</h2>
+          <button
+            onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
+            className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline transition-colors"
+          >
+            Покажи на цял екран →
+          </button>
+        </div>
+        {!loading && (
+          <WorldMap
+            visitsByCountry={visitsByCountry}
+            wishlistByCountry={wishlistByCountry}
+            mode={mode}
+            onCountryClick={handleCountryClick}
+            height={300}
+          />
+        )}
+        {loading && (
+          <div className="rounded-2xl flex items-center justify-center text-slate-400 text-sm" style={{ height: 300, background: 'rgba(0,0,0,0.06)' }}>
+            Зареждане…
           </div>
-        </button>
+        )}
       </div>
 
       {/* Fullscreen map modal */}
@@ -506,12 +497,11 @@ export default function Home() {
 
           {/* Map fills remaining space */}
           <div className="flex-1 overflow-hidden">
-            <MapEmbed
+            <WorldMap
               visitsByCountry={visitsByCountry}
               wishlistByCountry={wishlistByCountry}
               mode={mode}
               onCountryClick={handleCountryClick}
-              loading={loading}
               fullscreen
             />
           </div>
