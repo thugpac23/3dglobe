@@ -201,7 +201,7 @@ function makeHtmlEl(d: object): HTMLElement {
 
 const ZoomBtn = ({ label, onClick }: { label: string; onClick: () => void }) => (
   <button
-    onClick={onClick}
+    onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
     className="w-9 h-9 rounded-xl flex items-center justify-center text-xl font-bold transition-all hover:scale-110 active:scale-95"
     style={{
       background: 'rgba(6,18,40,0.85)',
@@ -363,14 +363,16 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   }, [visitsByCountry, wishlistByCountry, mode]);
 
   function zoomIn() {
-    const pov = globeRef.current?.pointOfView?.();
-    if (!pov) return;
-    globeRef.current.pointOfView({ ...pov, altitude: Math.max(0.3, pov.altitude * 0.65) }, 380);
+    if (!globeRef.current) return;
+    const pov = globeRef.current.pointOfView();
+    const alt = (typeof pov?.altitude === 'number' && isFinite(pov.altitude)) ? pov.altitude : cameraAlt;
+    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: Math.max(0.1, alt * 0.65) }, 400);
   }
   function zoomOut() {
-    const pov = globeRef.current?.pointOfView?.();
-    if (!pov) return;
-    globeRef.current.pointOfView({ ...pov, altitude: Math.min(5, pov.altitude * 1.5) }, 380);
+    if (!globeRef.current) return;
+    const pov = globeRef.current.pointOfView();
+    const alt = (typeof pov?.altitude === 'number' && isFinite(pov.altitude)) ? pov.altitude : cameraAlt;
+    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: Math.min(6, alt / 0.65) }, 400);
   }
 
   const selectedName = selectedIso ? (BG_NAMES[selectedIso] ?? selectedIso) : null;
