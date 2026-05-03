@@ -193,4 +193,17 @@ export const BG_NAMES: Record<string, string> = {
   YE: 'Йемен',
   ZM: 'Замбия',
   ZW: 'Зимбабве',
+  // Additional territories / disputed regions present in the GeoJSON
+  AQ: 'Антарктида',
+  TF: 'Френски южни територии',
+  CI: 'Кот д\'Ивоар',
+  GL: 'Гренландия',
+  FK: 'Фолкландски острови',
+  XK: 'Косово',
+  NC: 'Нова Каледония',
+  PR: 'Пуерто Рико',
+  PS: 'Палестина',
+  EH: 'Западна Сахара',
+  CY_N: 'Северен Кипър',
+  SO_L: 'Сомалиленд',
 };

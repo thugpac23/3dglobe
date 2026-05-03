@@ -38,7 +38,14 @@ const COLOR = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const polygonsData = (countriesGeoJson as any).features as GlobePolygon[];
 
-const ADM_TO_ISO2: Record<string, string> = { FRA: 'FR', NOR: 'NO' };
+// Mirrors ADM_TO_ISO2 in src/lib/mapHelpers.ts — keep these in sync.
+const ADM_TO_ISO2: Record<string, string> = {
+  FRA: 'FR', NOR: 'NO',
+  CYN: 'CY_N', SOL: 'SO_L',
+  KOS: 'XK', SAH: 'EH', PSX: 'PS',
+  ATA: 'AQ', ATF: 'TF',
+  GRL: 'GL', FLK: 'FK', NCL: 'NC', PRI: 'PR', CIV: 'CI',
+};
 function resolveIso(properties: GlobePolygon['properties']): string {
   const iso2 = properties?.ISO_A2;
   if (iso2 && iso2 !== '-99') return iso2;
