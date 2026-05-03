@@ -331,8 +331,8 @@ export default function Home() {
       {/* Fullscreen globe modal */}
       {globeOpen && (
         <div
-          className="fixed inset-0 z-50 flex flex-col"
-          style={{ background: 'rgba(4,12,24,0.96)', backdropFilter: 'blur(6px)' }}
+          className="fixed inset-0 flex flex-col"
+          style={{ background: '#040c18', zIndex: 9999 }}
         >
           {/* Modal header */}
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
@@ -467,8 +467,8 @@ export default function Home() {
       {/* Fullscreen map modal */}
       {mapOpen && (
         <div
-          className="fixed inset-0 z-50 flex flex-col"
-          style={{ background: 'rgba(4,12,24,0.96)', backdropFilter: 'blur(6px)' }}
+          className="fixed inset-0 flex flex-col"
+          style={{ background: '#040c18', zIndex: 9999 }}
         >
           {/* Modal header */}
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
@@ -592,7 +592,7 @@ export default function Home() {
       />
 
       {/* Toasts */}
-      <div className="fixed top-4 left-1/2 z-50 flex flex-col gap-2 pointer-events-none" style={{ transform: 'translateX(-50%)' }}>
+      <div className="fixed top-4 left-1/2 flex flex-col gap-2 pointer-events-none" style={{ transform: 'translateX(-50%)', zIndex: 10000 }}>
         {toasts.map((toast) => (
           <div
             key={toast.id}

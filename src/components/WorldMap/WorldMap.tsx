@@ -203,7 +203,7 @@ export default function WorldMap({
   }, []);
 
   return (
-    <div style={{ height: fullscreen ? '100%' : height, borderRadius: fullscreen ? 0 : 16, overflow: 'hidden' }}>
+    <div style={{ height: fullscreen ? '100%' : height, borderRadius: fullscreen ? 0 : 16, overflow: 'hidden', isolation: 'isolate' }}>
       <MapContainer
         center={[20, 10]}
         zoom={2}
