@@ -248,12 +248,12 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     return () => clearInterval(id);
   }, []);
 
-  // Labels: tiered by zoom — all countries shown at deep zoom (no missing names)
+  // Labels: tiered by altitude — show more names at default viewing distance
   const visibleLabels = useMemo<LabelDatum[]>(() => {
-    if (cameraAlt > 2.8) return [];
-    if (cameraAlt > 1.8) return allLabels.filter(l => l.labelrank <= 2);
-    if (cameraAlt > 1.2) return allLabels.filter(l => l.labelrank <= 3);
-    if (cameraAlt > 0.7) return allLabels.filter(l => l.labelrank <= 5);
+    if (cameraAlt > 3.5) return [];
+    if (cameraAlt > 2.2) return allLabels.filter(l => l.labelrank <= 3);
+    if (cameraAlt > 1.4) return allLabels.filter(l => l.labelrank <= 4);
+    if (cameraAlt > 0.7) return allLabels.filter(l => l.labelrank <= 6);
     return allLabels; // deep zoom → every labeled country
   }, [cameraAlt]);
 
@@ -290,6 +290,9 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
       ctrl.minDistance = 120;
       ctrl.maxDistance = 700;
     }
+    // Ensure the WebGL canvas passes touch events to OrbitControls (mobile pinch-zoom)
+    const canvas = globeRef.current?.renderer?.()?.domElement as HTMLCanvasElement | undefined;
+    if (canvas) canvas.style.touchAction = 'none';
   }, []);
 
   const capColor = useCallback((d: object) => {
@@ -373,7 +376,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   const selectedName = selectedIso ? (BG_NAMES[selectedIso] ?? selectedIso) : null;
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block" style={{ touchAction: 'none' }}>
       <ReactGlobe
         ref={globeRef}
         width={dims.w}
