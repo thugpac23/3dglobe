@@ -26,7 +26,23 @@ export const USER_FILL_GLOBE = {
 } as const;
 
 // ── ISO resolution (handle Natural Earth quirks) ─────────────────────────────
-const ADM_TO_ISO2: Record<string, string> = { FRA: 'FR', NOR: 'NO' };
+// Natural Earth marks several countries with ISO_A2 = '-99' or missing. Map
+// them by their ADM0_A3 code so labels and overlays still resolve correctly.
+const ADM_TO_ISO2: Record<string, string> = {
+  FRA: 'FR', NOR: 'NO',
+  CYN: 'CY_N',     // Northern Cyprus (no ISO; custom key)
+  SOL: 'SO_L',     // Somaliland (no ISO; custom key)
+  KOS: 'XK',       // Kosovo (transitional ISO)
+  SAH: 'EH',       // Western Sahara
+  PSX: 'PS',       // Palestine
+  ATA: 'AQ',       // Antarctica
+  ATF: 'TF',       // French Southern Territories
+  GRL: 'GL',       // Greenland (NE sometimes leaves this -99)
+  FLK: 'FK',       // Falkland Islands
+  NCL: 'NC',       // New Caledonia
+  PRI: 'PR',       // Puerto Rico
+  CIV: 'CI',       // Côte d'Ivoire
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function resolveIso(props: any): string {
