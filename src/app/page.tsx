@@ -86,6 +86,25 @@ export default function Home() {
     return () => window.removeEventListener('keydown', onKey);
   }, [globeOpen, mapOpen]);
 
+  // Body scroll lock when any modal is open (iOS-safe pattern)
+  useEffect(() => {
+    const open = globeOpen || mapOpen;
+    if (open) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+    } else {
+      const top = document.body.style.top;
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      if (top) window.scrollTo(0, parseInt(top) * -1);
+    }
+  }, [globeOpen, mapOpen]);
+
   const visitsByCountry = useMemo<VisitsByCountry>(() => {
     const map: VisitsByCountry = {};
     for (const v of visits) {
@@ -291,7 +310,7 @@ export default function Home() {
           </button>
         </div>
         <div className="rounded-2xl overflow-hidden shadow-xl flex justify-center items-start"
-          style={{ background: '#040c18', maxHeight: 370 }}>
+          style={{ background: '#040c18', maxHeight: 370, touchAction: 'none' }}>
           {!loading && (
             <Globe
               visitsByCountry={visitsByCountry}
@@ -364,7 +383,7 @@ export default function Home() {
 
           {/* Globe */}
           <div className="flex-1 flex items-center justify-center overflow-hidden"
-            style={{ filter: 'drop-shadow(0 0 40px rgba(14,100,148,0.4))' }}>
+            style={{ filter: 'drop-shadow(0 0 40px rgba(14,100,148,0.4))', touchAction: 'none' }}>
             <Globe
               visitsByCountry={visitsByCountry}
               wishlistByCountry={wishlistByCountry}
