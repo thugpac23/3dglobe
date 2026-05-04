@@ -320,17 +320,6 @@ export default function Home() {
         {/* Buttons below map */}
         <div className="flex gap-2 mt-3">
           <button
-            onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
-            className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{
-              background: USER_COLOR[activeUser],
-              color: 'white',
-              boxShadow: `0 3px 12px ${USER_COLOR[activeUser]}40`,
-            }}
-          >
-            🗺️ Покажи на цял екран
-          </button>
-          <button
             onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold border-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
             style={{
@@ -340,6 +329,17 @@ export default function Home() {
             }}
           >
             🌍 Покажи интерактивен глобус
+          </button>
+          <button
+            onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: USER_COLOR[activeUser],
+              color: 'white',
+              boxShadow: `0 3px 12px ${USER_COLOR[activeUser]}40`,
+            }}
+          >
+            🗺️ Покажи на цял екран
           </button>
         </div>
 
