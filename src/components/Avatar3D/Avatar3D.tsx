@@ -38,6 +38,99 @@ function cssToHex(css: string): number {
   return parseInt(css.replace('#', ''), 16);
 }
 
+// Derive a 3-color outfit palette from a single base hex.
+// top = base, bot = darker shade, acc = lighter complementary highlight.
+function deriveOutfitPalette(baseHex: number): { top: number; bot: number; acc: number } {
+  const c = new THREE.Color(baseHex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  const bot = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.05), Math.max(0.04, hsl.l - 0.18));
+  const acc = new THREE.Color().setHSL(hsl.h, Math.max(0.05, hsl.s * 0.55), Math.min(0.93, hsl.l + 0.24));
+  return { top: c.getHex(), bot: bot.getHex(), acc: acc.getHex() };
+}
+
+// ── Country flag patch helpers ───────────────────────────────────────────────
+function isoToFlagEmoji(iso: string): string {
+  if (!iso || iso.length !== 2) return '🏳';
+  try {
+    return String.fromCodePoint(
+      0x1F1E6 + iso.toUpperCase().charCodeAt(0) - 65,
+      0x1F1E6 + iso.toUpperCase().charCodeAt(1) - 65,
+    );
+  } catch { return '🏳'; }
+}
+
+function makePatchTexture(iso: string): THREE.CanvasTexture {
+  const c  = document.createElement('canvas');
+  c.width  = 128; c.height = 96;
+  const ctx = c.getContext('2d')!;
+  // Cloth patch background
+  const grad = ctx.createLinearGradient(0, 0, 0, 96);
+  grad.addColorStop(0, '#F8FAFC');
+  grad.addColorStop(1, '#CBD5E1');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 96);
+  // Outer border
+  ctx.strokeStyle = '#1E293B';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, 124, 92);
+  // Flag emoji centered
+  ctx.font = '64px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(isoToFlagEmoji(iso), 64, 50);
+  // ISO code label below the flag for reliability when emoji fonts are missing
+  ctx.font = 'bold 18px sans-serif';
+  ctx.fillStyle = '#1E293B';
+  ctx.fillText(iso.toUpperCase(), 64, 84);
+  // Stitched dashes inside border
+  ctx.strokeStyle = '#475569';
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(7, 7, 114, 82);
+  ctx.setLineDash([]);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// Lay flag patches across the front-left chest. They are positioned on the
+// torso cylinder surface (radius ≈ 0.30) and oriented along the radial normal
+// so they look stitched onto the clothing as the avatar rotates.
+function buildPatches(visitedIso: string[]): THREE.Group {
+  const g = new THREE.Group();
+  const isos = visitedIso.slice(0, 6);
+  if (!isos.length) return g;
+
+  const cols = isos.length <= 3 ? 1 : 2;
+  const xStart  = cols === 1 ? -0.13 : -0.18;
+  const xSpace  = 0.105;
+  const yStart  = 0.96;
+  const ySpace  = 0.082;
+  const torsoR  = 0.30;
+  const standoff = 0.022;
+  const pw = 0.094, ph = 0.070, pd = 0.008;
+
+  isos.forEach((iso, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = xStart + col * xSpace;
+    const y = yStart - row * ySpace;
+    const surfaceZ = Math.sqrt(Math.max(0, torsoR * torsoR - x * x));
+    const z = surfaceZ + standoff;
+    const tex = makePatchTexture(iso);
+    const m   = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.74, metalness: 0.04 });
+    const patch = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, pd), m);
+    patch.position.set(x, y, z);
+    patch.rotation.y = Math.atan2(x, surfaceZ);
+    patch.castShadow = true;
+    g.add(patch);
+  });
+
+  return g;
+}
+
 function mat(
   color: number,
   opts: Partial<THREE.MeshStandardMaterialParameters> = {},
@@ -63,6 +156,8 @@ function buildCharacter(
   avatar: Partial<AvatarConfig>,
   expression: Expression,
   faceType: FaceType,
+  outfitColor: string | undefined,
+  visitedIso: string[],
 ): { group: THREE.Group; parts: CharacterParts } {
 
   const skinHex = cssToHex(avatar.skinColor ?? '#FBBF8A');
@@ -73,13 +168,35 @@ function buildCharacter(
   const acc     = avatar.accessories ?? [];
   const isMale  = avatar.user !== 'iva';
 
+  // Outfit palette — main + bottom shade follow user override, accent stays
+  // outfit-specific so structural details (gold royal buttons, white sporty
+  // stripes, etc.) keep their identity even when colour is customized.
+  let topHex = OUTFIT_TOP[outfit] ?? 0x60A5FA;
+  let botHex = OUTFIT_BOT[outfit] ?? 0x1E40AF;
+  if (outfitColor) {
+    const palette = deriveOutfitPalette(cssToHex(outfitColor));
+    topHex = palette.top;
+    botHex = palette.bot;
+  }
+
   const skinM  = mat(skinHex, { roughness: 0.52, metalness: 0.02 });
   const hairM  = mat(hairHex, { roughness: 0.72, metalness: 0.01 });
   const eyeM   = mat(eyeHex,  { roughness: 0.28 });
   const whiteM = mat(0xffffff, { roughness: 0.22 });
   const darkM  = mat(0x2D2D2D, { roughness: 0.82 });
-  const topM   = mat(OUTFIT_TOP[outfit] ?? 0x60A5FA, { roughness: 0.72 });
-  const botM   = mat(OUTFIT_BOT[outfit] ?? 0x1E40AF, { roughness: 0.72 });
+  const topM   = mat(topHex, { roughness: 0.72 });
+  const botM   = mat(botHex, { roughness: 0.72 });
+  // Subtle highlight + shadow shades derived from main outfit colour
+  const highlightHex = (() => {
+    const c = new THREE.Color(topHex); const hsl = { h: 0, s: 0, l: 0 };
+    c.getHSL(hsl); return new THREE.Color().setHSL(hsl.h, hsl.s * 0.85, Math.min(0.95, hsl.l + 0.12)).getHex();
+  })();
+  const shadowHex = (() => {
+    const c = new THREE.Color(topHex); const hsl = { h: 0, s: 0, l: 0 };
+    c.getHSL(hsl); return new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.05), Math.max(0.04, hsl.l - 0.10)).getHex();
+  })();
+  const seamM      = mat(shadowHex, { roughness: 0.78 });
+  const highlightM = mat(highlightHex, { roughness: 0.62 });
 
   const g = new THREE.Group();
 
@@ -93,7 +210,7 @@ function buildCharacter(
 
   // Outfit details on torso
   if (['formal','travel','city','royal'].includes(outfit)) {
-    const lapelM = mat(OUTFIT_BOT[outfit] ?? 0x374151, { roughness: 0.7 });
+    const lapelM = mat(botHex, { roughness: 0.7 });
     for (const sx of [-1, 1]) {
       const lapel = mesh(new THREE.BoxGeometry(0.1, 0.28, 0.04), lapelM);
       lapel.position.set(sx * -0.1, 0.82, 0.27);
@@ -140,16 +257,30 @@ function buildCharacter(
     }
   }
   if (outfit === 'safari') {
-    const pocketM = mat(OUTFIT_BOT.safari, { roughness: 0.75 });
+    const pocketM = mat(botHex, { roughness: 0.75 });
     for (const sx of [-1, 1]) {
       const pocket = mesh(new THREE.BoxGeometry(0.14, 0.11, 0.04), pocketM);
       pocket.position.set(sx * 0.18, 0.88, 0.28);
       g.add(pocket);
+      // Pocket flap with button
+      const flap = mesh(new THREE.BoxGeometry(0.15, 0.04, 0.04), pocketM);
+      flap.position.set(sx * 0.18, 0.945, 0.282);
+      g.add(flap);
+      const btn = mesh(new THREE.SphereGeometry(0.012, 6, 6), mat(0x854D0E, { metalness: 0.4 }));
+      btn.position.set(sx * 0.18, 0.94, 0.305);
+      g.add(btn);
     }
-    const belt = mesh(new THREE.TorusGeometry(0.31, 0.03, 4, 14), mat(OUTFIT_BOT.safari));
+    const belt = mesh(new THREE.TorusGeometry(0.31, 0.03, 4, 14), mat(botHex));
     belt.position.set(0, 0.47, 0);
     belt.rotation.x = Math.PI / 2;
     g.add(belt);
+    // Epaulets on each shoulder
+    for (const sx of [-1, 1]) {
+      const ep = mesh(new THREE.BoxGeometry(0.14, 0.04, 0.06), pocketM);
+      ep.position.set(sx * 0.27, 1.10, 0.05);
+      ep.rotation.z = sx * 0.12;
+      g.add(ep);
+    }
   }
 
   // ── Realistic outfit details (folds, hoods, zippers, layers) ────────────────
@@ -181,33 +312,67 @@ function buildCharacter(
       cuff.position.set(sx * 0.66, 0.36, 0);
       cuff.rotation.y = Math.PI / 2;
       g.add(cuff);
+      // Velcro / strap detail above cuff
+      const strap = mesh(new THREE.BoxGeometry(0.06, 0.022, 0.02), jacketDarkM);
+      strap.position.set(sx * 0.66, 0.42, 0.062);
+      g.add(strap);
+    }
+    // Shoulder yoke seam (horizontal across upper back/chest)
+    const yoke = mesh(new THREE.BoxGeometry(0.50, 0.012, 0.05), seamM);
+    yoke.position.set(0, 1.02, 0.28);
+    yoke.rotation.x = -0.2;
+    g.add(yoke);
+    // Pocket flap highlights
+    for (const sx of [-1, 1]) {
+      const flap = mesh(new THREE.BoxGeometry(0.16, 0.02, 0.022), highlightM);
+      flap.position.set(sx * 0.16, 0.72, 0.298);
+      g.add(flap);
     }
   }
 
-  // Sporty: zip detail, contrast stripes
+  // Sporty: zip detail, contrast stripes, side panels, reflective trim
   if (outfit === 'sporty') {
     const stripeM = mat(0xFFFFFF, { roughness: 0.55 });
     for (const sx of [-1, 1]) {
       const stripe = mesh(new THREE.BoxGeometry(0.022, 0.62, 0.012), stripeM);
       stripe.position.set(sx * 0.21, 0.78, 0.30);
       g.add(stripe);
+      // Reflective trim along sleeve
+      const refl = mesh(new THREE.TorusGeometry(0.082, 0.008, 4, 12), mat(0xE5E7EB, { metalness: 0.3, roughness: 0.4 }));
+      refl.position.set(sx * 0.59, 0.42, 0);
+      refl.rotation.y = Math.PI / 2;
+      g.add(refl);
+      // Side panel — darker accent flank
+      const sidePanel = mesh(new THREE.BoxGeometry(0.05, 0.42, 0.022), seamM);
+      sidePanel.position.set(sx * 0.27, 0.74, 0.15);
+      sidePanel.rotation.y = sx * 0.5;
+      g.add(sidePanel);
     }
     // High collar
-    const sCollar = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 12, 1, true), mat(OUTFIT_BOT.sporty, { roughness: 0.65 }));
+    const sCollar = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 12, 1, true), mat(botHex, { roughness: 0.65 }));
     sCollar.position.set(0, 1.06, 0);
     g.add(sCollar);
     const sZip = mesh(new THREE.BoxGeometry(0.016, 0.18, 0.022), mat(0xC0C0C0, { metalness: 0.5 }));
     sZip.position.set(0, 1.0, 0.30);
     g.add(sZip);
+    // Logo box on chest
+    const logo = mesh(new THREE.BoxGeometry(0.07, 0.04, 0.02), stripeM);
+    logo.position.set(0.13, 0.94, 0.30);
+    g.add(logo);
   }
 
-  // City outfit: hoodie hood + drawstring + kangaroo pocket
+  // City outfit: hoodie hood + drawstring + kangaroo pocket + sleeve cuffs
   if (outfit === 'city') {
-    const hoodM = mat(OUTFIT_TOP.city, { roughness: 0.78 });
+    const hoodM = mat(topHex, { roughness: 0.78 });
     const hood = mesh(new THREE.SphereGeometry(0.28, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), hoodM);
     hood.position.set(0, 1.10, -0.04);
     hood.scale.set(1.05, 0.95, 1.10);
     g.add(hood);
+    // Hood lining ring (darker inside)
+    const hoodLining = mesh(new THREE.TorusGeometry(0.20, 0.022, 6, 18), mat(shadowHex, { roughness: 0.85 }));
+    hoodLining.position.set(0, 1.06, 0.06);
+    hoodLining.rotation.x = -0.5;
+    g.add(hoodLining);
     // Drawstrings
     for (const sx of [-1, 1]) {
       const string = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.18, 6), mat(0xF4F4F5));
@@ -217,15 +382,24 @@ function buildCharacter(
       tip.position.set(sx * 0.04, 0.84, 0.27);
       g.add(tip);
     }
-    // Kangaroo pocket — large front fold
-    const pocket = mesh(new THREE.BoxGeometry(0.4, 0.18, 0.04), mat(OUTFIT_BOT.city, { roughness: 0.78 }));
+    // Kangaroo pocket — large front fold with seam line
+    const pocket = mesh(new THREE.BoxGeometry(0.4, 0.18, 0.04), mat(botHex, { roughness: 0.78 }));
     pocket.position.set(0, 0.62, 0.295);
     g.add(pocket);
+    const pocketSeam = mesh(new THREE.BoxGeometry(0.4, 0.005, 0.03), seamM);
+    pocketSeam.position.set(0, 0.71, 0.30);
+    g.add(pocketSeam);
+    // Sleeve cuff bands
+    for (const sx of [-1, 1]) {
+      const cuff = mesh(new THREE.CylinderGeometry(0.080, 0.080, 0.06, 12, 1, true), mat(botHex, { roughness: 0.78 }));
+      cuff.position.set(sx * 0.66, 0.36, 0);
+      g.add(cuff);
+    }
   }
 
-  // Casual: subtle horizontal fold + cuff
+  // Casual: horizontal fold + henley placket + chest pocket + buttons
   if (outfit === 'casual') {
-    const foldM = mat(OUTFIT_BOT.casual, { roughness: 0.7 });
+    const foldM = mat(botHex, { roughness: 0.7 });
     const fold = mesh(new THREE.TorusGeometry(0.30, 0.014, 4, 16, Math.PI), foldM);
     fold.position.set(0, 0.66, 0);
     fold.rotation.x = Math.PI / 2;
@@ -234,6 +408,19 @@ function buildCharacter(
     const placket = mesh(new THREE.BoxGeometry(0.05, 0.18, 0.022), foldM);
     placket.position.set(0, 0.96, 0.29);
     g.add(placket);
+    // Two small placket buttons
+    for (let i = 0; i < 2; i++) {
+      const btn = mesh(new THREE.SphereGeometry(0.011, 6, 6), mat(0xF8FAFC, { metalness: 0.2 }));
+      btn.position.set(0, 1.02 - i * 0.07, 0.305);
+      g.add(btn);
+    }
+    // Right chest pocket outline
+    const pocketOutline = mesh(new THREE.BoxGeometry(0.10, 0.082, 0.006), seamM);
+    pocketOutline.position.set(0.13, 0.86, 0.302);
+    g.add(pocketOutline);
+    const pocketInner = mesh(new THREE.BoxGeometry(0.092, 0.072, 0.004), topM);
+    pocketInner.position.set(0.13, 0.86, 0.305);
+    g.add(pocketInner);
   }
 
   // Summer outfit: shoulder straps + waist tie
@@ -251,9 +438,9 @@ function buildCharacter(
     g.add(waistTie);
   }
 
-  // Winter outfit: puffy quilt rings + tall collar
+  // Winter outfit: puffy quilt rings + tall collar + zipper + arm seam stitching
   if (outfit === 'winter') {
-    const puffM = mat(OUTFIT_TOP.winter, { roughness: 0.84 });
+    const puffM = mat(topHex, { roughness: 0.84 });
     for (let i = 0; i < 4; i++) {
       const ring = mesh(new THREE.TorusGeometry(0.30, 0.022, 4, 18), puffM);
       ring.position.set(0, 0.50 + i * 0.16, 0);
@@ -263,6 +450,24 @@ function buildCharacter(
     const wCollar = mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.14, 12, 1, true), puffM);
     wCollar.position.set(0, 1.10, 0);
     g.add(wCollar);
+    // Front zipper
+    const wZip = mesh(new THREE.BoxGeometry(0.018, 0.62, 0.024), mat(0xC0C0C0, { metalness: 0.5 }));
+    wZip.position.set(0, 0.78, 0.305);
+    g.add(wZip);
+    // Zipper pull
+    const pull = mesh(new THREE.BoxGeometry(0.04, 0.022, 0.012), mat(0x9CA3AF, { metalness: 0.4 }));
+    pull.position.set(0, 1.04, 0.32);
+    g.add(pull);
+    // Arm puff rings (sleeve quilting)
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < 2; i++) {
+        const ring = mesh(new THREE.TorusGeometry(0.082, 0.014, 4, 12), puffM);
+        ring.position.set(sx * (0.50 + i * 0.10), 0.74 - i * 0.18, 0);
+        ring.rotation.y = Math.PI / 2;
+        ring.rotation.z = sx * 0.27;
+        g.add(ring);
+      }
+    }
   }
 
   // Adventure: chest harness + utility loops
@@ -277,6 +482,41 @@ function buildCharacter(
     const buckle = mesh(new THREE.BoxGeometry(0.06, 0.06, 0.025), mat(0xC0C0C0, { metalness: 0.5 }));
     buckle.position.set(0, 0.82, 0.30);
     g.add(buckle);
+    // Utility pouches on belt
+    for (const sx of [-1, 1]) {
+      const pouch = mesh(new THREE.BoxGeometry(0.10, 0.08, 0.05), mat(0x57534E, { roughness: 0.7 }));
+      pouch.position.set(sx * 0.18, 0.50, 0.27);
+      g.add(pouch);
+    }
+  }
+
+  // ── COMMON OUTFIT DETAILS ── seams + hem applied to every garment
+  // (skipped for skin-only outfits where torso would otherwise stay bare)
+  const skipCommonSeam = ['ninja'].includes(outfit);
+  if (!skipCommonSeam) {
+    // Bottom hem ring at waist
+    const hem = mesh(new THREE.TorusGeometry(0.305, 0.013, 5, 18), seamM);
+    hem.position.set(0, 0.43, 0);
+    hem.rotation.x = Math.PI / 2;
+    g.add(hem);
+    // Subtle shoulder yoke highlight on each shoulder cap
+    for (const sx of [-1, 1]) {
+      const sShine = mesh(new THREE.SphereGeometry(0.08, 8, 6), highlightM);
+      sShine.scale.set(0.9, 0.32, 0.66);
+      sShine.position.set(sx * 0.36, 1.085, 0.06);
+      g.add(sShine);
+    }
+    // Side seam — thin vertical line down each torso side
+    for (const sx of [-1, 1]) {
+      const sideSeam = mesh(new THREE.BoxGeometry(0.006, 0.62, 0.01), seamM);
+      sideSeam.position.set(sx * 0.298, 0.74, 0);
+      g.add(sideSeam);
+    }
+  }
+
+  // ── PATCHES ── flag patches of visited countries on front-left chest
+  if (visitedIso.length) {
+    g.add(buildPatches(visitedIso));
   }
 
   // ── SHOULDERS ── flattened spheres → deltoid silhouette, not round balls
@@ -887,14 +1127,323 @@ function groupOffset(g: THREE.Group, dy: number) {
   g.children.forEach(c => { c.position.y -= dy; });
 }
 
-function paintBackground(c: HTMLCanvasElement, top: THREE.Color, bot: THREE.Color) {
+// ── Illustrated background scenes ────────────────────────────────────────────
+// Each painter draws a full scene to a portrait off-screen canvas; the result
+// is uploaded as a CanvasTexture and cross-faded between scene changes.
+const SCENE_W = 256;
+const SCENE_H = 512;
+
+function paintScene(c: HTMLCanvasElement, key: string) {
   const ctx = c.getContext('2d');
   if (!ctx) return;
-  const grad = ctx.createLinearGradient(0, 0, 0, c.height);
-  grad.addColorStop(0, '#' + top.getHexString());
-  grad.addColorStop(1, '#' + bot.getHexString());
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.clearRect(0, 0, c.width, c.height);
+  switch (key) {
+    case 'beach':    paintBeach(ctx, c.width, c.height); break;
+    case 'mountain': paintMountain(ctx, c.width, c.height); break;
+    case 'city':     paintCity(ctx, c.width, c.height); break;
+    case 'home':     paintHome(ctx, c.width, c.height); break;
+    case 'forest':   paintForest(ctx, c.width, c.height); break;
+    case 'sunset':   paintSunset(ctx, c.width, c.height); break;
+    case 'space':    paintSpace(ctx, c.width, c.height); break;
+    case 'studio':
+    default:         paintStudio(ctx, c.width, c.height);
+  }
+}
+
+function paintStudio(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#F1F5F9');
+  grad.addColorStop(1, '#94A3B8');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+  // Soft floor curve
+  const floor = ctx.createLinearGradient(0, h * 0.62, 0, h);
+  floor.addColorStop(0, 'rgba(100,116,139,0.22)');
+  floor.addColorStop(1, 'rgba(30,41,59,0.55)');
+  ctx.fillStyle = floor; ctx.fillRect(0, h * 0.62, w, h * 0.38);
+  // Vignette
+  const vg = ctx.createRadialGradient(w * 0.5, h * 0.5, h * 0.2, w * 0.5, h * 0.5, h * 0.7);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+}
+
+function paintBeach(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  let grad = ctx.createLinearGradient(0, 0, 0, h * 0.55);
+  grad.addColorStop(0, '#7DD3FC'); grad.addColorStop(1, '#FBCFE8');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h * 0.55);
+  // Sun
+  ctx.fillStyle = 'rgba(254,243,199,0.45)';
+  ctx.beginPath(); ctx.arc(w * 0.78, h * 0.18, 56, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#FDE68A';
+  ctx.beginPath(); ctx.arc(w * 0.78, h * 0.18, 30, 0, Math.PI * 2); ctx.fill();
+  // Clouds
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  for (const [cx, cy, cr] of [[60, 70, 16], [110, 90, 22], [180, 60, 18]] as [number, number, number][]) {
+    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+    ctx.arc(cx + cr, cy + 4, cr * 0.78, 0, Math.PI * 2);
+    ctx.arc(cx - cr * 0.7, cy + 4, cr * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Ocean
+  grad = ctx.createLinearGradient(0, h * 0.55, 0, h * 0.78);
+  grad.addColorStop(0, '#0EA5E9'); grad.addColorStop(1, '#0369A1');
+  ctx.fillStyle = grad; ctx.fillRect(0, h * 0.55, w, h * 0.23);
+  // Wave highlights
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.4;
+  for (let i = 0; i < 6; i++) {
+    const y = h * 0.57 + i * 6;
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 8) ctx.lineTo(x, y + Math.sin(x * 0.1 + i) * 2);
+    ctx.stroke();
+  }
+  // Sand
+  grad = ctx.createLinearGradient(0, h * 0.78, 0, h);
+  grad.addColorStop(0, '#FCD34D'); grad.addColorStop(1, '#D97706');
+  ctx.fillStyle = grad; ctx.fillRect(0, h * 0.78, w, h * 0.22);
+  // Palm
+  ctx.strokeStyle = '#78350F'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(w * 0.92, h * 0.85);
+  ctx.quadraticCurveTo(w * 0.99, h * 0.6, w * 0.86, h * 0.4);
+  ctx.stroke();
+  ctx.fillStyle = '#15803D';
+  for (let i = 0; i < 7; i++) {
+    const angle = (i / 7) * Math.PI * 2;
+    ctx.save(); ctx.translate(w * 0.86, h * 0.4); ctx.rotate(angle);
+    ctx.beginPath(); ctx.ellipse(0, -28, 12, 36, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function paintMountain(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  let grad = ctx.createLinearGradient(0, 0, 0, h * 0.5);
+  grad.addColorStop(0, '#A5B4FC'); grad.addColorStop(1, '#E0E7FF');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h * 0.5);
+  // Sun glow
+  ctx.fillStyle = 'rgba(252,243,207,0.4)';
+  ctx.beginPath(); ctx.arc(w * 0.7, h * 0.16, 44, 0, Math.PI * 2); ctx.fill();
+  // Far mountains
+  ctx.fillStyle = '#64748B';
+  ctx.beginPath();
+  ctx.moveTo(0, h * 0.55);
+  for (let i = 0; i <= 8; i++) {
+    const x = (i / 8) * w;
+    const y = h * 0.5 - Math.sin(i * 1.3) * 28 - 10;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(w, h * 0.55); ctx.closePath(); ctx.fill();
+  // Near peaks
+  const peaks: [number, number][] = [[0.08, 0.42], [0.32, 0.30], [0.55, 0.36], [0.80, 0.28]];
+  ctx.fillStyle = '#334155';
+  ctx.beginPath();
+  ctx.moveTo(0, h * 0.66);
+  for (const [px, py] of peaks) {
+    const x = px * w, y = py * h;
+    ctx.lineTo(x - 56, h * 0.66);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + 56, h * 0.66);
+  }
+  ctx.lineTo(w, h * 0.66); ctx.closePath(); ctx.fill();
+  // Snow
+  ctx.fillStyle = '#F8FAFC';
+  for (const [px, py] of peaks) {
+    const x = px * w, y = py * h;
+    ctx.beginPath();
+    ctx.moveTo(x - 16, y + 22);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + 16, y + 22);
+    ctx.lineTo(x + 8, y + 26);
+    ctx.lineTo(x - 8, y + 26);
+    ctx.closePath(); ctx.fill();
+  }
+  // Pine forest foreground
+  grad = ctx.createLinearGradient(0, h * 0.66, 0, h);
+  grad.addColorStop(0, '#65A30D'); grad.addColorStop(1, '#1A2E05');
+  ctx.fillStyle = grad; ctx.fillRect(0, h * 0.66, w, h * 0.34);
+  ctx.fillStyle = '#14532D';
+  for (let i = 0; i < 14; i++) {
+    const x = i * (w / 14) + Math.random() * 8;
+    const baseY = h * 0.7 + Math.random() * 6;
+    ctx.beginPath();
+    ctx.moveTo(x - 9, baseY); ctx.lineTo(x, baseY - 28); ctx.lineTo(x + 9, baseY);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+function paintCity(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  let grad = ctx.createLinearGradient(0, 0, 0, h * 0.65);
+  grad.addColorStop(0, '#FCA5A5'); grad.addColorStop(0.5, '#F472B6'); grad.addColorStop(1, '#312E81');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h * 0.65);
+  // Distant building silhouettes
+  ctx.fillStyle = '#1E1B4B';
+  const farBuildings: [number, number, number][] = [
+    [0.04, 0.46, 0.10], [0.16, 0.40, 0.12], [0.28, 0.50, 0.09],
+    [0.40, 0.36, 0.13], [0.54, 0.28, 0.14], [0.68, 0.42, 0.10],
+    [0.80, 0.38, 0.10], [0.92, 0.46, 0.09],
+  ];
+  for (const [bx, top, wd] of farBuildings) {
+    const bw = wd * w;
+    ctx.fillRect(bx * w - bw / 2, top * h, bw, h * 0.65 - top * h);
+  }
+  // Window dots (warm)
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * w;
+    const y = h * 0.32 + Math.random() * h * 0.32;
+    ctx.fillStyle = Math.random() > 0.7 ? '#F59E0B' : '#FCD34D';
+    ctx.fillRect(x, y, 2.2, 2.2);
+  }
+  // Antenna lights
+  ctx.fillStyle = '#EF4444';
+  for (const [bx, top] of farBuildings) {
+    if (Math.random() > 0.5) ctx.fillRect(bx * w, top * h - 8, 1.5, 1.5);
+  }
+  // Foreground street
+  grad = ctx.createLinearGradient(0, h * 0.65, 0, h);
+  grad.addColorStop(0, '#0F172A'); grad.addColorStop(1, '#020617');
+  ctx.fillStyle = grad; ctx.fillRect(0, h * 0.65, w, h * 0.35);
+  // Street markings
+  ctx.fillStyle = '#FCD34D';
+  for (let i = 0; i < 5; i++) ctx.fillRect(w * 0.5 - 6, h * 0.74 + i * 28, 12, 8);
+}
+
+function paintHome(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  // Wall
+  let grad = ctx.createLinearGradient(0, 0, 0, h * 0.7);
+  grad.addColorStop(0, '#FED7AA'); grad.addColorStop(1, '#FDBA74');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h * 0.7);
+  // Window with sky outside
+  const wx = w * 0.66, wy = h * 0.16, ww = w * 0.26, wh = h * 0.32;
+  const sky = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+  sky.addColorStop(0, '#7DD3FC'); sky.addColorStop(1, '#FBCFE8');
+  ctx.fillStyle = sky; ctx.fillRect(wx, wy, ww, wh);
+  // Window mullions
+  ctx.strokeStyle = '#7C2D12'; ctx.lineWidth = 6;
+  ctx.strokeRect(wx, wy, ww, wh);
+  ctx.beginPath();
+  ctx.moveTo(wx + ww / 2, wy); ctx.lineTo(wx + ww / 2, wy + wh);
+  ctx.moveTo(wx, wy + wh / 2); ctx.lineTo(wx + ww, wy + wh / 2);
+  ctx.stroke();
+  // Picture frame on left wall
+  ctx.fillStyle = '#92400E';
+  ctx.fillRect(w * 0.08, h * 0.18, w * 0.16, h * 0.18);
+  ctx.fillStyle = '#FBBF24';
+  ctx.fillRect(w * 0.094, h * 0.195, w * 0.132, h * 0.150);
+  // Sofa silhouette
+  ctx.fillStyle = '#7F1D1D';
+  ctx.fillRect(w * 0.04, h * 0.56, w * 0.42, h * 0.14);
+  ctx.fillRect(w * 0.04, h * 0.50, w * 0.10, h * 0.20);
+  ctx.fillRect(w * 0.36, h * 0.50, w * 0.10, h * 0.20);
+  // Floor
+  grad = ctx.createLinearGradient(0, h * 0.7, 0, h);
+  grad.addColorStop(0, '#92400E'); grad.addColorStop(1, '#451A03');
+  ctx.fillStyle = grad; ctx.fillRect(0, h * 0.7, w, h * 0.3);
+  // Floor planks
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1;
+  for (let i = 1; i < 5; i++) {
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.7 + i * h * 0.06); ctx.lineTo(w, h * 0.7 + i * h * 0.06);
+    ctx.stroke();
+  }
+}
+
+function paintForest(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#86EFAC'); grad.addColorStop(0.45, '#15803D'); grad.addColorStop(1, '#052E16');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+  // Canopy clusters at top
+  ctx.fillStyle = 'rgba(20,83,45,0.85)';
+  for (let i = 0; i < 14; i++) {
+    ctx.beginPath();
+    ctx.arc((i / 14) * w + Math.random() * 16, Math.random() * h * 0.28, 30 + Math.random() * 18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Tree trunks (back layer)
+  ctx.fillStyle = '#3F2A14';
+  for (const tx of [0.06, 0.23, 0.48, 0.65, 0.86]) {
+    ctx.fillRect(tx * w - 4, 0, 8, h);
+  }
+  // Tree trunks (front layer with bark line)
+  ctx.fillStyle = '#451A03';
+  for (const tx of [0.13, 0.34, 0.58, 0.78]) {
+    ctx.fillRect(tx * w - 7, 0, 14, h);
+    ctx.fillStyle = '#1C0A01'; ctx.fillRect(tx * w - 1, 0, 2, h);
+    ctx.fillStyle = '#451A03';
+  }
+  // Light beams through canopy
+  ctx.fillStyle = 'rgba(254,243,199,0.10)';
+  for (let i = 0; i < 5; i++) {
+    const x = (i / 5) * w + 18;
+    ctx.beginPath();
+    ctx.moveTo(x, 0); ctx.lineTo(x + 80, h); ctx.lineTo(x + 110, h); ctx.lineTo(x + 30, 0);
+    ctx.closePath(); ctx.fill();
+  }
+  // Forest floor leaves
+  ctx.fillStyle = '#65A30D';
+  for (let i = 0; i < 60; i++) {
+    ctx.beginPath();
+    ctx.ellipse(Math.random() * w, h * 0.85 + Math.random() * h * 0.14, 4, 2, Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function paintSunset(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  let grad = ctx.createLinearGradient(0, 0, 0, h * 0.6);
+  grad.addColorStop(0, '#7C3AED'); grad.addColorStop(0.5, '#F472B6'); grad.addColorStop(1, '#FB923C');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h * 0.6);
+  // Sun glow
+  ctx.fillStyle = 'rgba(252,211,77,0.35)';
+  ctx.beginPath(); ctx.arc(w * 0.5, h * 0.6, 100, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#FB923C';
+  ctx.beginPath(); ctx.arc(w * 0.5, h * 0.6, 52, 0, Math.PI * 2); ctx.fill();
+  // Cloud streaks
+  ctx.fillStyle = 'rgba(126,34,206,0.55)';
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath();
+    ctx.ellipse(w * 0.5, h * 0.36 + i * 24, 90 + i * 8, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Ocean
+  grad = ctx.createLinearGradient(0, h * 0.6, 0, h);
+  grad.addColorStop(0, '#7C3AED'); grad.addColorStop(1, '#1E1B4B');
+  ctx.fillStyle = grad; ctx.fillRect(0, h * 0.6, w, h * 0.4);
+  // Reflection
+  ctx.fillStyle = 'rgba(251,146,60,0.45)';
+  for (let i = 0; i < 8; i++) {
+    const y = h * 0.62 + i * 12;
+    const wsh = 12 + i * 12;
+    ctx.beginPath();
+    ctx.ellipse(w * 0.5, y, wsh, 3 + i * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function paintSpace(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#0B0F2D'); grad.addColorStop(1, '#000000');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+  // Stars
+  for (let i = 0; i < 110; i++) {
+    const x = Math.random() * w;
+    const y = Math.random() * h;
+    const r = Math.random() * 1.6 + 0.4;
+    ctx.fillStyle = `rgba(255,255,255,${0.45 + Math.random() * 0.55})`;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  // Nebula tint
+  const neb = ctx.createRadialGradient(w * 0.3, h * 0.4, 12, w * 0.3, h * 0.4, 140);
+  neb.addColorStop(0, 'rgba(168,85,247,0.35)'); neb.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = neb; ctx.fillRect(0, 0, w, h);
+  // Distant planet with ring
+  const px = w * 0.78, py = h * 0.22;
+  const pgrad = ctx.createRadialGradient(px - 14, py - 10, 4, px, py, 42);
+  pgrad.addColorStop(0, '#60A5FA'); pgrad.addColorStop(0.6, '#1D4ED8'); pgrad.addColorStop(1, '#172554');
+  ctx.fillStyle = pgrad;
+  ctx.beginPath(); ctx.arc(px, py, 38, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(252,211,77,0.55)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.ellipse(px, py, 60, 12, -0.4, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -904,24 +1453,22 @@ interface Props {
   height?: number;
   /** Override expression — used by quiz page to show reaction */
   expression?: Expression;
-  /** Background scene key — see BACKGROUND_GRADIENTS */
+  /** Background scene key — one of BACKGROUND_KEYS */
   background?: string;
+  /** Optional outfit color override — affects main + bot shades */
+  outfitColor?: string;
+  /** ISO-2 codes of countries the user has visited — rendered as flag patches */
+  visitedIsoCodes?: string[];
 }
 
-// Background gradient palettes — top → bottom CSS color stops.
-// Used as scene.background via CanvasTexture so Three.js can lerp on change.
-export const BACKGROUND_GRADIENTS: Record<string, [string, string]> = {
-  studio:   ['#F1F5F9', '#CBD5E1'],
-  beach:    ['#7DD3FC', '#FDE68A'],
-  mountain: ['#A5B4FC', '#475569'],
-  city:     ['#FCA5A5', '#312E81'],
-  home:     ['#FED7AA', '#92400E'],
-  sunset:   ['#F472B6', '#7C3AED'],
-  forest:   ['#86EFAC', '#14532D'],
-  space:    ['#0B0F2D', '#000000'],
-};
+// Available illustrated background scenes
+export const BACKGROUND_KEYS = ['studio','beach','mountain','city','home','forest','sunset','space'] as const;
 
-export default function Avatar3D({ avatar, width = 220, height = 300, expression: expressionProp, background = 'studio' }: Props) {
+export default function Avatar3D({
+  avatar, width = 220, height = 300,
+  expression: expressionProp, background = 'studio',
+  outfitColor, visitedIsoCodes,
+}: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef     = useRef<THREE.Scene | null>(null);
@@ -931,11 +1478,13 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
   const rotYRef      = useRef(0);
   const isDragRef    = useRef(false);
   const lastXRef     = useRef(0);
-  // Background fade refs — current colors that render, target colors to lerp toward
-  const bgCurRef     = useRef<[THREE.Color, THREE.Color]>([new THREE.Color('#F1F5F9'), new THREE.Color('#CBD5E1')]);
-  const bgTgtRef     = useRef<[THREE.Color, THREE.Color]>([new THREE.Color('#F1F5F9'), new THREE.Color('#CBD5E1')]);
-  const bgCanvasRef  = useRef<HTMLCanvasElement | null>(null);
-  const bgTextureRef = useRef<THREE.CanvasTexture | null>(null);
+  // Background scene refs — illustrated cross-fade between scenes
+  const bgCanvasRef   = useRef<HTMLCanvasElement | null>(null);  // visible composite
+  const bgFromCanvasRef = useRef<HTMLCanvasElement | null>(null); // previous scene
+  const bgToCanvasRef = useRef<HTMLCanvasElement | null>(null);   // target scene
+  const bgTextureRef  = useRef<THREE.CanvasTexture | null>(null);
+  const bgMixRef      = useRef(1); // 1 = fully on "to"
+  const bgKeyRef      = useRef('studio');
 
   // Idle animation refs
   const lastTRef      = useRef(0);
@@ -948,12 +1497,16 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
   const effectiveExpression: Expression = expressionProp ?? avatar.expression ?? 'smile';
   const effectiveFaceType: FaceType     = avatar.faceType ?? 'standard';
 
+  const visitedIsoMemo = useMemo(() => visitedIsoCodes ?? [], [visitedIsoCodes]);
+
   const avatarKey = useMemo(() => [
     avatar.hairStyle, avatar.hairColor, avatar.eyeColor,
     avatar.skinColor, avatar.outfit, avatar.user,
     effectiveFaceType, effectiveExpression,
+    outfitColor ?? '',
+    visitedIsoMemo.join('|'),
     ...(avatar.accessories ?? []),
-  ].join(','), [avatar, effectiveFaceType, effectiveExpression]);
+  ].join(','), [avatar, effectiveFaceType, effectiveExpression, outfitColor, visitedIsoMemo]);
 
   // Mount: renderer, scene, camera, lights, initial character, RAF loop
   useEffect(() => {
@@ -973,16 +1526,24 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
     camera.position.set(0, 0.86, 3.9);
     camera.lookAt(0, 0.62, 0);
 
-    // Background — CanvasTexture with linear gradient (smoothly fadable via lerp)
+    // Background — CanvasTexture cross-faded between illustrated scenes
     const bgCanvas = document.createElement('canvas');
-    bgCanvas.width = 64; bgCanvas.height = 256;
+    bgCanvas.width = SCENE_W; bgCanvas.height = SCENE_H;
+    const bgFrom = document.createElement('canvas');
+    bgFrom.width = SCENE_W; bgFrom.height = SCENE_H;
+    const bgTo = document.createElement('canvas');
+    bgTo.width = SCENE_W; bgTo.height = SCENE_H;
     const bgTex = new THREE.CanvasTexture(bgCanvas);
-    bgCanvasRef.current  = bgCanvas;
-    bgTextureRef.current = bgTex;
-    const initial = BACKGROUND_GRADIENTS[background] ?? BACKGROUND_GRADIENTS.studio;
-    bgCurRef.current = [new THREE.Color(initial[0]), new THREE.Color(initial[1])];
-    bgTgtRef.current = [new THREE.Color(initial[0]), new THREE.Color(initial[1])];
-    paintBackground(bgCanvas, bgCurRef.current[0], bgCurRef.current[1]);
+    bgTex.colorSpace = THREE.SRGBColorSpace;
+    bgCanvasRef.current     = bgCanvas;
+    bgFromCanvasRef.current = bgFrom;
+    bgToCanvasRef.current   = bgTo;
+    bgTextureRef.current    = bgTex;
+    bgKeyRef.current        = background;
+    paintScene(bgTo, background);
+    paintScene(bgFrom, background);
+    bgCanvas.getContext('2d')!.drawImage(bgTo, 0, 0);
+    bgMixRef.current = 1;
     bgTex.needsUpdate = true;
     scene.background = bgTex;
 
@@ -1000,7 +1561,7 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
     rim.position.set(0, -1, -4);
     scene.add(rim);
 
-    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType);
+    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType, outfitColor, visitedIsoMemo);
     scene.add(char);
     rendererRef.current  = renderer;
     sceneRef.current     = scene;
@@ -1015,21 +1576,20 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
       const dt  = lastTRef.current > 0 ? Math.min(now - lastTRef.current, 0.08) : 0.016;
       lastTRef.current = now;
 
-      // Smoothly fade background colors toward target
-      const cur = bgCurRef.current;
-      const tgt = bgTgtRef.current;
-      const bgC = bgCanvasRef.current;
-      const bgT = bgTextureRef.current;
-      if (cur && tgt && bgC && bgT) {
-        const d0 = Math.abs(cur[0].r - tgt[0].r) + Math.abs(cur[0].g - tgt[0].g) + Math.abs(cur[0].b - tgt[0].b);
-        const d1 = Math.abs(cur[1].r - tgt[1].r) + Math.abs(cur[1].g - tgt[1].g) + Math.abs(cur[1].b - tgt[1].b);
-        if (d0 + d1 > 0.003) {
-          const lerpAmt = 1 - Math.pow(0.001, dt); // ~0.4s feel
-          cur[0].lerp(tgt[0], lerpAmt);
-          cur[1].lerp(tgt[1], lerpAmt);
-          paintBackground(bgC, cur[0], cur[1]);
-          bgT.needsUpdate = true;
-        }
+      // Cross-fade between illustrated background scenes
+      const bgC    = bgCanvasRef.current;
+      const bgFrom = bgFromCanvasRef.current;
+      const bgTo   = bgToCanvasRef.current;
+      const bgT    = bgTextureRef.current;
+      if (bgC && bgFrom && bgTo && bgT && bgMixRef.current < 1) {
+        bgMixRef.current = Math.min(1, bgMixRef.current + dt * 1.6); // ~0.6s
+        const ctx = bgC.getContext('2d')!;
+        ctx.globalAlpha = 1; ctx.clearRect(0, 0, SCENE_W, SCENE_H);
+        ctx.drawImage(bgFrom, 0, 0);
+        ctx.globalAlpha = bgMixRef.current;
+        ctx.drawImage(bgTo, 0, 0);
+        ctx.globalAlpha = 1;
+        bgT.needsUpdate = true;
       }
 
       const p = partsRef.current;
@@ -1086,7 +1646,7 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
     const scene = sceneRef.current;
     if (!scene) return;
     if (characterRef.current) scene.remove(characterRef.current);
-    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType);
+    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType, outfitColor, visitedIsoMemo);
     scene.add(char);
     char.rotation.y      = rotYRef.current;
     characterRef.current = char;
@@ -1095,10 +1655,19 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarKey]);
 
-  // Re-target background colors when prop changes — animation loop lerps toward
+  // Cross-fade to a new scene when the background prop changes
   useEffect(() => {
-    const pal = BACKGROUND_GRADIENTS[background] ?? BACKGROUND_GRADIENTS.studio;
-    bgTgtRef.current = [new THREE.Color(pal[0]), new THREE.Color(pal[1])];
+    if (background === bgKeyRef.current) return;
+    const bgC    = bgCanvasRef.current;
+    const bgFrom = bgFromCanvasRef.current;
+    const bgTo   = bgToCanvasRef.current;
+    if (!bgC || !bgFrom || !bgTo) return;
+    // Snapshot current visible composite into "from"
+    const fctx = bgFrom.getContext('2d');
+    if (fctx) { fctx.clearRect(0, 0, SCENE_W, SCENE_H); fctx.drawImage(bgC, 0, 0); }
+    paintScene(bgTo, background);
+    bgMixRef.current = 0;
+    bgKeyRef.current = background;
   }, [background]);
 
   function startDrag(x: number) { isDragRef.current = true; lastXRef.current = x; }

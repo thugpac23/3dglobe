@@ -52,10 +52,15 @@ const OUTFITS: { value: AvatarConfig['outfit']; label: string }[] = [
 
 const FACE_TYPES: { value: FaceType; label: string }[] = [
   { value: 'standard', label: 'Стандартно' },
-  { value: 'round',    label: 'Заоблено' },
   { value: 'long',     label: 'Издължено' },
   { value: 'child',    label: 'Детско' },
   { value: 'angular',  label: 'Ъгловато' },
+];
+
+const OUTFIT_COLOR_PRESETS = [
+  '#60A5FA', '#10B981', '#DC2626', '#FBBF24',
+  '#7C3AED', '#EC4899', '#FB923C', '#1E293B',
+  '#0EA5E9', '#84CC16',
 ];
 
 const EXPRESSIONS: { value: Expression; label: string }[] = [
@@ -103,6 +108,8 @@ export default function AvatarPage() {
   const [saved,  setSaved]            = useState(false);
   const [tab, setTab]                 = useState<'build' | 'import'>('build');
   const [backgrounds, setBackgrounds] = useState<Record<UserType, string>>({ tati: 'studio', iva: 'studio' });
+  const [outfitColors, setOutfitColors] = useState<Record<UserType, string | null>>({ tati: null, iva: null });
+  const [visitedIso, setVisitedIso] = useState<Record<UserType, string[]>>({ tati: [], iva: [] });
 
   // Persist background choice per user in localStorage (no DB column needed)
   useEffect(() => {
@@ -121,6 +128,38 @@ export default function AvatarPage() {
       return next;
     });
   }, [activeUser]);
+
+  // Persist outfit color choice per user (override of outfit's default palette)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('avatar-outfit-color');
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<UserType, string | null>;
+        setOutfitColors({ tati: parsed.tati ?? null, iva: parsed.iva ?? null });
+      }
+    } catch { /* ignore */ }
+  }, []);
+  const setOutfitColor = useCallback((color: string | null) => {
+    setOutfitColors(prev => {
+      const next = { ...prev, [activeUser]: color };
+      try { localStorage.setItem('avatar-outfit-color', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [activeUser]);
+
+  // Fetch visited countries — patches show flags of countries the user has visited
+  useEffect(() => {
+    fetch('/api/visits').then(r => r.json()).then(visits => {
+      if (!Array.isArray(visits)) return;
+      const map: Record<UserType, Set<string>> = { tati: new Set(), iva: new Set() };
+      for (const v of visits) {
+        const u = v.user as UserType;
+        const iso = v.country?.isoCode as string | undefined;
+        if (u && iso && map[u]) map[u].add(iso.toUpperCase());
+      }
+      setVisitedIso({ tati: Array.from(map.tati), iva: Array.from(map.iva) });
+    }).catch(() => {});
+  }, []);
 
   // Load persisted data on mount
   useEffect(() => {
@@ -225,10 +264,14 @@ export default function AvatarPage() {
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-        {/* ── Avatar preview (sticky on scroll) ────────────────────────── */}
+        {/* ── Avatar preview (sticky, vertically centered) ─────────────── */}
         <div
-          className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky top-2 self-start z-10"
-          style={{ border: `2px solid ${color}28` }}
+          className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky self-start z-10"
+          style={{
+            border: `2px solid ${color}28`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+          }}
         >
           {avatarUrls[activeUser] ? (
             <>
@@ -244,6 +287,8 @@ export default function AvatarPage() {
                 width={220}
                 height={290}
                 background={backgrounds[activeUser]}
+                outfitColor={outfitColors[activeUser] ?? undefined}
+                visitedIsoCodes={visitedIso[activeUser]}
               />
               <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
             </>
@@ -360,6 +405,41 @@ export default function AvatarPage() {
                       {label}
                     </Chip>
                   ))}
+                </div>
+              </Section>
+
+              {/* Outfit color */}
+              <Section color={color} label="Цвят на облеклото">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setOutfitColor(null)}
+                    title="Стандартен цвят"
+                    style={{
+                      width: 26, height: 26, borderRadius: '50%',
+                      background: 'conic-gradient(#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa,#f87171)',
+                      border: outfitColors[activeUser] === null ? '3px solid #1e293b' : '2px solid #e2e8f0',
+                    }}
+                  />
+                  {OUTFIT_COLOR_PRESETS.map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setOutfitColor(c)}
+                      style={{
+                        width: 26, height: 26, borderRadius: '50%', background: c,
+                        border: outfitColors[activeUser] === c ? '3px solid #1e293b' : '2px solid #e2e8f0',
+                        boxShadow: outfitColors[activeUser] === c ? '0 0 0 2px white inset' : 'none',
+                      }}
+                    />
+                  ))}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input
+                      type="color"
+                      value={outfitColors[activeUser] ?? '#60A5FA'}
+                      onChange={e => setOutfitColor(e.target.value)}
+                      style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 0 }}
+                    />
+                    <span className="text-xs text-slate-400">Избери</span>
+                  </label>
                 </div>
               </Section>
 
