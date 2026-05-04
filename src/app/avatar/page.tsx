@@ -13,9 +13,24 @@ const AvatarRPM  = dynamic(() => import('@/components/AvatarRPM/AvatarRPM'), { s
 const HAIR_STYLES: { value: AvatarConfig['hairStyle']; label: string }[] = [
   { value: 'short',    label: 'Късa' },
   { value: 'long',     label: 'Дълга' },
-  { value: 'curly',   label: 'Къдрава' },
+  { value: 'longest',  label: 'Много дълга' },
+  { value: 'loose',    label: 'Пусната' },
+  { value: 'curly',    label: 'Къдрава' },
   { value: 'ponytail', label: 'Опашка' },
+  { value: 'braid',    label: 'Плитка' },
+  { value: 'tied',     label: 'Кок' },
   { value: 'bald',     label: 'Без коса' },
+];
+
+const BACKGROUNDS: { value: string; label: string }[] = [
+  { value: 'studio',   label: '🎨 Студио' },
+  { value: 'beach',    label: '🏖 Плаж' },
+  { value: 'mountain', label: '⛰ Планина' },
+  { value: 'city',     label: '🏙 Град' },
+  { value: 'home',     label: '🏠 Вкъщи' },
+  { value: 'forest',   label: '🌲 Гора' },
+  { value: 'sunset',   label: '🌇 Залез' },
+  { value: 'space',    label: '🌌 Космос' },
 ];
 
 const OUTFITS: { value: AvatarConfig['outfit']; label: string }[] = [
@@ -87,6 +102,25 @@ export default function AvatarPage() {
   const [saving, setSaving]           = useState(false);
   const [saved,  setSaved]            = useState(false);
   const [tab, setTab]                 = useState<'build' | 'import'>('build');
+  const [backgrounds, setBackgrounds] = useState<Record<UserType, string>>({ tati: 'studio', iva: 'studio' });
+
+  // Persist background choice per user in localStorage (no DB column needed)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('avatar-bg');
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<UserType, string>;
+        setBackgrounds({ tati: parsed.tati ?? 'studio', iva: parsed.iva ?? 'studio' });
+      }
+    } catch { /* ignore */ }
+  }, []);
+  const setBackground = useCallback((bg: string) => {
+    setBackgrounds(prev => {
+      const next = { ...prev, [activeUser]: bg };
+      try { localStorage.setItem('avatar-bg', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [activeUser]);
 
   // Load persisted data on mount
   useEffect(() => {
@@ -191,26 +225,29 @@ export default function AvatarPage() {
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-        {/* ── Avatar preview ────────────────────────────────────────────── */}
+        {/* ── Avatar preview (sticky on scroll) ────────────────────────── */}
         <div
-          className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white shadow-md flex-shrink-0"
+          className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky top-2 self-start z-10"
           style={{ border: `2px solid ${color}28` }}
         >
           {avatarUrls[activeUser] ? (
             <>
-              <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={240} height={320} />
+              <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={220} height={290} />
               <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
               <span className="text-xs text-slate-400">Завърти / Приближи</span>
             </>
           ) : (
-            <Avatar3D
-              avatar={cfg}
-              expression={cfg.expression ?? 'smile'}
-              width={240}
-              height={320}
-            />
+            <>
+              <Avatar3D
+                avatar={cfg}
+                expression={cfg.expression ?? 'smile'}
+                width={220}
+                height={290}
+                background={backgrounds[activeUser]}
+              />
+              <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
+            </>
           )}
-          <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
         </div>
 
         {/* ── Editor panel ──────────────────────────────────────────────── */}
@@ -319,6 +356,22 @@ export default function AvatarPage() {
                       active={cfg.outfit === value}
                       color={color}
                       onClick={() => updateConfig('outfit', value)}
+                    >
+                      {label}
+                    </Chip>
+                  ))}
+                </div>
+              </Section>
+
+              {/* Background */}
+              <Section color={color} label="Фон">
+                <div className="flex flex-wrap gap-1.5">
+                  {BACKGROUNDS.map(({ value, label }) => (
+                    <Chip
+                      key={value}
+                      active={backgrounds[activeUser] === value}
+                      color={color}
+                      onClick={() => setBackground(value)}
                     >
                       {label}
                     </Chip>

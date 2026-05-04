@@ -152,6 +152,133 @@ function buildCharacter(
     g.add(belt);
   }
 
+  // ── Realistic outfit details (folds, hoods, zippers, layers) ────────────────
+  // Travel jacket: collar + zipper + horizontal fold lines
+  if (outfit === 'travel') {
+    const jacketDarkM = mat(0x2D3744, { roughness: 0.74 });
+    // Collar
+    const collar = mesh(new THREE.TorusGeometry(0.16, 0.04, 6, 16, Math.PI), jacketDarkM);
+    collar.position.set(0, 1.04, 0.04);
+    collar.rotation.x = -0.4;
+    g.add(collar);
+    // Vertical zipper line
+    const zipper = mesh(new THREE.BoxGeometry(0.022, 0.55, 0.024), mat(0x9CA3AF, { metalness: 0.4, roughness: 0.4 }));
+    zipper.position.set(0, 0.78, 0.295);
+    g.add(zipper);
+    // Chest pocket
+    const chestPocket = mesh(new THREE.BoxGeometry(0.13, 0.10, 0.022), jacketDarkM);
+    chestPocket.position.set(-0.13, 0.92, 0.296);
+    g.add(chestPocket);
+    // Side pockets
+    for (const sx of [-1, 1]) {
+      const sp = mesh(new THREE.BoxGeometry(0.16, 0.10, 0.022), jacketDarkM);
+      sp.position.set(sx * 0.16, 0.66, 0.292);
+      g.add(sp);
+    }
+    // Cuff lines
+    for (const sx of [-1, 1]) {
+      const cuff = mesh(new THREE.TorusGeometry(0.082, 0.014, 5, 12), jacketDarkM);
+      cuff.position.set(sx * 0.66, 0.36, 0);
+      cuff.rotation.y = Math.PI / 2;
+      g.add(cuff);
+    }
+  }
+
+  // Sporty: zip detail, contrast stripes
+  if (outfit === 'sporty') {
+    const stripeM = mat(0xFFFFFF, { roughness: 0.55 });
+    for (const sx of [-1, 1]) {
+      const stripe = mesh(new THREE.BoxGeometry(0.022, 0.62, 0.012), stripeM);
+      stripe.position.set(sx * 0.21, 0.78, 0.30);
+      g.add(stripe);
+    }
+    // High collar
+    const sCollar = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 12, 1, true), mat(OUTFIT_BOT.sporty, { roughness: 0.65 }));
+    sCollar.position.set(0, 1.06, 0);
+    g.add(sCollar);
+    const sZip = mesh(new THREE.BoxGeometry(0.016, 0.18, 0.022), mat(0xC0C0C0, { metalness: 0.5 }));
+    sZip.position.set(0, 1.0, 0.30);
+    g.add(sZip);
+  }
+
+  // City outfit: hoodie hood + drawstring + kangaroo pocket
+  if (outfit === 'city') {
+    const hoodM = mat(OUTFIT_TOP.city, { roughness: 0.78 });
+    const hood = mesh(new THREE.SphereGeometry(0.28, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), hoodM);
+    hood.position.set(0, 1.10, -0.04);
+    hood.scale.set(1.05, 0.95, 1.10);
+    g.add(hood);
+    // Drawstrings
+    for (const sx of [-1, 1]) {
+      const string = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.18, 6), mat(0xF4F4F5));
+      string.position.set(sx * 0.04, 0.94, 0.27);
+      g.add(string);
+      const tip = mesh(new THREE.SphereGeometry(0.018, 6, 6), mat(0xF4F4F5));
+      tip.position.set(sx * 0.04, 0.84, 0.27);
+      g.add(tip);
+    }
+    // Kangaroo pocket — large front fold
+    const pocket = mesh(new THREE.BoxGeometry(0.4, 0.18, 0.04), mat(OUTFIT_BOT.city, { roughness: 0.78 }));
+    pocket.position.set(0, 0.62, 0.295);
+    g.add(pocket);
+  }
+
+  // Casual: subtle horizontal fold + cuff
+  if (outfit === 'casual') {
+    const foldM = mat(OUTFIT_BOT.casual, { roughness: 0.7 });
+    const fold = mesh(new THREE.TorusGeometry(0.30, 0.014, 4, 16, Math.PI), foldM);
+    fold.position.set(0, 0.66, 0);
+    fold.rotation.x = Math.PI / 2;
+    g.add(fold);
+    // Henley placket
+    const placket = mesh(new THREE.BoxGeometry(0.05, 0.18, 0.022), foldM);
+    placket.position.set(0, 0.96, 0.29);
+    g.add(placket);
+  }
+
+  // Summer outfit: shoulder straps + waist tie
+  if (outfit === 'summer') {
+    const strapM = mat(OUTFIT_ACC.summer, { roughness: 0.68 });
+    for (const sx of [-1, 1]) {
+      const strap = mesh(new THREE.BoxGeometry(0.05, 0.30, 0.026), strapM);
+      strap.position.set(sx * 0.16, 0.96, 0.22);
+      strap.rotation.x = -0.4;
+      g.add(strap);
+    }
+    const waistTie = mesh(new THREE.TorusGeometry(0.30, 0.018, 4, 16), strapM);
+    waistTie.position.set(0, 0.52, 0);
+    waistTie.rotation.x = Math.PI / 2;
+    g.add(waistTie);
+  }
+
+  // Winter outfit: puffy quilt rings + tall collar
+  if (outfit === 'winter') {
+    const puffM = mat(OUTFIT_TOP.winter, { roughness: 0.84 });
+    for (let i = 0; i < 4; i++) {
+      const ring = mesh(new THREE.TorusGeometry(0.30, 0.022, 4, 18), puffM);
+      ring.position.set(0, 0.50 + i * 0.16, 0);
+      ring.rotation.x = Math.PI / 2;
+      g.add(ring);
+    }
+    const wCollar = mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.14, 12, 1, true), puffM);
+    wCollar.position.set(0, 1.10, 0);
+    g.add(wCollar);
+  }
+
+  // Adventure: chest harness + utility loops
+  if (outfit === 'adventure') {
+    const harnessM = mat(0x44403C, { roughness: 0.6 });
+    for (const sx of [-1, 1]) {
+      const strap = mesh(new THREE.BoxGeometry(0.04, 0.48, 0.022), harnessM);
+      strap.position.set(sx * 0.10, 0.86, 0.295);
+      strap.rotation.z = sx * 0.1;
+      g.add(strap);
+    }
+    const buckle = mesh(new THREE.BoxGeometry(0.06, 0.06, 0.025), mat(0xC0C0C0, { metalness: 0.5 }));
+    buckle.position.set(0, 0.82, 0.30);
+    g.add(buckle);
+  }
+
   // ── SHOULDERS ── flattened spheres → deltoid silhouette, not round balls
   for (const sx of [-1, 1]) {
     const sho = mesh(new THREE.SphereGeometry(0.152, 10, 10), topM);
@@ -360,6 +487,22 @@ function buildCharacter(
   // This eliminates the cap-over-forehead clipping entirely.
   // ──────────────────────────────────────────────────────────────────────────
   if (hair !== 'bald') {
+    // ── SCALP BASE ── full hair-colored under-layer that prevents bald patches
+    // from any angle. Slight backward offset hides the front edge behind the face.
+    const scalpBase = mesh(
+      new THREE.SphereGeometry(0.327, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      hairM,
+    );
+    scalpBase.scale.set(fsx, fsy, fsz);
+    scalpBase.position.set(0, 0, -0.018 * fsz);
+    headGroup.add(scalpBase);
+
+    // Bridge piece — fills the upper back gap between cap edge and back coverage
+    const skullBridge = mesh(new THREE.SphereGeometry(0.18, 12, 10), hairM);
+    skullBridge.scale.set(1.45, 0.78, 0.55);
+    skullBridge.position.set(0, 0.13, -0.20);
+    headGroup.add(skullBridge);
+
     // Shared top dome — sits above hairline, never touches forehead/eyes
     const capR     = 0.338;
     const capAngle = Math.PI * 0.31;
@@ -447,6 +590,109 @@ function buildCharacter(
       tail.position.set(0, -0.22, -0.348);
       tail.rotation.x = 0.48;
       headGroup.add(tail);
+    }
+
+    if (hair === 'loose') {
+      // Loose flowing hair — soft volume on sides + slightly outward sweep
+      for (const sx of [-1, 1]) {
+        const temple = mesh(new THREE.SphereGeometry(0.140, 10, 8), hairM);
+        temple.scale.set(0.62, 1.10, 0.78);
+        temple.position.set(sx * 0.310, 0.03, -0.03);
+        headGroup.add(temple);
+        // Two flowing strands per side, slight outward angle
+        const strand1 = mesh(new THREE.CylinderGeometry(0.082, 0.044, 0.52, 8), hairM);
+        strand1.position.set(sx * 0.350, -0.36, -0.04);
+        strand1.rotation.z = sx * 0.06;
+        headGroup.add(strand1);
+        const strand2 = mesh(new THREE.CylinderGeometry(0.062, 0.034, 0.46, 8), hairM);
+        strand2.position.set(sx * 0.298, -0.40, 0.06);
+        strand2.rotation.z = sx * -0.10;
+        headGroup.add(strand2);
+      }
+      const backUpper = mesh(new THREE.SphereGeometry(0.215, 10, 8), hairM);
+      backUpper.scale.set(1.30, 0.78, 0.78);
+      backUpper.position.set(0, 0, -0.282);
+      headGroup.add(backUpper);
+      const backLower = mesh(new THREE.CylinderGeometry(0.180, 0.108, 0.46, 12), hairM);
+      backLower.position.set(0, -0.30, -0.292);
+      headGroup.add(backLower);
+    }
+
+    if (hair === 'braid') {
+      // Braid (плитка) — tied at the back with stacked spheres for woven look
+      for (const sx of [-1, 1]) {
+        const side = mesh(new THREE.SphereGeometry(0.122, 10, 8), hairM);
+        side.scale.set(0.52, 0.86, 0.70);
+        side.position.set(sx * 0.298, 0.05, -0.02);
+        headGroup.add(side);
+      }
+      const backV = mesh(new THREE.SphereGeometry(0.190, 10, 8), hairM);
+      backV.scale.set(1.30, 0.74, 0.72);
+      backV.position.set(0, -0.005, -0.276);
+      headGroup.add(backV);
+      // Braid: 5 stacked overlapping spheres going down from nape
+      const braidStartY = -0.13;
+      const braidStep   = 0.092;
+      for (let i = 0; i < 5; i++) {
+        const segR = 0.078 - i * 0.008;
+        const seg  = mesh(new THREE.SphereGeometry(segR, 10, 10), hairM);
+        // Slight zig-zag offset gives woven illusion
+        seg.position.set((i % 2 === 0 ? 0.018 : -0.018), braidStartY - i * braidStep, -0.34 - i * 0.01);
+        headGroup.add(seg);
+      }
+      // Tie band at top of braid
+      const band = mesh(new THREE.TorusGeometry(0.062, 0.020, 6, 12), mat(0xDC2626, { roughness: 0.62 }));
+      band.position.set(0, braidStartY + 0.05, -0.336);
+      band.rotation.x = Math.PI / 2;
+      headGroup.add(band);
+    }
+
+    if (hair === 'tied') {
+      // Tied hair — sleek pulled-back style with bun at the back
+      for (const sx of [-1, 1]) {
+        const side = mesh(new THREE.SphereGeometry(0.108, 10, 8), hairM);
+        side.scale.set(0.46, 0.74, 0.66);
+        side.position.set(sx * 0.288, 0.06, -0.04);
+        headGroup.add(side);
+      }
+      const back = mesh(new THREE.SphereGeometry(0.178, 10, 8), hairM);
+      back.scale.set(1.24, 0.74, 0.62);
+      back.position.set(0, 0.02, -0.262);
+      headGroup.add(back);
+      // Bun
+      const bun = mesh(new THREE.SphereGeometry(0.118, 12, 12), hairM);
+      bun.position.set(0, -0.02, -0.388);
+      headGroup.add(bun);
+      // Wrap band around bun
+      const bunBand = mesh(new THREE.TorusGeometry(0.118, 0.018, 6, 16), mat(0xDC2626, { roughness: 0.62 }));
+      bunBand.position.set(0, -0.02, -0.388);
+      bunBand.rotation.y = Math.PI / 2;
+      headGroup.add(bunBand);
+    }
+
+    if (hair === 'longest') {
+      // Longer flowing hair — reaches well past shoulders with bottom flare
+      for (const sx of [-1, 1]) {
+        const temple = mesh(new THREE.SphereGeometry(0.130, 10, 8), hairM);
+        temple.scale.set(0.60, 1.08, 0.74);
+        temple.position.set(sx * 0.308, 0.04, -0.02);
+        headGroup.add(temple);
+        const strand = mesh(new THREE.CylinderGeometry(0.094, 0.072, 0.78, 10), hairM);
+        strand.position.set(sx * 0.354, -0.50, -0.04);
+        headGroup.add(strand);
+      }
+      const backUpper = mesh(new THREE.SphereGeometry(0.218, 10, 8), hairM);
+      backUpper.scale.set(1.32, 0.78, 0.78);
+      backUpper.position.set(0, -0.01, -0.282);
+      headGroup.add(backUpper);
+      // Long curtain to mid-back
+      const backCurtain = mesh(new THREE.CylinderGeometry(0.190, 0.120, 0.78, 12), hairM);
+      backCurtain.position.set(0, -0.50, -0.302);
+      headGroup.add(backCurtain);
+      // Bottom flare
+      const flare = mesh(new THREE.CylinderGeometry(0.125, 0.180, 0.16, 12), hairM);
+      flare.position.set(0, -0.92, -0.302);
+      headGroup.add(flare);
     }
   } else {
     // Bald shine
@@ -641,6 +887,16 @@ function groupOffset(g: THREE.Group, dy: number) {
   g.children.forEach(c => { c.position.y -= dy; });
 }
 
+function paintBackground(c: HTMLCanvasElement, top: THREE.Color, bot: THREE.Color) {
+  const ctx = c.getContext('2d');
+  if (!ctx) return;
+  const grad = ctx.createLinearGradient(0, 0, 0, c.height);
+  grad.addColorStop(0, '#' + top.getHexString());
+  grad.addColorStop(1, '#' + bot.getHexString());
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, c.width, c.height);
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 interface Props {
   avatar: Partial<AvatarConfig>;
@@ -648,9 +904,24 @@ interface Props {
   height?: number;
   /** Override expression — used by quiz page to show reaction */
   expression?: Expression;
+  /** Background scene key — see BACKGROUND_GRADIENTS */
+  background?: string;
 }
 
-export default function Avatar3D({ avatar, width = 220, height = 300, expression: expressionProp }: Props) {
+// Background gradient palettes — top → bottom CSS color stops.
+// Used as scene.background via CanvasTexture so Three.js can lerp on change.
+export const BACKGROUND_GRADIENTS: Record<string, [string, string]> = {
+  studio:   ['#F1F5F9', '#CBD5E1'],
+  beach:    ['#7DD3FC', '#FDE68A'],
+  mountain: ['#A5B4FC', '#475569'],
+  city:     ['#FCA5A5', '#312E81'],
+  home:     ['#FED7AA', '#92400E'],
+  sunset:   ['#F472B6', '#7C3AED'],
+  forest:   ['#86EFAC', '#14532D'],
+  space:    ['#0B0F2D', '#000000'],
+};
+
+export default function Avatar3D({ avatar, width = 220, height = 300, expression: expressionProp, background = 'studio' }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef     = useRef<THREE.Scene | null>(null);
@@ -660,6 +931,11 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
   const rotYRef      = useRef(0);
   const isDragRef    = useRef(false);
   const lastXRef     = useRef(0);
+  // Background fade refs — current colors that render, target colors to lerp toward
+  const bgCurRef     = useRef<[THREE.Color, THREE.Color]>([new THREE.Color('#F1F5F9'), new THREE.Color('#CBD5E1')]);
+  const bgTgtRef     = useRef<[THREE.Color, THREE.Color]>([new THREE.Color('#F1F5F9'), new THREE.Color('#CBD5E1')]);
+  const bgCanvasRef  = useRef<HTMLCanvasElement | null>(null);
+  const bgTextureRef = useRef<THREE.CanvasTexture | null>(null);
 
   // Idle animation refs
   const lastTRef      = useRef(0);
@@ -697,6 +973,19 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
     camera.position.set(0, 0.86, 3.9);
     camera.lookAt(0, 0.62, 0);
 
+    // Background — CanvasTexture with linear gradient (smoothly fadable via lerp)
+    const bgCanvas = document.createElement('canvas');
+    bgCanvas.width = 64; bgCanvas.height = 256;
+    const bgTex = new THREE.CanvasTexture(bgCanvas);
+    bgCanvasRef.current  = bgCanvas;
+    bgTextureRef.current = bgTex;
+    const initial = BACKGROUND_GRADIENTS[background] ?? BACKGROUND_GRADIENTS.studio;
+    bgCurRef.current = [new THREE.Color(initial[0]), new THREE.Color(initial[1])];
+    bgTgtRef.current = [new THREE.Color(initial[0]), new THREE.Color(initial[1])];
+    paintBackground(bgCanvas, bgCurRef.current[0], bgCurRef.current[1]);
+    bgTex.needsUpdate = true;
+    scene.background = bgTex;
+
     // Soft 3-point lighting
     scene.add(new THREE.AmbientLight(0xfff4e8, 0.52));
     const key = new THREE.DirectionalLight(0xffffff, 0.96);
@@ -725,6 +1014,23 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
       const now = performance.now() / 1000;
       const dt  = lastTRef.current > 0 ? Math.min(now - lastTRef.current, 0.08) : 0.016;
       lastTRef.current = now;
+
+      // Smoothly fade background colors toward target
+      const cur = bgCurRef.current;
+      const tgt = bgTgtRef.current;
+      const bgC = bgCanvasRef.current;
+      const bgT = bgTextureRef.current;
+      if (cur && tgt && bgC && bgT) {
+        const d0 = Math.abs(cur[0].r - tgt[0].r) + Math.abs(cur[0].g - tgt[0].g) + Math.abs(cur[0].b - tgt[0].b);
+        const d1 = Math.abs(cur[1].r - tgt[1].r) + Math.abs(cur[1].g - tgt[1].g) + Math.abs(cur[1].b - tgt[1].b);
+        if (d0 + d1 > 0.003) {
+          const lerpAmt = 1 - Math.pow(0.001, dt); // ~0.4s feel
+          cur[0].lerp(tgt[0], lerpAmt);
+          cur[1].lerp(tgt[1], lerpAmt);
+          paintBackground(bgC, cur[0], cur[1]);
+          bgT.needsUpdate = true;
+        }
+      }
 
       const p = partsRef.current;
       if (p) {
@@ -788,6 +1094,12 @@ export default function Avatar3D({ avatar, width = 220, height = 300, expression
     blinkPhaseRef.current = -1;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarKey]);
+
+  // Re-target background colors when prop changes — animation loop lerps toward
+  useEffect(() => {
+    const pal = BACKGROUND_GRADIENTS[background] ?? BACKGROUND_GRADIENTS.studio;
+    bgTgtRef.current = [new THREE.Color(pal[0]), new THREE.Color(pal[1])];
+  }, [background]);
 
   function startDrag(x: number) { isDragRef.current = true; lastXRef.current = x; }
   function moveDrag(x: number) {
