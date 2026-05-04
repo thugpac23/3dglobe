@@ -261,7 +261,7 @@ export default function Home() {
         <p className="text-slate-500 text-xs mt-1 tracking-widest uppercase">Открийте света заедно</p>
       </header>
 
-      {/* XP Bars */}
+      {/* Compact user switcher — no XP bar, no numbers */}
       <div className="flex gap-3 w-full max-w-lg mt-3 px-2">
         {(['tati', 'iva'] as UserType[]).map((user) => (
           <XPBar
@@ -269,13 +269,14 @@ export default function Home() {
             user={user}
             progress={progress[user]}
             isActive={activeUser === user}
-            onClick={() => setActiveUser(user)}
+            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(user); }}
+            compact
           />
         ))}
       </div>
 
       {/* Mode toggle */}
-      <div className="flex mt-4 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(0,0,0,0.1)' }}>
+      <div className="flex mt-3 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(0,0,0,0.1)' }}>
         {(['visited', 'wishlist'] as AppMode[]).map((m) => (
           <button
             key={m}
@@ -298,33 +299,63 @@ export default function Home() {
           : `Добави дестинация в списъка на ${USER_DISPLAY[activeUser]}`}
       </p>
 
-      {/* Globe section */}
+      {/* ── Map section (default view) ───────────────────────────────────── */}
       <div className="w-full max-w-2xl mt-4 px-2">
-        <div className="flex items-center justify-between mb-1.5">
-          <h2 className="text-base font-bold text-slate-700">🌍 Интерактивен глобус</h2>
+        <h2 className="text-base font-bold text-slate-700 mb-1.5">🗺️ Карта на пътешествието</h2>
+        {!loading && (
+          <WorldMap
+            visitsByCountry={visitsByCountry}
+            wishlistByCountry={wishlistByCountry}
+            mode={mode}
+            onCountryClick={handleCountryClick}
+            height={300}
+          />
+        )}
+        {loading && (
+          <div className="rounded-2xl flex items-center justify-center text-slate-400 text-sm" style={{ height: 300, background: 'rgba(0,0,0,0.06)' }}>
+            Зареждане…
+          </div>
+        )}
+
+        {/* Buttons below map */}
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: USER_COLOR[activeUser],
+              color: 'white',
+              boxShadow: `0 3px 12px ${USER_COLOR[activeUser]}40`,
+            }}
+          >
+            🗺️ Покажи на цял екран
+          </button>
           <button
             onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
-            className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline transition-colors"
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold border-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: 'white',
+              color: USER_COLOR[activeUser],
+              borderColor: USER_COLOR[activeUser],
+            }}
           >
-            Покажи на цял екран →
+            🌍 Покажи интерактивен глобус
           </button>
         </div>
-        <div className="rounded-2xl overflow-hidden shadow-xl flex justify-center items-start"
-          style={{ background: '#040c18', maxHeight: 370, touchAction: 'none' }}>
-          {!loading && (
-            <Globe
-              visitsByCountry={visitsByCountry}
-              wishlistByCountry={wishlistByCountry}
-              activeUser={activeUser}
-              mode={mode}
-              onCountryClick={handleCountryClick}
-            />
-          )}
-          {loading && (
-            <div className="flex items-center justify-center text-white opacity-40 text-sm" style={{ height: 200 }}>
-              Зареждане…
+
+        {/* Legend */}
+        <div className="flex flex-wrap justify-center gap-3 mt-3">
+          {[
+            { color: '#F59E0B', label: `само ${USER_DISPLAY.tati}` },
+            { color: '#EC4899', label: `само ${USER_DISPLAY.iva}` },
+            { color: '#7C3AED', label: 'двете заедно' },
+            { color: '#14B8A6', label: 'желано' },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color }} />
+              {label}
             </div>
-          )}
+          ))}
         </div>
       </div>
 
@@ -437,32 +468,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Map section */}
-      <div className="w-full max-w-2xl mt-5 px-2">
-        <div className="flex items-center justify-between mb-1.5">
-          <h2 className="text-base font-bold text-slate-700">🗺️ Карта на пътешествията</h2>
-          <button
-            onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
-            className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline transition-colors"
-          >
-            Покажи на цял екран →
-          </button>
-        </div>
-        {!loading && (
-          <WorldMap
-            visitsByCountry={visitsByCountry}
-            wishlistByCountry={wishlistByCountry}
-            mode={mode}
-            onCountryClick={handleCountryClick}
-            height={300}
-          />
-        )}
-        {loading && (
-          <div className="rounded-2xl flex items-center justify-center text-slate-400 text-sm" style={{ height: 300, background: 'rgba(0,0,0,0.06)' }}>
-            Зареждане…
-          </div>
-        )}
-      </div>
+      {/* Map and Globe fullscreen modals follow below */}
 
       {/* Fullscreen map modal */}
       {mapOpen && (
@@ -568,21 +574,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      {/* Legend */}
-      <div className="flex flex-wrap justify-center gap-3 mt-4 px-4">
-        {[
-          { color: '#F59E0B', label: `само ${USER_DISPLAY.tati}` },
-          { color: '#EC4899', label: `само ${USER_DISPLAY.iva}` },
-          { color: '#7C3AED', label: 'двете заедно' },
-          { color: '#14B8A6', label: 'желано' },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
-            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color }} />
-            {label}
-          </div>
-        ))}
-      </div>
 
       {/* Table */}
       <VisitsTable

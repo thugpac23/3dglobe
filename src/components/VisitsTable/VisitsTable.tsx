@@ -46,8 +46,11 @@ function applyOrder(rows: CountryRow[], savedOrder: string[]): CountryRow[] {
   return result;
 }
 
+const ITEM_H = 36;
+const MAX_VISIBLE = 10;
+
 function DraggableColumn({
-  storageKey, rows, color, label, emoji, emptyText, maxHeight,
+  storageKey, rows, color, label, emoji, emptyText,
 }: {
   storageKey: string;
   rows: CountryRow[];
@@ -55,10 +58,13 @@ function DraggableColumn({
   label: string;
   emoji: string;
   emptyText: string;
-  maxHeight: number;
 }) {
   const [savedOrder, setSavedOrder] = useListOrder(storageKey);
   const ordered = useMemo(() => applyOrder(rows, savedOrder), [rows, savedOrder]);
+  // Show at most MAX_VISIBLE rows before scroll kicks in
+  const maxHeight = ordered.length > MAX_VISIBLE
+    ? MAX_VISIBLE * ITEM_H
+    : Math.max(60, ordered.length * ITEM_H);
   const orderedRef = useRef(ordered);
   useEffect(() => { orderedRef.current = ordered; }, [ordered]);
 
@@ -211,12 +217,11 @@ export default function VisitsTable({ visitsByCountry, wishlistByCountry, mode, 
   }
 
   const emptyText = mode === 'wishlist' ? 'Няма желани дестинации' : 'Няма държави все още';
-  const maxH = compact ? 180 : 220;
 
   if (compact) {
     return (
       <div className="flex flex-col gap-3">
-        {cols.map(c => <DraggableColumn key={c.storageKey} {...c} emptyText={emptyText} maxHeight={maxH} />)}
+        {cols.map(c => <DraggableColumn key={c.storageKey} {...c} emptyText={emptyText} />)}
       </div>
     );
   }
@@ -224,7 +229,7 @@ export default function VisitsTable({ visitsByCountry, wishlistByCountry, mode, 
   return (
     <div className="w-full max-w-4xl mx-auto mt-5 px-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {cols.map(c => <DraggableColumn key={c.storageKey} {...c} emptyText={emptyText} maxHeight={maxH} />)}
+        {cols.map(c => <DraggableColumn key={c.storageKey} {...c} emptyText={emptyText} />)}
       </div>
     </div>
   );
