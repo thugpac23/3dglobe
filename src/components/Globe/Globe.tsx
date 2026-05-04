@@ -91,6 +91,8 @@ interface LabelDatum {
   name: string;
   labelrank: number;
   type: 'label' | 'flag' | 'select-ring';
+  /** Pre-computed font size (px) based on rank + current zoom */
+  fontSize?: number;
 }
 
 const allLabels: LabelDatum[] = polygonsData.flatMap((feature) => {
@@ -181,7 +183,7 @@ function makeHtmlEl(d: object): HTMLElement {
       'user-select:none',
     ].join(';');
   } else {
-    const sz = datum.labelrank <= 2 ? 14 : datum.labelrank <= 3 ? 12 : 10;
+    const sz = datum.fontSize ?? (datum.labelrank <= 2 ? 14 : datum.labelrank <= 3 ? 12 : 10);
     el.textContent = datum.name;
     el.style.cssText = [
       'color:rgba(255,255,255,0.95)',
@@ -248,13 +250,22 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     return () => clearInterval(id);
   }, []);
 
-  // Labels: tiered by altitude — show more names at default viewing distance
+  // Labels: progressive by altitude. No labels when zoomed out.
+  // Font size scales up as the camera gets closer (lower altitude).
   const visibleLabels = useMemo<LabelDatum[]>(() => {
-    if (cameraAlt > 3.5) return [];
-    if (cameraAlt > 2.2) return allLabels.filter(l => l.labelrank <= 3);
-    if (cameraAlt > 1.4) return allLabels.filter(l => l.labelrank <= 4);
-    if (cameraAlt > 0.7) return allLabels.filter(l => l.labelrank <= 6);
-    return allLabels; // deep zoom → every labeled country
+    if (cameraAlt > 2.8) return [];                             // far out — no labels
+    const filtered =
+      cameraAlt > 2.0 ? allLabels.filter(l => l.labelrank <= 2) : // only 5–6 giants
+      cameraAlt > 1.4 ? allLabels.filter(l => l.labelrank <= 3) :
+      cameraAlt > 0.9 ? allLabels.filter(l => l.labelrank <= 4) :
+      cameraAlt > 0.5 ? allLabels.filter(l => l.labelrank <= 6) :
+      allLabels;
+    // Scale font size with zoom: bigger labels when camera is closer
+    const zoomScale = Math.min(1.4, Math.max(0.85, 1 / cameraAlt * 0.9));
+    return filtered.map(l => ({
+      ...l,
+      fontSize: Math.round((l.labelrank <= 2 ? 14 : l.labelrank <= 3 ? 12 : 10) * zoomScale),
+    }));
   }, [cameraAlt]);
 
   // Labels + hover flag + selection ring
@@ -366,13 +377,17 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     if (!globeRef.current) return;
     const pov = globeRef.current.pointOfView();
     const alt = (typeof pov?.altitude === 'number' && isFinite(pov.altitude)) ? pov.altitude : cameraAlt;
-    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: Math.max(0.1, alt * 0.65) }, 400);
+    const next = Math.max(0.1, alt * 0.65);
+    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: next }, 400);
+    setCameraAlt(next);
   }
   function zoomOut() {
     if (!globeRef.current) return;
     const pov = globeRef.current.pointOfView();
     const alt = (typeof pov?.altitude === 'number' && isFinite(pov.altitude)) ? pov.altitude : cameraAlt;
-    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: Math.min(6, alt / 0.65) }, 400);
+    const next = Math.min(6, alt / 0.65);
+    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: next }, 400);
+    setCameraAlt(next);
   }
 
   const selectedName = selectedIso ? (BG_NAMES[selectedIso] ?? selectedIso) : null;
