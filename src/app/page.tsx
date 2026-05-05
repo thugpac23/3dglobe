@@ -14,7 +14,7 @@ import {
   fetchWishlist, addWishlist, removeWishlist,
 } from '@/lib/api';
 import { ACHIEVEMENTS } from '@/lib/xp';
-import { COUNTRY_FACTS } from '@/data/countryFacts';
+import { getFact } from '@/data/countryFacts';
 import { BG_NAMES } from '@/data/countryNamesBg';
 
 function getFlagEmoji(iso: string): string {
@@ -50,6 +50,11 @@ export default function Home() {
   const [globeOpen, setGlobeOpen] = useState(false);
   const [mapOpen, setMapOpen]     = useState(false);
   const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
+  // When ON, first click on a country shows its fact; second click on the
+  // same country adds/removes from visited/wishlist. When OFF (default),
+  // a single click both shows the fact and applies the change (legacy).
+  const [factsMode, setFactsMode] = useState(false);
+  const [primedIso, setPrimedIso] = useState<string | null>(null);
   const xpPopRef = useRef<HTMLDivElement>(null);
   const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -73,6 +78,22 @@ export default function Home() {
       .then(([v, p, w]) => { setVisits(v); setProgress(p); setWishlist(w); })
       .catch(console.error)
       .finally(() => setLoading(false));
+  }, []);
+
+  // Persist facts toggle in localStorage
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('home-facts-mode');
+      if (v === '1') setFactsMode(true);
+    } catch { /* ignore */ }
+  }, []);
+  const toggleFactsMode = useCallback(() => {
+    setFactsMode(prev => {
+      const next = !prev;
+      try { localStorage.setItem('home-facts-mode', next ? '1' : '0'); } catch { /* ignore */ }
+      if (!next) setPrimedIso(null);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -150,7 +171,7 @@ export default function Home() {
   }, [showToast]);
 
   const showFactPopup = useCallback((isoCode: string) => {
-    const fact = COUNTRY_FACTS[isoCode];
+    const fact = getFact(isoCode);
     if (!fact) return;
     const name = BG_NAMES[isoCode] ?? isoCode;
     if (factTimerRef.current) clearTimeout(factTimerRef.current);
@@ -159,7 +180,19 @@ export default function Home() {
   }, []);
 
   const handleCountryClick = useCallback(async (isoCode: string, countryName: string) => {
-    showFactPopup(isoCode);
+    if (factsMode) {
+      // Two-step flow: first click on a country shows its fact, second click
+      // on the same primed country applies the change.
+      if (primedIso !== isoCode) {
+        showFactPopup(isoCode);
+        setPrimedIso(isoCode);
+        return;
+      }
+      setPrimedIso(null);
+    } else {
+      // Legacy: every click shows fact AND applies change in one go.
+      showFactPopup(isoCode);
+    }
     if (mode === 'wishlist') {
       const onWishlist = wishlistByCountry[isoCode]?.[activeUser] ?? false;
       const displayName = USER_DISPLAY[activeUser];
@@ -244,7 +277,7 @@ export default function Home() {
         showToast('Грешка при запазване', 'remove');
       }
     }
-  }, [mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast, handleAwardXP, showFactPopup]);
+  }, [mode, visitsByCountry, wishlistByCountry, visits, wishlist, activeUser, showToast, handleAwardXP, showFactPopup, factsMode, primedIso]);
 
   const toastColors: Record<Toast['type'], string> = {
     add: '#059669', remove: '#DC2626',
@@ -294,10 +327,27 @@ export default function Home() {
       </div>
 
       <p className="text-xs text-slate-500 mt-1.5">
-        {mode === 'visited'
-          ? `Кликни върху държава, за да я отбележиш за ${USER_DISPLAY[activeUser]}`
-          : `Добави дестинация в списъка на ${USER_DISPLAY[activeUser]}`}
+        {factsMode && primedIso
+          ? `Кликни отново върху ${BG_NAMES[primedIso] ?? primedIso} за да добавиш`
+          : mode === 'visited'
+            ? `Кликни върху държава, за да я отбележиш за ${USER_DISPLAY[activeUser]}`
+            : `Добави дестинация в списъка на ${USER_DISPLAY[activeUser]}`}
       </p>
+
+      {/* Facts toggle — when ON, first click on country shows fact, 2nd click adds */}
+      <button
+        onClick={() => { resumeAudio(); sounds.click(); toggleFactsMode(); }}
+        className="mt-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all"
+        style={{
+          background: factsMode ? USER_COLOR[activeUser] : 'rgba(255,255,255,0.7)',
+          color: factsMode ? 'white' : '#64748b',
+          border: `1.5px solid ${factsMode ? USER_COLOR[activeUser] : 'rgba(0,0,0,0.1)'}`,
+          boxShadow: factsMode ? `0 2px 10px ${USER_COLOR[activeUser]}30` : '0 1px 3px rgba(0,0,0,0.05)',
+        }}
+        title={factsMode ? 'Натисни за изключване' : 'Натисни за включване'}
+      >
+        📚 {factsMode ? 'Фактите са включени' : 'Покажи интересни факти'}
+      </button>
 
       {/* ── Map section (default view) ───────────────────────────────────── */}
       <div className="w-full max-w-2xl mt-4 px-2">
