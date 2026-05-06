@@ -1,11 +1,12 @@
 'use client';
 
-import { useRef, useMemo, useCallback, useState } from 'react';
+import { useRef, useMemo, useCallback, useState, useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON, Marker, useMap, useMapEvents } from 'react-leaflet';
 import type { GeoJsonObject } from 'geojson';
 import L from 'leaflet';
 import { VisitsByCountry, WishlistByCountry, AppMode } from '@/types';
 import { BG_NAMES } from '@/data/countryNamesBg';
+import { getFact } from '@/data/countryFacts';
 import countriesGeoJson from '@/data/countries.json';
 import {
   resolveIso, getOverlayColor, USER_FILL, ALL_LABELS, CENTROID_BY_ISO,
@@ -34,12 +35,20 @@ function overlayToStyle(overlay: string | null): L.PathOptions {
   return { fillColor: hex, fillOpacity: parseFloat(m[4]), color: 'rgba(255,255,255,0.75)', weight: 1.2 };
 }
 
+interface HoverFact { iso: string; name: string; fact: string; x: number; y: number; }
+
 interface DataRef {
   visitsByCountry: VisitsByCountry;
   wishlistByCountry: WishlistByCountry;
   mode: AppMode;
   onCountryClick: (iso2: string, name: string) => void;
+  isDesktop: boolean;
+  setHoverFact: (f: HoverFact | null) => void;
+  hoverTimer: { current: ReturnType<typeof setTimeout> | null };
+  hoverState:  { current: { iso: string; clientX: number; clientY: number } | null };
 }
+
+const HOVER_FACT_DELAY_MS = 6000;
 
 // ── ZoomControls (runs inside MapContainer) ───────────────────────────────────
 function ZoomControls() {
@@ -153,9 +162,36 @@ interface Props {
 export default function WorldMap({
   visitsByCountry, wishlistByCountry, mode, onCountryClick, height = 300, fullscreen = false,
 }: Props) {
+  // Hover-fact state — DESKTOP ONLY. After cursor stays still on the same
+  // country for HOVER_FACT_DELAY_MS the fact tooltip appears next to it.
+  const [hoverFact, setHoverFact] = useState<HoverFact | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverState = useRef<{ iso: string; clientX: number; clientY: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener?.('change', update);
+    return () => { mq.removeEventListener?.('change', update); };
+  }, []);
+
   // Always-fresh ref for use inside stable Leaflet callbacks
-  const dataRef = useRef<DataRef>({ visitsByCountry, wishlistByCountry, mode, onCountryClick });
-  dataRef.current = { visitsByCountry, wishlistByCountry, mode, onCountryClick };
+  const dataRef = useRef<DataRef>({
+    visitsByCountry, wishlistByCountry, mode, onCountryClick,
+    isDesktop, setHoverFact, hoverTimer, hoverState,
+  });
+  dataRef.current = {
+    visitsByCountry, wishlistByCountry, mode, onCountryClick,
+    isDesktop, setHoverFact, hoverTimer, hoverState,
+  };
+
+  // Cancel any pending fact reveal & hide tooltip when leaving the map root
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+  }, []);
 
   // When this key changes, GeoJSON remounts with fresh styles
   const geoKey = useMemo(() => {
@@ -185,25 +221,61 @@ export default function WorldMap({
       offset: L.point(12, 0),
     });
 
+    function startHoverTimer(clientX: number, clientY: number) {
+      const d = dataRef.current;
+      if (!d.isDesktop) return;
+      if (d.hoverTimer.current) clearTimeout(d.hoverTimer.current);
+      d.hoverState.current = { iso, clientX, clientY };
+      d.hoverTimer.current = setTimeout(() => {
+        const cur = d.hoverState.current;
+        if (!cur || cur.iso !== iso) return;
+        const fact = getFact(iso);
+        if (!fact) return;
+        d.setHoverFact({ iso, name, fact, x: cur.clientX, y: cur.clientY });
+      }, HOVER_FACT_DELAY_MS);
+    }
+
+    function cancelHover() {
+      const d = dataRef.current;
+      if (d.hoverTimer.current) { clearTimeout(d.hoverTimer.current); d.hoverTimer.current = null; }
+      d.hoverState.current = null;
+      d.setHoverFact(null);
+    }
+
     (layer as L.Path).on({
       mouseover(e: L.LeafletMouseEvent) {
         (e.target as L.Path).setStyle({
           weight: 2.5, color: '#93c5fd',
           fillOpacity: Math.max(0.35, (e.target as L.Path).options.fillOpacity ?? 0),
         });
+        const oe = e.originalEvent as MouseEvent | undefined;
+        if (oe) startHoverTimer(oe.clientX, oe.clientY);
+      },
+      mousemove(e: L.LeafletMouseEvent) {
+        // Reset timer on every move while still over this country.
+        const oe = e.originalEvent as MouseEvent | undefined;
+        if (!oe) return;
+        const d = dataRef.current;
+        if (!d.isDesktop) return;
+        // Hide currently shown fact if we move (so it follows the spec:
+        // "disappears immediately when mouse leaves" + "reset timer on mouse move")
+        d.setHoverFact(null);
+        startHoverTimer(oe.clientX, oe.clientY);
       },
       mouseout(e: L.LeafletMouseEvent) {
         const { visitsByCountry, wishlistByCountry, mode } = dataRef.current;
         (e.target as L.Path).setStyle(overlayToStyle(getOverlayColor(iso, visitsByCountry, wishlistByCountry, mode)));
+        cancelHover();
       },
       click() {
+        cancelHover();
         dataRef.current.onCountryClick(iso, name);
       },
     });
   }, []);
 
   return (
-    <div style={{ height: fullscreen ? '100%' : height, borderRadius: fullscreen ? 0 : 16, overflow: 'hidden', isolation: 'isolate' }}>
+    <div style={{ height: fullscreen ? '100%' : height, borderRadius: fullscreen ? 0 : 16, overflow: 'hidden', isolation: 'isolate', position: 'relative' }}>
       <MapContainer
         center={[20, 10]}
         zoom={2}
@@ -230,6 +302,41 @@ export default function WorldMap({
         />
         <ZoomControls />
       </MapContainer>
+
+      {/* Hover-fact tooltip — desktop only, after 6s of stillness on a country */}
+      {hoverFact && isDesktop && (
+        <div
+          style={{
+            position: 'fixed',
+            left: hoverFact.x + 14,
+            top:  hoverFact.y - 12,
+            transform: 'translateY(-100%)',
+            maxWidth: 280,
+            background: 'rgba(6,14,36,0.97)',
+            color: '#e2e8f0',
+            border: '1px solid rgba(80,140,230,0.4)',
+            borderRadius: 12,
+            padding: '10px 12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+            fontFamily: '-apple-system,Segoe UI,Roboto,sans-serif',
+            pointerEvents: 'none',
+            zIndex: 1500,
+            animation: 'wmap-fact-in 0.18s ease-out both',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 14 }}>{getFlagEmoji(hoverFact.iso)}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#93c5fd' }}>{hoverFact.name}</span>
+          </div>
+          <div style={{ fontSize: 11.5, lineHeight: 1.45, color: '#cbd5e1' }}>{hoverFact.fact}</div>
+        </div>
+      )}
+      <style jsx global>{`
+        @keyframes wmap-fact-in {
+          from { opacity: 0; transform: translateY(-100%) scale(0.94); }
+          to   { opacity: 1; transform: translateY(-100%) scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

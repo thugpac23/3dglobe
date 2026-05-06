@@ -33,6 +33,67 @@ function getFlagEmoji(iso: string): string {
   } catch { return '🌍'; }
 }
 
+// Hand-drawn waving Bulgarian flag (white/green/red), with a flagpole.
+function BgWavingFlag({ size = 26 }: { size?: number }) {
+  const w = Math.round(size * 1.55);
+  return (
+    <svg
+      viewBox="0 0 62 40"
+      width={w}
+      height={size}
+      style={{ display: 'inline-block', verticalAlign: '-0.18em', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.18))' }}
+      aria-label="Bulgarian flag"
+    >
+      {/* Pole */}
+      <rect x="0" y="0" width="2.4" height="40" rx="0.8" fill="#7a5a2c" />
+      <circle cx="1.2" cy="2" r="1.6" fill="#caa83b" />
+      {/* Stripes — each is a waving band drawn with cubic bezier curves */}
+      {/* White */}
+      <path
+        d="M 2.4 5
+           C 12 2.5, 22 7.2, 32 4.5
+           S 52 7.2, 62 4.8
+           L 62 14
+           C 52 16.4, 42 11.7, 32 14
+           S 12 16.6, 2.4 14
+           Z"
+        fill="#ffffff"
+      />
+      {/* Green */}
+      <path
+        d="M 2.4 14
+           C 12 11.6, 22 16.4, 32 14
+           S 52 16.6, 62 14
+           L 62 24
+           C 52 26.6, 42 21.7, 32 24
+           S 12 26.6, 2.4 24
+           Z"
+        fill="#00966E"
+      />
+      {/* Red */}
+      <path
+        d="M 2.4 24
+           C 12 21.6, 22 26.4, 32 24
+           S 52 26.6, 62 24
+           L 62 34
+           C 52 36.6, 42 31.7, 32 34
+           S 12 36.6, 2.4 34
+           Z"
+        fill="#D62612"
+      />
+      {/* Subtle shading along the wave troughs */}
+      <path
+        d="M 2.4 14 C 12 11.6, 22 16.4, 32 14 S 52 16.6, 62 14"
+        fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="0.6"
+      />
+      <path
+        d="M 2.4 24 C 12 21.6, 22 26.4, 32 24 S 52 26.6, 62 24"
+        fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="0.6"
+      />
+    </svg>
+  );
+}
+
 function InkStamp({ stamp, color }: { stamp: Stamp; color: string }) {
   const bgName = BG_NAMES[stamp.country.isoCode] ?? stamp.country.name;
   const flag   = getFlagEmoji(stamp.country.isoCode);
@@ -285,39 +346,61 @@ function InfoPage({ user, count, avatarConfig }: {
       position: 'relative',
       width: '100%', height: '100%',
       background: 'linear-gradient(160deg, #fffdf5 0%, #faf6e8 60%, #f2edd8 100%)',
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: 8, padding: 24,
+      padding: 16,
+      display: 'flex', flexDirection: 'column',
     }}>
-      {/* Passport photo — top-right corner */}
-      <div style={{
-        position: 'absolute', top: 14, right: 14,
-        width: 60, height: 78,
-        border: '3px solid white',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.22)',
-        overflow: 'hidden',
-        background: '#d8e8f4',
-      }}>
-        {avatarConfig
-          ? <Avatar3D avatar={{ ...avatarConfig, user }} expression={avatarConfig.expression ?? 'smile'} width={60} height={78} />
-          : <div style={{ width: 60, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🧑</div>
-        }
+      {/* Header strip — Republic of Bulgaria */}
+      <div style={{ textAlign: 'center', marginBottom: 12 }}>
+        <div style={{
+          fontSize: 8, fontWeight: 800, letterSpacing: '0.22em',
+          color: COVER_GOLD, textTransform: 'uppercase', lineHeight: 1.4,
+        }}>
+          Република България
+        </div>
+        <div style={{ width: 48, height: 1, background: `${COVER_GOLD}80`, margin: '4px auto 0' }} />
       </div>
 
-      <div style={{ fontSize: 34, lineHeight: 1 }}>🌹</div>
+      {/* Two-column main row — avatar left, info right (no borders) */}
       <div style={{
-        fontSize: 8.5, fontWeight: 800, letterSpacing: '0.2em', color: COVER_GOLD,
-        textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.5,
+        flex: 1,
+        display: 'flex', alignItems: 'center', gap: 14,
       }}>
-        Република<br/>България
+        {/* LEFT COLUMN — avatar photo */}
+        <div style={{
+          flex: '0 0 auto',
+          width: 84, height: 108,
+          background: '#d8e8f4',
+          overflow: 'hidden',
+        }}>
+          {avatarConfig
+            ? <Avatar3D avatar={{ ...avatarConfig, user }} expression={avatarConfig.expression ?? 'smile'} width={84} height={108} />
+            : <div style={{ width: 84, height: 108, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30 }}>🧑</div>
+          }
+        </div>
+
+        {/* RIGHT COLUMN — name + visited count */}
+        <div style={{
+          flex: 1, minWidth: 0,
+          display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
+        }}>
+          <div style={{ fontSize: 9, color: '#a08e6a', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+            име
+          </div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: '#3d2a0f', lineHeight: 1.1 }}>
+            {USER_DISPLAY[user]}
+          </div>
+          <div style={{ width: 40, height: 1, background: `${COVER_GOLD}80`, margin: '6px 0' }} />
+          <div style={{ fontSize: 9, color: '#a08e6a', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+            посетени държави
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: COVER_RED, lineHeight: 1 }}>
+            {count}
+          </div>
+        </div>
       </div>
-      <div style={{ width: 40, height: 1, background: `${COVER_GOLD}80`, marginTop: 2 }} />
-      <div style={{ fontSize: 15, fontWeight: 700, color: '#3d2a0f', marginTop: 4 }}>
-        {USER_DISPLAY[user]}
-      </div>
-      <div style={{ fontSize: 9, color: '#8a7a60', marginTop: 2 }}>
-        {count} посетени държави
-      </div>
-      <div style={{ fontSize: 7.5, color: '#c0b090', fontStyle: 'italic', marginTop: 16, textAlign: 'center', lineHeight: 1.6 }}>
+
+      {/* Footer ribbon */}
+      <div style={{ fontSize: 7.5, color: '#c0b090', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.6, marginTop: 8 }}>
         ПАСПОРТ НА ПЪТЕШЕСТВЕНИКА
       </div>
     </div>
@@ -411,7 +494,13 @@ export default function PasportPage() {
 
   return (
     <main style={{ minHeight: '100vh', padding: '24px 16px', maxWidth: 640, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>📕 Паспорт</h1>
+      <h1 style={{
+        fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 4,
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        <BgWavingFlag size={26} />
+        <span>Паспорт</span>
+      </h1>
       <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>Разгледай своите печати от обиколения свят</p>
 
       {/* User tabs */}

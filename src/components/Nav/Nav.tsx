@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { isSoundEnabled, setSoundEnabled, resumeAudio } from '@/lib/sounds';
+import { setSoundEnabled, resumeAudio } from '@/lib/sounds';
 import { useState, useEffect } from 'react';
 
 const ITEMS = [
@@ -15,15 +15,33 @@ const ITEMS = [
 
 export default function Nav() {
   const path = usePathname();
-  const [sound, setSound] = useState(true);
+  // Default OFF (mute). Server-stored preference loads on mount.
+  const [sound, setSound] = useState(false);
 
-  useEffect(() => { setSound(isSoundEnabled()); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/settings', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, string>) => {
+        if (cancelled) return;
+        const enabled = data.soundEnabled === 'true';
+        setSoundEnabled(enabled);
+        setSound(enabled);
+      })
+      .catch(() => { /* keep default (muted) */ });
+    return () => { cancelled = true; };
+  }, []);
 
   function toggleSound() {
     resumeAudio();
     const next = !sound;
     setSoundEnabled(next);
     setSound(next);
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'soundEnabled', value: next ? 'true' : 'false' }),
+    }).catch(() => { /* non-critical */ });
   }
 
   return (
