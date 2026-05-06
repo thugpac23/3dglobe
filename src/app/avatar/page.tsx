@@ -240,58 +240,50 @@ export default function AvatarPage() {
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-extrabold text-slate-800 mb-1">🧑 Моят герой</h1>
-      <p className="text-slate-500 text-sm mb-5">Персонализирай своя 3D герой</p>
-
-      {/* User tabs */}
-      <div className="flex gap-2 mb-6">
-        {(['tati', 'iva'] as UserType[]).map(u => (
-          <button
-            key={u}
-            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
-            className="px-5 py-2 rounded-full font-bold text-sm transition-all"
-            style={{
-              background: activeUser === u ? USER_COLOR[u] : 'white',
-              color: activeUser === u ? 'white' : '#64748b',
-              border: `2px solid ${activeUser === u ? USER_COLOR[u] : '#E2E8F0'}`,
-              boxShadow: activeUser === u ? `0 4px 16px ${USER_COLOR[u]}40` : '0 1px 4px rgba(0,0,0,0.08)',
-            }}
-          >
-            {USER_DISPLAY[u]}
-          </button>
-        ))}
-      </div>
+      <h1 className="text-2xl font-extrabold text-slate-800 mb-4">🧑 Моят герой</h1>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-        {/* ── Avatar preview (sticky, vertically centered) ─────────────── */}
+        {/* ── Sticky panel: user buttons on top, avatar below ───────────── */}
         <div
-          className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky self-start z-10"
-          style={{
-            border: `2px solid ${color}28`,
-            top: '50%',
-            transform: 'translateY(-50%)',
-          }}
+          className="flex flex-col items-center gap-3 pt-3 pb-4 px-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky self-start z-10 w-full lg:w-auto"
+          style={{ border: `2px solid ${color}28`, top: '56px' }}
         >
+          {/* User switcher — sits above the avatar */}
+          <div className="flex gap-2 w-full justify-center">
+            {(['tati', 'iva'] as UserType[]).map(u => (
+              <button
+                key={u}
+                onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
+                className="flex-1 py-2 rounded-full font-bold text-sm transition-all"
+                style={{
+                  background: activeUser === u ? USER_COLOR[u] : '#F8FAFC',
+                  color: activeUser === u ? 'white' : '#64748b',
+                  border: `2px solid ${activeUser === u ? USER_COLOR[u] : '#E2E8F0'}`,
+                  boxShadow: activeUser === u ? `0 3px 12px ${USER_COLOR[u]}40` : 'none',
+                }}
+              >
+                {USER_DISPLAY[u]}
+              </button>
+            ))}
+          </div>
+
+          {/* Avatar preview */}
           {avatarUrls[activeUser] ? (
             <>
               <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={220} height={290} />
-              <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
               <span className="text-xs text-slate-400">Завърти / Приближи</span>
             </>
           ) : (
-            <>
-              <Avatar3D
-                avatar={cfg}
-                expression={cfg.expression ?? 'smile'}
-                width={220}
-                height={290}
-                background={backgrounds[activeUser]}
-                outfitColor={outfitColors[activeUser] ?? undefined}
-                visitedIsoCodes={visitedIso[activeUser]}
-              />
-              <span className="font-bold text-slate-700 text-sm">{USER_DISPLAY[activeUser]}</span>
-            </>
+            <Avatar3D
+              avatar={cfg}
+              expression={cfg.expression ?? 'smile'}
+              width={220}
+              height={290}
+              background={backgrounds[activeUser]}
+              outfitColor={outfitColors[activeUser] ?? undefined}
+              visitedIsoCodes={visitedIso[activeUser]}
+            />
           )}
         </div>
 
