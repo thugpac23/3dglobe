@@ -242,275 +242,286 @@ export default function AvatarPage() {
     <main className="min-h-screen px-4 py-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-extrabold text-slate-800 mb-4">🧑 Моят герой</h1>
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      {/* ── Sticky strip: full width, avatar always centered ─────────── */}
+      <div
+        className="sticky z-10 mb-6"
+        style={{
+          top: 56,
+          margin: '0 -16px',
+          padding: '12px 16px',
+          background: 'linear-gradient(180deg, rgba(186,230,253,0.95), rgba(224,242,254,0.92))',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div
+            className="flex flex-col items-center gap-3 pt-3 pb-4 rounded-2xl bg-white shadow-md flex-shrink-0"
+            style={{ border: `2px solid ${color}28`, width: 'fit-content' }}
+          >
+            {/* User switcher — above the avatar */}
+            <div className="flex gap-2" style={{ width: 220 }}>
+              {(['tati', 'iva'] as UserType[]).map(u => (
+                <button
+                  key={u}
+                  onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
+                  className="flex-1 py-2 rounded-full font-bold text-sm transition-all"
+                  style={{
+                    background: activeUser === u ? USER_COLOR[u] : '#F8FAFC',
+                    color: activeUser === u ? 'white' : '#64748b',
+                    border: `2px solid ${activeUser === u ? USER_COLOR[u] : '#E2E8F0'}`,
+                    boxShadow: activeUser === u ? `0 3px 12px ${USER_COLOR[u]}40` : 'none',
+                  }}
+                >
+                  {USER_DISPLAY[u]}
+                </button>
+              ))}
+            </div>
 
-        {/* ── Sticky panel: user buttons on top, avatar below ───────────── */}
-        <div
-          className="flex flex-col items-center gap-3 pt-3 pb-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky self-start z-10"
-          style={{ border: `2px solid ${color}28`, top: '56px', width: 'fit-content' }}
-        >
-          {/* User switcher — sits above the avatar, same width as avatar canvas */}
-          <div className="flex gap-2 px-0" style={{ width: 220 }}>
-            {(['tati', 'iva'] as UserType[]).map(u => (
-              <button
-                key={u}
-                onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
-                className="flex-1 py-2 rounded-full font-bold text-sm transition-all"
-                style={{
-                  background: activeUser === u ? USER_COLOR[u] : '#F8FAFC',
-                  color: activeUser === u ? 'white' : '#64748b',
-                  border: `2px solid ${activeUser === u ? USER_COLOR[u] : '#E2E8F0'}`,
-                  boxShadow: activeUser === u ? `0 3px 12px ${USER_COLOR[u]}40` : 'none',
-                }}
-              >
-                {USER_DISPLAY[u]}
-              </button>
-            ))}
+            {/* Avatar preview */}
+            {avatarUrls[activeUser] ? (
+              <>
+                <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={220} height={290} />
+                <span className="text-xs text-slate-400">Завърти / Приближи</span>
+              </>
+            ) : (
+              <Avatar3D
+                avatar={cfg}
+                expression={cfg.expression ?? 'smile'}
+                width={220}
+                height={290}
+                background={backgrounds[activeUser]}
+                outfitColor={outfitColors[activeUser] ?? undefined}
+                visitedIsoCodes={visitedIso[activeUser]}
+              />
+            )}
           </div>
+        </div>
+      </div>
 
-          {/* Avatar preview */}
-          {avatarUrls[activeUser] ? (
-            <>
-              <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={220} height={290} />
-              <span className="text-xs text-slate-400">Завърти / Приближи</span>
-            </>
-          ) : (
-            <Avatar3D
-              avatar={cfg}
-              expression={cfg.expression ?? 'smile'}
-              width={220}
-              height={290}
-              background={backgrounds[activeUser]}
-              outfitColor={outfitColors[activeUser] ?? undefined}
-              visitedIsoCodes={visitedIso[activeUser]}
-            />
-          )}
+      {/* ── Editor panel ─────────────────────────────────────────────── */}
+      <div className="space-y-4">
+
+        {/* Mode tabs */}
+        <div className="flex rounded-xl overflow-hidden border border-slate-200">
+          {(['build', 'import'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => { sounds.click(); resumeAudio(); setTab(t); }}
+              className="flex-1 py-2 text-xs font-bold transition-all"
+              style={{
+                background: tab === t ? color : 'white',
+                color: tab === t ? 'white' : '#64748b',
+              }}
+            >
+              {t === 'build' ? '🎨 Направи сам' : '🔗 Импортирай GLB'}
+            </button>
+          ))}
         </div>
 
-        {/* ── Editor panel ──────────────────────────────────────────────── */}
-        <div className="flex-1 space-y-4 w-full">
+        {tab === 'build' ? (
+          <>
+            {/* Hair style */}
+            <Section color={color} label="Прическа">
+              <div className="flex flex-wrap gap-1.5">
+                {HAIR_STYLES.map(({ value, label }) => (
+                  <Chip
+                    key={value}
+                    active={cfg.hairStyle === value}
+                    color={color}
+                    onClick={() => updateConfig('hairStyle', value)}
+                  >
+                    {label}
+                  </Chip>
+                ))}
+              </div>
+            </Section>
 
-          {/* Mode tabs */}
-          <div className="flex rounded-xl overflow-hidden border border-slate-200">
-            {(['build', 'import'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => { sounds.click(); resumeAudio(); setTab(t); }}
-                className="flex-1 py-2 text-xs font-bold transition-all"
-                style={{
-                  background: tab === t ? color : 'white',
-                  color: tab === t ? 'white' : '#64748b',
-                }}
-              >
-                {t === 'build' ? '🎨 Направи сам' : '🔗 Импортирай GLB'}
-              </button>
-            ))}
-          </div>
+            {/* Hair color */}
+            <Section color={color} label="Цвят на косата">
+              <ColorPicker
+                value={cfg.hairColor}
+                presets={HAIR_PRESETS}
+                onChange={v => updateConfig('hairColor', v)}
+              />
+            </Section>
 
-          {tab === 'build' ? (
-            <>
-              {/* Hair style */}
-              <Section color={color} label="Прическа">
-                <div className="flex flex-wrap gap-1.5">
-                  {HAIR_STYLES.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      active={cfg.hairStyle === value}
-                      color={color}
-                      onClick={() => updateConfig('hairStyle', value)}
-                    >
-                      {label}
-                    </Chip>
-                  ))}
-                </div>
-              </Section>
+            {/* Skin color */}
+            <Section color={color} label="Цвят на кожата">
+              <ColorPicker
+                value={cfg.skinColor}
+                presets={SKIN_PRESETS}
+                onChange={v => updateConfig('skinColor', v)}
+              />
+            </Section>
 
-              {/* Hair color */}
-              <Section color={color} label="Цвят на косата">
-                <ColorPicker
-                  value={cfg.hairColor}
-                  presets={HAIR_PRESETS}
-                  onChange={v => updateConfig('hairColor', v)}
+            {/* Eye color */}
+            <Section color={color} label="Цвят на очите">
+              <ColorPicker
+                value={cfg.eyeColor}
+                presets={EYE_PRESETS}
+                onChange={v => updateConfig('eyeColor', v)}
+              />
+            </Section>
+
+            {/* Face type */}
+            <Section color={color} label="Форма на лицето">
+              <div className="flex flex-wrap gap-1.5">
+                {FACE_TYPES.map(({ value, label }) => (
+                  <Chip
+                    key={value}
+                    active={cfg.faceType === value}
+                    color={color}
+                    onClick={() => updateConfig('faceType', value)}
+                  >
+                    {label}
+                  </Chip>
+                ))}
+              </div>
+            </Section>
+
+            {/* Expression */}
+            <Section color={color} label="Израз">
+              <div className="flex flex-wrap gap-1.5">
+                {EXPRESSIONS.map(({ value, label }) => (
+                  <Chip
+                    key={value}
+                    active={cfg.expression === value}
+                    color={color}
+                    onClick={() => updateConfig('expression', value)}
+                  >
+                    {label}
+                  </Chip>
+                ))}
+              </div>
+            </Section>
+
+            {/* Outfit */}
+            <Section color={color} label="Облекло">
+              <div className="flex flex-wrap gap-1.5">
+                {OUTFITS.map(({ value, label }) => (
+                  <Chip
+                    key={value}
+                    active={cfg.outfit === value}
+                    color={color}
+                    onClick={() => updateConfig('outfit', value)}
+                  >
+                    {label}
+                  </Chip>
+                ))}
+              </div>
+            </Section>
+
+            {/* Outfit color */}
+            <Section color={color} label="Цвят на облеклото">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setOutfitColor(null)}
+                  title="Стандартен цвят"
+                  style={{
+                    width: 26, height: 26, borderRadius: '50%',
+                    background: 'conic-gradient(#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa,#f87171)',
+                    border: outfitColors[activeUser] === null ? '3px solid #1e293b' : '2px solid #e2e8f0',
+                  }}
                 />
-              </Section>
-
-              {/* Skin color */}
-              <Section color={color} label="Цвят на кожата">
-                <ColorPicker
-                  value={cfg.skinColor}
-                  presets={SKIN_PRESETS}
-                  onChange={v => updateConfig('skinColor', v)}
-                />
-              </Section>
-
-              {/* Eye color */}
-              <Section color={color} label="Цвят на очите">
-                <ColorPicker
-                  value={cfg.eyeColor}
-                  presets={EYE_PRESETS}
-                  onChange={v => updateConfig('eyeColor', v)}
-                />
-              </Section>
-
-              {/* Face type */}
-              <Section color={color} label="Форма на лицето">
-                <div className="flex flex-wrap gap-1.5">
-                  {FACE_TYPES.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      active={cfg.faceType === value}
-                      color={color}
-                      onClick={() => updateConfig('faceType', value)}
-                    >
-                      {label}
-                    </Chip>
-                  ))}
-                </div>
-              </Section>
-
-              {/* Expression */}
-              <Section color={color} label="Израз">
-                <div className="flex flex-wrap gap-1.5">
-                  {EXPRESSIONS.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      active={cfg.expression === value}
-                      color={color}
-                      onClick={() => updateConfig('expression', value)}
-                    >
-                      {label}
-                    </Chip>
-                  ))}
-                </div>
-              </Section>
-
-              {/* Outfit */}
-              <Section color={color} label="Облекло">
-                <div className="flex flex-wrap gap-1.5">
-                  {OUTFITS.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      active={cfg.outfit === value}
-                      color={color}
-                      onClick={() => updateConfig('outfit', value)}
-                    >
-                      {label}
-                    </Chip>
-                  ))}
-                </div>
-              </Section>
-
-              {/* Outfit color */}
-              <Section color={color} label="Цвят на облеклото">
-                <div className="flex items-center gap-2 flex-wrap">
+                {OUTFIT_COLOR_PRESETS.map(c => (
                   <button
-                    onClick={() => setOutfitColor(null)}
-                    title="Стандартен цвят"
+                    key={c}
+                    onClick={() => setOutfitColor(c)}
                     style={{
-                      width: 26, height: 26, borderRadius: '50%',
-                      background: 'conic-gradient(#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa,#f87171)',
-                      border: outfitColors[activeUser] === null ? '3px solid #1e293b' : '2px solid #e2e8f0',
+                      width: 26, height: 26, borderRadius: '50%', background: c,
+                      border: outfitColors[activeUser] === c ? '3px solid #1e293b' : '2px solid #e2e8f0',
+                      boxShadow: outfitColors[activeUser] === c ? '0 0 0 2px white inset' : 'none',
                     }}
                   />
-                  {OUTFIT_COLOR_PRESETS.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setOutfitColor(c)}
-                      style={{
-                        width: 26, height: 26, borderRadius: '50%', background: c,
-                        border: outfitColors[activeUser] === c ? '3px solid #1e293b' : '2px solid #e2e8f0',
-                        boxShadow: outfitColors[activeUser] === c ? '0 0 0 2px white inset' : 'none',
-                      }}
-                    />
-                  ))}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <input
-                      type="color"
-                      value={outfitColors[activeUser] ?? '#60A5FA'}
-                      onChange={e => setOutfitColor(e.target.value)}
-                      style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 0 }}
-                    />
-                    <span className="text-xs text-slate-400">Избери</span>
-                  </label>
-                </div>
-              </Section>
-
-              {/* Background */}
-              <Section color={color} label="Фон">
-                <div className="flex flex-wrap gap-1.5">
-                  {BACKGROUNDS.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      active={backgrounds[activeUser] === value}
-                      color={color}
-                      onClick={() => setBackground(value)}
-                    >
-                      {label}
-                    </Chip>
-                  ))}
-                </div>
-              </Section>
-
-              <button
-                onClick={() => persist()}
-                className="w-full py-3 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{ background: color, boxShadow: `0 4px 16px ${color}40` }}
-              >
-                💾 Запази героя
-              </button>
-            </>
-          ) : (
-            /* ── Import GLB tab ──────────────────────────────────────────── */
-            <div className="space-y-4">
-              <div
-                className="rounded-2xl p-4 text-xs text-slate-600 leading-relaxed space-y-1"
-                style={{ background: `${color}0e`, border: `1.5px solid ${color}28` }}
-              >
-                <p className="font-bold" style={{ color }}>🔗 Импортирай 3D аватар (GLB URL)</p>
-                <p>Вземи GLB URL от всеки 3D avatar creator (напр. Ready Player Me, VRoid, Mixamo) и го постави тук. Трябва да е пряка връзка, завършваща на <code>.glb</code>.</p>
+                ))}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    type="color"
+                    value={outfitColors[activeUser] ?? '#60A5FA'}
+                    onChange={e => setOutfitColor(e.target.value)}
+                    style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 0 }}
+                  />
+                  <span className="text-xs text-slate-400">Избери</span>
+                </label>
               </div>
+            </Section>
 
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={importInput}
-                  onChange={e => setImportInput(e.target.value)}
-                  placeholder="https://models.readyplayer.me/abc123.glb"
-                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2"
-                  style={{ focusRingColor: color } as React.CSSProperties}
-                />
-                <button
-                  onClick={handleImport}
-                  disabled={!importInput.trim()}
-                  className="px-4 py-2 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-40"
-                  style={{ background: color }}
-                >
-                  Зареди
-                </button>
+            {/* Background */}
+            <Section color={color} label="Фон">
+              <div className="flex flex-wrap gap-1.5">
+                {BACKGROUNDS.map(({ value, label }) => (
+                  <Chip
+                    key={value}
+                    active={backgrounds[activeUser] === value}
+                    color={color}
+                    onClick={() => setBackground(value)}
+                  >
+                    {label}
+                  </Chip>
+                ))}
               </div>
+            </Section>
 
-              {avatarUrls[activeUser] && (
-                <button
-                  onClick={handleClearImport}
-                  className="w-full py-2 rounded-xl text-sm text-slate-500 border border-slate-200 hover:bg-slate-50 transition-all"
-                >
-                  ✕ Премахни импортирания аватар
-                </button>
-              )}
-
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Ако нямаш GLB URL, използвай таба „Направи сам" за да създадеш герой директно в приложението.
-              </p>
+            <button
+              onClick={() => persist()}
+              className="w-full py-3 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{ background: color, boxShadow: `0 4px 16px ${color}40` }}
+            >
+              💾 Запази героя
+            </button>
+          </>
+        ) : (
+          /* ── Import GLB tab ──────────────────────────────────────────── */
+          <div className="space-y-4">
+            <div
+              className="rounded-2xl p-4 text-xs text-slate-600 leading-relaxed space-y-1"
+              style={{ background: `${color}0e`, border: `1.5px solid ${color}28` }}
+            >
+              <p className="font-bold" style={{ color }}>🔗 Импортирай 3D аватар (GLB URL)</p>
+              <p>Вземи GLB URL от всеки 3D avatar creator (напр. Ready Player Me, VRoid, Mixamo) и го постави тук. Трябва да е пряка връзка, завършваща на <code>.glb</code>.</p>
             </div>
-          )}
 
-          {saving && (
-            <p className="text-center text-xs text-slate-400 animate-pulse">Запазване…</p>
-          )}
-          {saved && (
-            <p className="text-center text-xs font-semibold text-emerald-600">✓ Героят е запазен!</p>
-          )}
-        </div>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={importInput}
+                onChange={e => setImportInput(e.target.value)}
+                placeholder="https://models.readyplayer.me/abc123.glb"
+                className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2"
+                style={{ focusRingColor: color } as React.CSSProperties}
+              />
+              <button
+                onClick={handleImport}
+                disabled={!importInput.trim()}
+                className="px-4 py-2 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-40"
+                style={{ background: color }}
+              >
+                Зареди
+              </button>
+            </div>
+
+            {avatarUrls[activeUser] && (
+              <button
+                onClick={handleClearImport}
+                className="w-full py-2 rounded-xl text-sm text-slate-500 border border-slate-200 hover:bg-slate-50 transition-all"
+              >
+                ✕ Премахни импортирания аватар
+              </button>
+            )}
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Ако нямаш GLB URL, използвай таба „Направи сам" за да създадеш герой директно в приложението.
+            </p>
+          </div>
+        )}
+
+        {saving && (
+          <p className="text-center text-xs text-slate-400 animate-pulse">Запазване…</p>
+        )}
+        {saved && (
+          <p className="text-center text-xs font-semibold text-emerald-600">✓ Героят е запазен!</p>
+        )}
       </div>
     </main>
   );
