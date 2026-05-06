@@ -48,7 +48,7 @@ interface DataRef {
   hoverState:  { current: { iso: string; clientX: number; clientY: number } | null };
 }
 
-const HOVER_FACT_DELAY_MS = 6000;
+const HOVER_FACT_DELAY_MS = 3000;
 
 // ── ZoomControls (runs inside MapContainer) ───────────────────────────────────
 function ZoomControls() {
