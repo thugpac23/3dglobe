@@ -246,11 +246,11 @@ export default function AvatarPage() {
 
         {/* ── Sticky panel: user buttons on top, avatar below ───────────── */}
         <div
-          className="flex flex-col items-center gap-3 pt-3 pb-4 px-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky self-start z-10 w-full lg:w-auto"
-          style={{ border: `2px solid ${color}28`, top: '56px' }}
+          className="flex flex-col items-center gap-3 pt-3 pb-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky self-start z-10"
+          style={{ border: `2px solid ${color}28`, top: '56px', width: 'fit-content' }}
         >
-          {/* User switcher — sits above the avatar */}
-          <div className="flex gap-2 w-full justify-center">
+          {/* User switcher — sits above the avatar, same width as avatar canvas */}
+          <div className="flex gap-2 px-0" style={{ width: 220 }}>
             {(['tati', 'iva'] as UserType[]).map(u => (
               <button
                 key={u}
