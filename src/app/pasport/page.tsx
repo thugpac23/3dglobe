@@ -360,6 +360,11 @@ function InfoPage({ user, count, avatarConfig }: {
         <div style={{ width: 48, height: 1, background: `${COVER_GOLD}80`, margin: '4px auto 0' }} />
       </div>
 
+      {/* Bulgarian waving flag — centred between header and content */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+        <BgWavingFlag size={30} />
+      </div>
+
       {/* Two-column main row — avatar left, info right (no borders) */}
       <div style={{
         flex: 1,
