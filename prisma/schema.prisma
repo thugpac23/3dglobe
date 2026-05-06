@@ -86,3 +86,10 @@ enum User {
   tati
   iva
 }
+
+model Setting {
+  key   String @id
+  value String
+
+  @@map("settings")
+}

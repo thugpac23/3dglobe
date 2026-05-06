@@ -1,6 +1,6 @@
 // Web Audio API sound system — no external audio files needed
 let audioCtx: AudioContext | null = null;
-let soundEnabled = true;
+let soundEnabled = false;
 
 function ctx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
