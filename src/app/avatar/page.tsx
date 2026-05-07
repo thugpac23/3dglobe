@@ -242,61 +242,53 @@ export default function AvatarPage() {
     <main className="min-h-screen px-4 py-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-extrabold text-slate-800 mb-4">🧑 Моят герой</h1>
 
-      {/* ── Sticky strip: full width, avatar always centered ─────────── */}
+      {/* ── Sticky centered avatar card ───────────────────────────────── */}
       <div
-        className="sticky z-10 mb-6"
+        className="flex flex-col items-center gap-3 pt-3 pb-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky z-10 mb-6"
         style={{
+          border: `2px solid ${color}28`,
+          width: 'fit-content',
+          marginLeft: 'auto',
+          marginRight: 'auto',
           top: 56,
-          margin: '0 -16px',
-          padding: '12px 16px',
-          background: 'linear-gradient(180deg, rgba(186,230,253,0.95), rgba(224,242,254,0.92))',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div
-            className="flex flex-col items-center gap-3 pt-3 pb-4 rounded-2xl bg-white shadow-md flex-shrink-0"
-            style={{ border: `2px solid ${color}28`, width: 'fit-content' }}
-          >
-            {/* User switcher — above the avatar */}
-            <div className="flex gap-2" style={{ width: 220 }}>
-              {(['tati', 'iva'] as UserType[]).map(u => (
-                <button
-                  key={u}
-                  onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
-                  className="flex-1 py-2 rounded-full font-bold text-sm transition-all"
-                  style={{
-                    background: activeUser === u ? USER_COLOR[u] : '#F8FAFC',
-                    color: activeUser === u ? 'white' : '#64748b',
-                    border: `2px solid ${activeUser === u ? USER_COLOR[u] : '#E2E8F0'}`,
-                    boxShadow: activeUser === u ? `0 3px 12px ${USER_COLOR[u]}40` : 'none',
-                  }}
-                >
-                  {USER_DISPLAY[u]}
-                </button>
-              ))}
-            </div>
-
-            {/* Avatar preview */}
-            {avatarUrls[activeUser] ? (
-              <>
-                <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={220} height={290} />
-                <span className="text-xs text-slate-400">Завърти / Приближи</span>
-              </>
-            ) : (
-              <Avatar3D
-                avatar={cfg}
-                expression={cfg.expression ?? 'smile'}
-                width={220}
-                height={290}
-                background={backgrounds[activeUser]}
-                outfitColor={outfitColors[activeUser] ?? undefined}
-                visitedIsoCodes={visitedIso[activeUser]}
-              />
-            )}
-          </div>
+        {/* User switcher — above the avatar */}
+        <div className="flex gap-2" style={{ width: 220 }}>
+          {(['tati', 'iva'] as UserType[]).map(u => (
+            <button
+              key={u}
+              onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
+              className="flex-1 py-2 rounded-full font-bold text-sm transition-all"
+              style={{
+                background: activeUser === u ? USER_COLOR[u] : '#F8FAFC',
+                color: activeUser === u ? 'white' : '#64748b',
+                border: `2px solid ${activeUser === u ? USER_COLOR[u] : '#E2E8F0'}`,
+                boxShadow: activeUser === u ? `0 3px 12px ${USER_COLOR[u]}40` : 'none',
+              }}
+            >
+              {USER_DISPLAY[u]}
+            </button>
+          ))}
         </div>
+
+        {/* Avatar preview */}
+        {avatarUrls[activeUser] ? (
+          <>
+            <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={220} height={290} />
+            <span className="text-xs text-slate-400">Завърти / Приближи</span>
+          </>
+        ) : (
+          <Avatar3D
+            avatar={cfg}
+            expression={cfg.expression ?? 'smile'}
+            width={220}
+            height={290}
+            background={backgrounds[activeUser]}
+            outfitColor={outfitColors[activeUser] ?? undefined}
+            visitedIsoCodes={visitedIso[activeUser]}
+          />
+        )}
       </div>
 
       {/* ── Editor panel ─────────────────────────────────────────────── */}
