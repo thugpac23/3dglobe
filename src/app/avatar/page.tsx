@@ -242,16 +242,14 @@ export default function AvatarPage() {
     <main className="min-h-screen px-4 py-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-extrabold text-slate-800 mb-4">🧑 Моят герой</h1>
 
-      {/* ── Sticky centered avatar card ───────────────────────────────── */}
+      {/* Two-column on desktop: sticky avatar left, editor right.
+          Single column on mobile: avatar centered on top, editor below. */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+
+      {/* ── Sticky avatar card ─────────────────────────────────────────── */}
       <div
-        className="flex flex-col items-center gap-3 pt-3 pb-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky z-10 mb-6"
-        style={{
-          border: `2px solid ${color}28`,
-          width: 'fit-content',
-          marginLeft: 'auto',
-          marginRight: 'auto',
-          top: 56,
-        }}
+        className="flex flex-col items-center gap-3 pt-3 pb-4 rounded-2xl bg-white shadow-md flex-shrink-0 sticky self-start z-10"
+        style={{ border: `2px solid ${color}28`, width: 'fit-content', top: 56 }}
       >
         {/* User switcher — above the avatar */}
         <div className="flex gap-2" style={{ width: 220 }}>
@@ -291,8 +289,8 @@ export default function AvatarPage() {
         )}
       </div>
 
-      {/* ── Editor panel ─────────────────────────────────────────────── */}
-      <div className="space-y-4">
+      {/* ── Editor panel (right column on desktop) ───────────────────── */}
+      <div className="flex-1 min-w-0 space-y-4">
 
         {/* Mode tabs */}
         <div className="flex rounded-xl overflow-hidden border border-slate-200">
@@ -514,6 +512,8 @@ export default function AvatarPage() {
         {saved && (
           <p className="text-center text-xs font-semibold text-emerald-600">✓ Героят е запазен!</p>
         )}
+      </div>
+      {/* end outer flex row */}
       </div>
     </main>
   );
