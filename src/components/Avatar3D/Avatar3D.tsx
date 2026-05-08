@@ -49,88 +49,6 @@ function deriveOutfitPalette(baseHex: number): { top: number; bot: number; acc: 
   return { top: c.getHex(), bot: bot.getHex(), acc: acc.getHex() };
 }
 
-// ── Country flag patch helpers ───────────────────────────────────────────────
-function isoToFlagEmoji(iso: string): string {
-  if (!iso || iso.length !== 2) return '🏳';
-  try {
-    return String.fromCodePoint(
-      0x1F1E6 + iso.toUpperCase().charCodeAt(0) - 65,
-      0x1F1E6 + iso.toUpperCase().charCodeAt(1) - 65,
-    );
-  } catch { return '🏳'; }
-}
-
-function makePatchTexture(iso: string): THREE.CanvasTexture {
-  const c  = document.createElement('canvas');
-  c.width  = 128; c.height = 96;
-  const ctx = c.getContext('2d')!;
-  // Cloth patch background
-  const grad = ctx.createLinearGradient(0, 0, 0, 96);
-  grad.addColorStop(0, '#F8FAFC');
-  grad.addColorStop(1, '#CBD5E1');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 128, 96);
-  // Outer border
-  ctx.strokeStyle = '#1E293B';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, 124, 92);
-  // Flag emoji centered
-  ctx.font = '64px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(isoToFlagEmoji(iso), 64, 50);
-  // ISO code label below the flag for reliability when emoji fonts are missing
-  ctx.font = 'bold 18px sans-serif';
-  ctx.fillStyle = '#1E293B';
-  ctx.fillText(iso.toUpperCase(), 64, 84);
-  // Stitched dashes inside border
-  ctx.strokeStyle = '#475569';
-  ctx.setLineDash([4, 4]);
-  ctx.lineWidth = 1.4;
-  ctx.strokeRect(7, 7, 114, 82);
-  ctx.setLineDash([]);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  return tex;
-}
-
-// Lay flag patches across the front-left chest. They are positioned on the
-// torso cylinder surface (radius ≈ 0.30) and oriented along the radial normal
-// so they look stitched onto the clothing as the avatar rotates.
-function buildPatches(visitedIso: string[]): THREE.Group {
-  const g = new THREE.Group();
-  const isos = visitedIso.slice(0, 6);
-  if (!isos.length) return g;
-
-  const cols = isos.length <= 3 ? 1 : 2;
-  const xStart  = cols === 1 ? -0.13 : -0.18;
-  const xSpace  = 0.105;
-  const yStart  = 0.96;
-  const ySpace  = 0.082;
-  const torsoR  = 0.30;
-  const standoff = 0.022;
-  const pw = 0.094, ph = 0.070, pd = 0.008;
-
-  isos.forEach((iso, idx) => {
-    const col = idx % cols;
-    const row = Math.floor(idx / cols);
-    const x = xStart + col * xSpace;
-    const y = yStart - row * ySpace;
-    const surfaceZ = Math.sqrt(Math.max(0, torsoR * torsoR - x * x));
-    const z = surfaceZ + standoff;
-    const tex = makePatchTexture(iso);
-    const m   = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.74, metalness: 0.04 });
-    const patch = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, pd), m);
-    patch.position.set(x, y, z);
-    patch.rotation.y = Math.atan2(x, surfaceZ);
-    patch.castShadow = true;
-    g.add(patch);
-  });
-
-  return g;
-}
-
 function mat(
   color: number,
   opts: Partial<THREE.MeshStandardMaterialParameters> = {},
@@ -157,7 +75,6 @@ function buildCharacter(
   expression: Expression,
   faceType: FaceType,
   outfitColor: string | undefined,
-  visitedIso: string[],
 ): { group: THREE.Group; parts: CharacterParts } {
 
   const skinHex = cssToHex(avatar.skinColor ?? '#FBBF8A');
@@ -512,11 +429,6 @@ function buildCharacter(
       sideSeam.position.set(sx * 0.298, 0.74, 0);
       g.add(sideSeam);
     }
-  }
-
-  // ── PATCHES ── flag patches of visited countries on front-left chest
-  if (visitedIso.length) {
-    g.add(buildPatches(visitedIso));
   }
 
   // ── SHOULDERS ── flattened spheres → deltoid silhouette, not round balls
@@ -946,174 +858,842 @@ function buildCharacter(
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // ACCESSORIES — head-attached go into headGroup; body accessories go into g
+  // ACCESSORIES — head-attached go into headGroup; body accessories into g
   // ──────────────────────────────────────────────────────────────────────────
 
-  if (acc.includes('hat')) {
-    const hatM = mat(0xDC2626, { roughness: 0.7 });
-    const brim = mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.06, 16), hatM);
-    brim.position.set(0, 0.34, 0);
-    headGroup.add(brim);
-    const crown3d = mesh(new THREE.CylinderGeometry(0.3, 0.33, 0.38, 16), hatM);
-    crown3d.position.set(0, 0.57, 0);
-    headGroup.add(crown3d);
+  // ── HEAD ─────────────────────────────────────────────────────────────────
+
+  // Winter hat / pompom beanie  (also matches legacy key 'hat')
+  if (acc.includes('hat') || acc.includes('winter-hat')) {
+    const beanieM = mat(0xDC2626, { roughness: 0.76 });
+    const bBody = mesh(new THREE.SphereGeometry(0.342, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), beanieM);
+    bBody.position.set(0, 0.02, 0);
+    headGroup.add(bBody);
+    const bCuff = mesh(new THREE.CylinderGeometry(0.342, 0.338, 0.09, 16), mat(0xB91C1C, { roughness: 0.74 }));
+    bCuff.position.set(0, 0.04, 0);
+    headGroup.add(bCuff);
+    for (let i = 0; i < 3; i++) {
+      const rib = mesh(new THREE.TorusGeometry(0.334, 0.011, 4, 20), mat(0xEF4444, { roughness: 0.72 }));
+      rib.position.set(0, 0.13 + i * 0.09, 0);
+      rib.rotation.x = Math.PI / 2;
+      headGroup.add(rib);
+    }
+    const pompom = mesh(new THREE.SphereGeometry(0.080, 10, 10), mat(0xFECACA, { roughness: 0.82 }));
+    pompom.position.set(0, 0.44, 0);
+    headGroup.add(pompom);
   }
 
+  // Baseball cap (improved)
   if (acc.includes('cap')) {
-    const capM = mat(0x1D4ED8, { roughness: 0.7 });
-    const capHat = mesh(new THREE.SphereGeometry(0.342, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), capM);
-    headGroup.add(capHat);
+    const capM = mat(0x1D4ED8, { roughness: 0.70 });
+    const capDarkM = mat(0x1E3A5F, { roughness: 0.72 });
+    const capDome = mesh(new THREE.SphereGeometry(0.342, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), capM);
+    headGroup.add(capDome);
+    const sweatband = mesh(new THREE.CylinderGeometry(0.338, 0.338, 0.055, 16), mat(0xFCD34D, { roughness: 0.68 }));
+    sweatband.position.set(0, 0.01, 0);
+    headGroup.add(sweatband);
     const visor = mesh(
-      new THREE.CylinderGeometry(0.3, 0.32, 0.06, 14, 1, false, -Math.PI * 0.15, Math.PI * 0.8),
-      mat(0x1E3A5F),
+      new THREE.CylinderGeometry(0.34, 0.36, 0.05, 14, 1, false, -Math.PI * 0.15, Math.PI * 0.8),
+      capDarkM,
     );
-    visor.position.set(0, 0.19, 0.22);
-    visor.rotation.x = 0.4;
+    visor.position.set(0, 0.02, 0.26);
+    visor.rotation.x = 0.34;
     headGroup.add(visor);
+    const visorUnder = mesh(
+      new THREE.CylinderGeometry(0.32, 0.34, 0.03, 14, 1, false, -Math.PI * 0.15, Math.PI * 0.8),
+      mat(0x172554, { roughness: 0.76 }),
+    );
+    visorUnder.position.set(0, 0.01, 0.265);
+    visorUnder.rotation.x = 0.34;
+    headGroup.add(visorUnder);
+    const capTopBtn = mesh(new THREE.SphereGeometry(0.026, 7, 7), capDarkM);
+    capTopBtn.position.set(0, 0.35, 0);
+    headGroup.add(capTopBtn);
   }
 
+  // Explorer / fedora hat
+  if (acc.includes('explorer-hat')) {
+    const feltM = mat(0x78350F, { roughness: 0.82 });
+    const hatCrown = mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.30, 14), feltM);
+    hatCrown.position.set(0, 0.45, 0);
+    headGroup.add(hatCrown);
+    const hatDomeTop = mesh(new THREE.SphereGeometry(0.22, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), feltM);
+    hatDomeTop.position.set(0, 0.60, 0);
+    headGroup.add(hatDomeTop);
+    const hatBrim = mesh(new THREE.CylinderGeometry(0.52, 0.54, 0.05, 16), feltM);
+    hatBrim.position.set(0, 0.31, 0);
+    headGroup.add(hatBrim);
+    const hatBand = mesh(new THREE.CylinderGeometry(0.245, 0.245, 0.07, 14), mat(0x1C1917, { roughness: 0.72 }));
+    hatBand.position.set(0, 0.316, 0);
+    headGroup.add(hatBand);
+    const hatBuckle = mesh(new THREE.BoxGeometry(0.052, 0.042, 0.022), mat(0xFCD34D, { metalness: 0.42, roughness: 0.38 }));
+    hatBuckle.position.set(0, 0.316, 0.248);
+    headGroup.add(hatBuckle);
+  }
+
+  // Crown
   if (acc.includes('crown')) {
-    const crownBaseM = mat(0xFCD34D, { roughness: 0.38, metalness: 0.32 });
-    const crownBase = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.1, 14), crownBaseM);
-    crownBase.position.set(0, 0.38, 0);
+    const goldM2 = mat(0xFCD34D, { roughness: 0.38, metalness: 0.32 });
+    const crownBase = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.10, 14), goldM2);
+    crownBase.position.set(0, 0.35, 0);
     headGroup.add(crownBase);
+    const crownRidge = mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.024, 14), mat(0xD97706, { metalness: 0.38, roughness: 0.42 }));
+    crownRidge.position.set(0, 0.40, 0);
+    headGroup.add(crownRidge);
+    const gemColors = [0xEF4444, 0x60A5FA, 0x34D399, 0xF472B6, 0xFBBF24];
     for (let i = 0; i < 5; i++) {
       const angle = (i / 5) * Math.PI * 2;
-      const spike = mesh(new THREE.ConeGeometry(0.06, 0.2, 6), mat(0xFCD34D, { metalness: 0.32 }));
-      spike.position.set(Math.sin(angle) * 0.3, 0.52, Math.cos(angle) * 0.3);
+      const spike = mesh(new THREE.ConeGeometry(0.058, 0.22, 6), goldM2);
+      spike.position.set(Math.sin(angle) * 0.30, 0.52, Math.cos(angle) * 0.30);
       headGroup.add(spike);
-      const gemColor = i % 3 === 0 ? 0xEF4444 : i % 3 === 1 ? 0x60A5FA : 0x34D399;
-      const gem = mesh(new THREE.SphereGeometry(0.04, 6, 6), mat(gemColor, { roughness: 0.18, metalness: 0.12 }));
-      gem.position.copy(spike.position);
-      gem.position.y -= 0.06;
+      const gem = mesh(new THREE.SphereGeometry(0.036, 6, 6), mat(gemColors[i], { roughness: 0.14, metalness: 0.1 }));
+      gem.position.set(Math.sin(angle) * 0.30, 0.43, Math.cos(angle) * 0.30);
       headGroup.add(gem);
     }
-  }
-
-  if (acc.includes('glasses') || acc.includes('sunglasses')) {
-    const lensColor   = acc.includes('sunglasses') ? 0x1e293b : 0xdbeafe;
-    const lensOpacity = acc.includes('sunglasses') ? 0.85 : 0.35;
-    const lensM  = mat(lensColor, { transparent: true, opacity: lensOpacity, roughness: 0.1 });
-    const frameM = mat(0x1e293b, { roughness: 0.48 });
-    for (const fx of [-0.113, 0.113]) {
-      const frame = mesh(new THREE.TorusGeometry(0.068, 0.013, 6, 16), frameM);
-      frame.position.set(fx, eyeBaseY, eyeZ + 0.026);
-      headGroup.add(frame);
-      const fill = mesh(new THREE.CircleGeometry(0.068, 16), lensM);
-      fill.position.set(fx, eyeBaseY, eyeZ + 0.031);
-      headGroup.add(fill);
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const stud = mesh(new THREE.SphereGeometry(0.020, 5, 5), mat(0xD97706, { metalness: 0.4 }));
+      stud.position.set(Math.sin(angle) * 0.37, 0.36, Math.cos(angle) * 0.37);
+      headGroup.add(stud);
     }
-    const bridge = mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.09, 4), frameM);
-    bridge.position.set(0, eyeBaseY, eyeZ + 0.026);
-    bridge.rotation.z = Math.PI / 2;
-    headGroup.add(bridge);
   }
 
+  // Flower crown
+  if (acc.includes('flower-crown')) {
+    const vine = mesh(new THREE.TorusGeometry(0.34, 0.024, 5, 24), mat(0x15803D, { roughness: 0.78 }));
+    vine.position.set(0, 0.16, 0);
+    vine.rotation.x = Math.PI / 2;
+    headGroup.add(vine);
+    const flPetalColors = [0xFB7185, 0xF9A8D4, 0xFDE68A, 0x86EFAC, 0xBAE6FD, 0xC4B5FD, 0xFDB87A];
+    for (let f = 0; f < 7; f++) {
+      const fAngle = (f / 7) * Math.PI * 2;
+      const fx2 = Math.sin(fAngle) * 0.34;
+      const fz2 = Math.cos(fAngle) * 0.34;
+      const flCenter = mesh(new THREE.SphereGeometry(0.030, 7, 7), mat(0xFEF08A, { roughness: 0.65 }));
+      flCenter.position.set(fx2, 0.19, fz2);
+      headGroup.add(flCenter);
+      for (let p = 0; p < 5; p++) {
+        const pAngle = (p / 5) * Math.PI * 2;
+        const petal = mesh(new THREE.SphereGeometry(0.034, 6, 5), mat(flPetalColors[f], { roughness: 0.68 }));
+        petal.scale.set(0.7, 0.42, 1.1);
+        petal.position.set(fx2 + Math.sin(pAngle) * 0.050, 0.19, fz2 + Math.cos(pAngle) * 0.050);
+        headGroup.add(petal);
+      }
+    }
+  }
+
+  // Headphones (improved)
   if (acc.includes('headphones')) {
     const hpM = mat(0x374151, { roughness: 0.62 });
-    const arc = mesh(new THREE.TorusGeometry(0.34, 0.033, 6, 16, Math.PI), hpM);
+    const arc = mesh(new THREE.TorusGeometry(0.34, 0.032, 6, 16, Math.PI), hpM);
     arc.position.set(0, 0.08, 0);
     arc.rotation.z = Math.PI / 2;
     headGroup.add(arc);
+    const hpTopPad = mesh(new THREE.SphereGeometry(0.048, 8, 6), mat(0x111827, { roughness: 0.74 }));
+    hpTopPad.scale.set(0.6, 0.38, 1);
+    hpTopPad.position.set(0, 0.38, 0);
+    headGroup.add(hpTopPad);
     for (const sx of [-1, 1]) {
       const cup = mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.08, 12), hpM);
       cup.position.set(sx * 0.34, 0.01, 0);
       cup.rotation.z = Math.PI / 2;
       headGroup.add(cup);
+      const driver = mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.02, 12), mat(0x111827, { roughness: 0.74 }));
+      driver.position.set(sx * 0.395, 0.01, 0);
+      driver.rotation.z = Math.PI / 2;
+      headGroup.add(driver);
+      const hpRing = mesh(new THREE.TorusGeometry(0.090, 0.013, 5, 14), mat(0x6B7280, { roughness: 0.5 }));
+      hpRing.position.set(sx * 0.388, 0.01, 0);
+      hpRing.rotation.z = Math.PI / 2;
+      headGroup.add(hpRing);
     }
   }
 
-  if (acc.includes('scarf')) {
-    const scarfM = mat(0xDC2626, { roughness: 0.76 });
-    const scarf = mesh(new THREE.TorusGeometry(0.17, 0.067, 8, 18), scarfM);
-    scarf.position.set(0, 1.18, 0);
-    g.add(scarf);
-    const end = mesh(new THREE.BoxGeometry(0.08, 0.28, 0.07), scarfM);
-    end.position.set(0.12, 0.9, 0.2);
-    end.rotation.z = 0.2;
-    g.add(end);
+  // Pirate hat (bicorne style)
+  if (acc.includes('pirate-hat')) {
+    const pirateHatM = mat(0x111827, { roughness: 0.74 });
+    const pirateTrimM = mat(0xFCD34D, { metalness: 0.36, roughness: 0.40 });
+    const pirateBody = mesh(new THREE.CylinderGeometry(0.28, 0.30, 0.28, 4), pirateHatM);
+    pirateBody.position.set(0, 0.42, 0);
+    pirateBody.rotation.y = Math.PI / 4;
+    headGroup.add(pirateBody);
+    for (const sx of [-1, 1]) {
+      const brimPiece = mesh(
+        new THREE.CylinderGeometry(0.46, 0.46, 0.05, 10, 1, false, -Math.PI * 0.42, Math.PI * 0.84),
+        pirateHatM,
+      );
+      brimPiece.position.set(sx * 0.10, 0.30, 0);
+      brimPiece.rotation.z = sx * 0.68;
+      headGroup.add(brimPiece);
+      const goldTrim = mesh(new THREE.BoxGeometry(0.038, 0.34, 0.028), pirateTrimM);
+      goldTrim.position.set(sx * 0.40, 0.30, 0);
+      goldTrim.rotation.z = sx * 0.68;
+      headGroup.add(goldTrim);
+    }
+    const pirateSkull = mesh(new THREE.SphereGeometry(0.065, 10, 8), mat(0xFFFDE7, { roughness: 0.66 }));
+    pirateSkull.position.set(0, 0.44, 0.27);
+    headGroup.add(pirateSkull);
+    for (const sx of [-1, 1]) {
+      const bone = mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.14, 5), mat(0xFFFDE7, { roughness: 0.66 }));
+      bone.position.set(sx * 0.04, 0.34, 0.27);
+      bone.rotation.z = sx * 0.72;
+      headGroup.add(bone);
+    }
   }
 
+  // Wizard hat
+  if (acc.includes('wizard-hat')) {
+    const wizM = mat(0x5B21B6, { roughness: 0.72 });
+    const wizBrim = mesh(new THREE.CylinderGeometry(0.50, 0.52, 0.06, 16), wizM);
+    wizBrim.position.set(0, 0.30, 0);
+    headGroup.add(wizBrim);
+    const wizCone = mesh(new THREE.ConeGeometry(0.30, 0.68, 14), wizM);
+    wizCone.position.set(0, 0.68, 0);
+    headGroup.add(wizCone);
+    const wizBand = mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.058, 14), mat(0xFCD34D, { metalness: 0.38, roughness: 0.42 }));
+    wizBand.position.set(0, 0.34, 0);
+    headGroup.add(wizBand);
+    const wizStarColors = [0xFCD34D, 0x60A5FA, 0xF9A8D4, 0x86EFAC];
+    for (let i = 0; i < 4; i++) {
+      const star = mesh(new THREE.SphereGeometry(0.032, 6, 6), mat(wizStarColors[i], { roughness: 0.5 }));
+      const angle = (i / 4) * Math.PI * 2;
+      star.position.set(Math.sin(angle) * (0.18 - i * 0.028), 0.44 + i * 0.08, Math.cos(angle) * (0.18 - i * 0.028));
+      headGroup.add(star);
+    }
+    const moon = mesh(new THREE.TorusGeometry(0.060, 0.020, 6, 14, Math.PI * 1.4), mat(0xFCD34D, { metalness: 0.3 }));
+    moon.position.set(-0.08, 0.74, 0.15);
+    moon.rotation.z = 0.82;
+    headGroup.add(moon);
+  }
+
+  // Animal ears (cat)
+  if (acc.includes('animal-ears')) {
+    for (const sx of [-1, 1]) {
+      const earOuter = mesh(new THREE.ConeGeometry(0.10, 0.22, 4), mat(0xD97706, { roughness: 0.72 }));
+      earOuter.position.set(sx * 0.22, 0.44, -0.04);
+      earOuter.rotation.z = sx * 0.22;
+      headGroup.add(earOuter);
+      const earInner = mesh(new THREE.ConeGeometry(0.057, 0.14, 4), mat(0xFBBF8A, { roughness: 0.72 }));
+      earInner.position.set(sx * 0.22, 0.46, 0.02);
+      earInner.rotation.z = sx * 0.22;
+      headGroup.add(earInner);
+    }
+  }
+
+  // ── FACE ─────────────────────────────────────────────────────────────────
+
+  // Sunglasses
+  if (acc.includes('sunglasses')) {
+    const sunFrameM = mat(0x111827, { roughness: 0.38 });
+    const sunLensM = mat(0x030712, { transparent: true, opacity: 0.90, roughness: 0.06, metalness: 0.10 });
+    for (const fx of [-0.113, 0.113]) {
+      const sunFrame = mesh(new THREE.TorusGeometry(0.072, 0.014, 7, 18), sunFrameM);
+      sunFrame.position.set(fx, eyeBaseY, eyeZ + 0.022);
+      headGroup.add(sunFrame);
+      const sunFill = mesh(new THREE.CircleGeometry(0.072, 18), sunLensM);
+      sunFill.position.set(fx, eyeBaseY, eyeZ + 0.027);
+      headGroup.add(sunFill);
+    }
+    const sunBridge = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.085, 5), sunFrameM);
+    sunBridge.position.set(0, eyeBaseY, eyeZ + 0.022);
+    sunBridge.rotation.z = Math.PI / 2;
+    headGroup.add(sunBridge);
+    for (const fx of [-0.113, 0.113]) {
+      const sunArm = mesh(new THREE.BoxGeometry(0.018, 0.010, 0.20), sunFrameM);
+      sunArm.position.set(fx + Math.sign(fx) * 0.195, eyeBaseY, eyeZ - 0.08);
+      headGroup.add(sunArm);
+    }
+  }
+
+  // Regular glasses
+  if (acc.includes('glasses')) {
+    const glFrameM = mat(0x92400E, { roughness: 0.54 });
+    const glLensM = mat(0xBAE6FD, { transparent: true, opacity: 0.38, roughness: 0.08 });
+    for (const fx of [-0.113, 0.113]) {
+      const glFrame = mesh(new THREE.TorusGeometry(0.070, 0.012, 7, 18), glFrameM);
+      glFrame.position.set(fx, eyeBaseY, eyeZ + 0.022);
+      headGroup.add(glFrame);
+      const glFill = mesh(new THREE.CircleGeometry(0.070, 18), glLensM);
+      glFill.position.set(fx, eyeBaseY, eyeZ + 0.027);
+      headGroup.add(glFill);
+    }
+    const glBridge = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.085, 5), glFrameM);
+    glBridge.position.set(0, eyeBaseY, eyeZ + 0.022);
+    glBridge.rotation.z = Math.PI / 2;
+    headGroup.add(glBridge);
+    for (const fx of [-0.113, 0.113]) {
+      const glArm = mesh(new THREE.BoxGeometry(0.016, 0.008, 0.20), glFrameM);
+      glArm.position.set(fx + Math.sign(fx) * 0.188, eyeBaseY, eyeZ - 0.078);
+      headGroup.add(glArm);
+    }
+  }
+
+  // Sporty glasses
+  if (acc.includes('sporty-glasses')) {
+    const spFrameM = mat(0xC2410C, { roughness: 0.46 });
+    const spLensM = mat(0xFEF3C7, { transparent: true, opacity: 0.46, roughness: 0.06 });
+    for (const fx of [-0.113, 0.113]) {
+      const spFrame = mesh(new THREE.TorusGeometry(0.080, 0.014, 7, 18), spFrameM);
+      spFrame.scale.x = 1.28;
+      spFrame.position.set(fx, eyeBaseY, eyeZ + 0.022);
+      headGroup.add(spFrame);
+      const spFill = mesh(new THREE.SphereGeometry(0.070, 14, 10), spLensM);
+      spFill.scale.set(1.28, 0.66, 0.18);
+      spFill.position.set(fx, eyeBaseY, eyeZ + 0.030);
+      headGroup.add(spFill);
+    }
+    const spNose = mesh(new THREE.BoxGeometry(0.08, 0.020, 0.018), spFrameM);
+    spNose.position.set(0, eyeBaseY - 0.022, eyeZ + 0.026);
+    headGroup.add(spNose);
+  }
+
+  // Ski goggles
+  if (acc.includes('ski-goggles')) {
+    const gogFrameM = mat(0x1E40AF, { roughness: 0.62 });
+    const gogLensM = mat(0xFDE68A, { transparent: true, opacity: 0.58, roughness: 0.06, metalness: 0.08 });
+    for (const fx of [-0.113, 0.113]) {
+      const gogFrame = mesh(new THREE.TorusGeometry(0.085, 0.022, 8, 18), gogFrameM);
+      gogFrame.scale.y = 0.72;
+      gogFrame.position.set(fx, eyeBaseY, eyeZ + 0.012);
+      headGroup.add(gogFrame);
+      const gogFill = mesh(new THREE.CircleGeometry(0.085, 18), gogLensM);
+      gogFill.scale.y = 0.72;
+      gogFill.position.set(fx, eyeBaseY, eyeZ + 0.035);
+      headGroup.add(gogFill);
+    }
+    const gogBridge = mesh(new THREE.BoxGeometry(0.08, 0.042, 0.022), gogFrameM);
+    gogBridge.position.set(0, eyeBaseY, eyeZ + 0.012);
+    headGroup.add(gogBridge);
+    const gogElastic = mesh(new THREE.TorusGeometry(0.34, 0.013, 5, 16, Math.PI), mat(0x1D4ED8, { roughness: 0.72 }));
+    gogElastic.position.set(0, eyeBaseY, 0);
+    gogElastic.rotation.y = Math.PI;
+    headGroup.add(gogElastic);
+  }
+
+  // Monocle
+  if (acc.includes('monocle')) {
+    const monoGoldM = mat(0xD97706, { metalness: 0.42, roughness: 0.38 });
+    const monoFrame = mesh(new THREE.TorusGeometry(0.068, 0.014, 7, 16), monoGoldM);
+    monoFrame.position.set(0.113, eyeBaseY, eyeZ + 0.022);
+    headGroup.add(monoFrame);
+    const monoGlass = mesh(new THREE.CircleGeometry(0.068, 16), mat(0xBAE6FD, { transparent: true, opacity: 0.34, roughness: 0.06 }));
+    monoGlass.position.set(0.113, eyeBaseY, eyeZ + 0.028);
+    headGroup.add(monoGlass);
+    for (let i = 0; i < 6; i++) {
+      const link = mesh(new THREE.TorusGeometry(0.013, 0.005, 4, 10), monoGoldM);
+      link.position.set(0.113 + i * 0.021, eyeBaseY - 0.030 - i * 0.016, eyeZ + 0.020);
+      link.rotation.z = (i % 2) ? Math.PI / 2 : 0;
+      headGroup.add(link);
+    }
+  }
+
+  // Superhero mask
+  if (acc.includes('superhero-mask')) {
+    const maskM2 = mat(0x7C3AED, { roughness: 0.58 });
+    const maskBand = mesh(new THREE.BoxGeometry(0.68, 0.10, 0.060), maskM2);
+    maskBand.position.set(0, eyeBaseY, eyeZ - 0.04);
+    maskBand.rotation.x = 0.18;
+    headGroup.add(maskBand);
+    for (const fx of [-0.113, 0.113]) {
+      const maskHole = mesh(new THREE.CircleGeometry(0.055, 14), mat(0x1C1917, { roughness: 0.80 }));
+      maskHole.position.set(fx, eyeBaseY, eyeZ + 0.032);
+      headGroup.add(maskHole);
+    }
+    for (const sx of [-1, 1]) {
+      const wingFlare = mesh(new THREE.BoxGeometry(0.12, 0.08, 0.030), maskM2);
+      wingFlare.position.set(sx * 0.36, eyeBaseY + 0.024, eyeZ - 0.08);
+      wingFlare.rotation.z = sx * 0.28;
+      wingFlare.rotation.y = sx * 0.28;
+      headGroup.add(wingFlare);
+    }
+  }
+
+  // ── NECK ─────────────────────────────────────────────────────────────────
+
+  // Scarf (double wrap + fringe)
+  if (acc.includes('scarf')) {
+    const scarfM2 = mat(0xDC2626, { roughness: 0.76 });
+    const wrap1 = mesh(new THREE.TorusGeometry(0.17, 0.065, 8, 18), scarfM2);
+    wrap1.position.set(0, 1.18, 0);
+    wrap1.rotation.x = 0.10;
+    g.add(wrap1);
+    const wrap2 = mesh(new THREE.TorusGeometry(0.17, 0.055, 8, 18), scarfM2);
+    wrap2.position.set(0, 1.10, 0);
+    wrap2.rotation.x = -0.08;
+    g.add(wrap2);
+    const scarfEnd = mesh(new THREE.BoxGeometry(0.085, 0.30, 0.07), scarfM2);
+    scarfEnd.position.set(0.12, 0.88, 0.18);
+    scarfEnd.rotation.z = 0.18;
+    g.add(scarfEnd);
+    for (let i = 0; i < 4; i++) {
+      const fringe = mesh(new THREE.BoxGeometry(0.014, 0.058, 0.012), scarfM2);
+      fringe.position.set(0.08 + i * 0.018, 0.75, 0.18);
+      g.add(fringe);
+    }
+  }
+
+  // Tie
+  if (acc.includes('tie')) {
+    const tieM2 = mat(0x1E40AF, { roughness: 0.64 });
+    const tieKnot = mesh(new THREE.BoxGeometry(0.065, 0.058, 0.040), mat(0x1E3A5F, { roughness: 0.62 }));
+    tieKnot.position.set(0, 1.06, 0.30);
+    g.add(tieKnot);
+    const tieBlade = mesh(new THREE.BoxGeometry(0.055, 0.30, 0.032), tieM2);
+    tieBlade.position.set(0, 0.86, 0.30);
+    g.add(tieBlade);
+    const tieTip = mesh(new THREE.ConeGeometry(0.038, 0.12, 4), tieM2);
+    tieTip.position.set(0, 0.65, 0.30);
+    g.add(tieTip);
+    const tieStripe = mesh(new THREE.BoxGeometry(0.040, 0.10, 0.036), mat(0x7DD3FC, { roughness: 0.64 }));
+    tieStripe.position.set(0.004, 0.88, 0.314);
+    tieStripe.rotation.z = 0.28;
+    g.add(tieStripe);
+  }
+
+  // Bow tie
+  if (acc.includes('bow-tie')) {
+    const bowM = mat(0xDC2626, { roughness: 0.68 });
+    for (const sx of [-1, 1]) {
+      const bowWing = mesh(new THREE.BoxGeometry(0.10, 0.06, 0.030), bowM);
+      bowWing.position.set(sx * 0.07, 1.10, 0.30);
+      bowWing.rotation.z = sx * 0.18;
+      g.add(bowWing);
+      const bowAccent = mesh(new THREE.BoxGeometry(0.004, 0.055, 0.032), mat(0xFB923C, { roughness: 0.60 }));
+      bowAccent.position.set(sx * 0.07, 1.10, 0.316);
+      g.add(bowAccent);
+    }
+    const bowKnot = mesh(new THREE.SphereGeometry(0.024, 7, 7), mat(0xB91C1C, { roughness: 0.68 }));
+    bowKnot.scale.set(0.8, 1, 0.6);
+    bowKnot.position.set(0, 1.10, 0.312);
+    g.add(bowKnot);
+  }
+
+  // Necklace with heart pendant
+  if (acc.includes('necklace')) {
+    const nkGoldM = mat(0xFCD34D, { metalness: 0.44, roughness: 0.36 });
+    for (let i = -4; i <= 4; i++) {
+      const t = i / 4;
+      const bead = mesh(new THREE.SphereGeometry(0.016, 6, 6), nkGoldM);
+      bead.position.set(t * 0.14, 1.08 - Math.abs(t) * 0.040, 0.26 + (1 - Math.abs(t)) * 0.06);
+      g.add(bead);
+    }
+    const pendantM = mat(0xFCA5A5, { roughness: 0.40, metalness: 0.10 });
+    for (const hx of [-0.018, 0.018]) {
+      const lobe = mesh(new THREE.SphereGeometry(0.034, 8, 8), pendantM);
+      lobe.position.set(hx, 0.924, 0.28);
+      g.add(lobe);
+    }
+    const heartTip = mesh(new THREE.ConeGeometry(0.024, 0.048, 6), pendantM);
+    heartTip.position.set(0, 0.885, 0.28);
+    heartTip.rotation.z = Math.PI;
+    g.add(heartTip);
+    const bail2 = mesh(new THREE.TorusGeometry(0.015, 0.006, 4, 10), nkGoldM);
+    bail2.position.set(0, 0.960, 0.28);
+    g.add(bail2);
+  }
+
+  // Compass necklace
+  if (acc.includes('compass-necklace')) {
+    const compChainM = mat(0xD1D5DB, { metalness: 0.40, roughness: 0.44 });
+    for (let i = -3; i <= 3; i++) {
+      const t = i / 3;
+      const link = mesh(new THREE.SphereGeometry(0.011, 5, 5), compChainM);
+      link.position.set(t * 0.10, 1.06 - Math.abs(t) * 0.030, 0.25 + (1 - Math.abs(t)) * 0.048);
+      g.add(link);
+    }
+    const compCaseM = mat(0xFCD34D, { metalness: 0.46, roughness: 0.36 });
+    const compCase = mesh(new THREE.CylinderGeometry(0.064, 0.064, 0.022, 14), compCaseM);
+    compCase.position.set(0, 0.92, 0.27);
+    compCase.rotation.x = Math.PI / 2;
+    g.add(compCase);
+    const compFace = mesh(new THREE.CircleGeometry(0.054, 14), mat(0xFFFDE7, { roughness: 0.72 }));
+    compFace.position.set(0, 0.92, 0.283);
+    g.add(compFace);
+    const needleN = mesh(new THREE.BoxGeometry(0.008, 0.042, 0.005), mat(0xEF4444));
+    needleN.position.set(0.004, 0.936, 0.285);
+    g.add(needleN);
+    const needleS = mesh(new THREE.BoxGeometry(0.008, 0.042, 0.005), mat(0x374151));
+    needleS.position.set(-0.004, 0.903, 0.285);
+    g.add(needleS);
+  }
+
+  // ── BACK ─────────────────────────────────────────────────────────────────
+
+  // Regular / travel backpack
   if (acc.includes('backpack') || acc.includes('travel-backpack')) {
     const packColor = acc.includes('travel-backpack') ? 0x65A30D : 0xD97706;
-    const pack = mesh(new THREE.BoxGeometry(0.42, 0.48, 0.18), mat(packColor, { roughness: 0.78 }));
-    pack.position.set(0, 0.76, -0.3);
-    g.add(pack);
-    const pocket = mesh(new THREE.BoxGeometry(0.3, 0.16, 0.04), mat(packColor - 0x111100));
-    pocket.position.set(0, 0.9, -0.4);
-    g.add(pocket);
+    const packM2 = mat(packColor, { roughness: 0.78 });
+    const packDarkM = mat(packColor - 0x111100, { roughness: 0.80 });
+    const packBody = mesh(new THREE.BoxGeometry(0.42, 0.50, 0.20), packM2);
+    packBody.position.set(0, 0.76, -0.32);
+    g.add(packBody);
+    const packTopPocket = mesh(new THREE.BoxGeometry(0.30, 0.12, 0.06), packDarkM);
+    packTopPocket.position.set(0, 1.03, -0.40);
+    g.add(packTopPocket);
+    const packFrontPocket = mesh(new THREE.BoxGeometry(0.30, 0.18, 0.05), packDarkM);
+    packFrontPocket.position.set(0, 0.72, -0.44);
+    g.add(packFrontPocket);
+    const packZip = mesh(new THREE.BoxGeometry(0.28, 0.008, 0.052), mat(0xC0C0C0, { metalness: 0.5, roughness: 0.4 }));
+    packZip.position.set(0, 0.816, -0.445);
+    g.add(packZip);
     for (const sx of [-1, 1]) {
-      const strap = mesh(new THREE.BoxGeometry(0.05, 0.52, 0.03), mat(packColor - 0x111100));
-      strap.position.set(sx * 0.17, 0.82, -0.22);
-      g.add(strap);
+      const packStrap = mesh(new THREE.BoxGeometry(0.05, 0.54, 0.030), packDarkM);
+      packStrap.position.set(sx * 0.17, 0.82, -0.226);
+      g.add(packStrap);
     }
   }
 
-  if (acc.includes('medal')) {
-    const rib = mesh(new THREE.BoxGeometry(0.05, 0.22, 0.02), mat(0xDC2626, { roughness: 0.7 }));
-    rib.position.set(0.08, 1.05, 0.31);
-    rib.rotation.z = 0.15;
-    g.add(rib);
-    const disc = mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 14), mat(0xFCD34D, { metalness: 0.36, roughness: 0.38 }));
-    disc.position.set(0.1, 0.9, 0.31);
-    disc.rotation.x = Math.PI / 2;
-    g.add(disc);
+  // Hiking backpack
+  if (acc.includes('hiking-backpack')) {
+    const hikeM = mat(0x0C4A6E, { roughness: 0.80 });
+    const hikeDarkM = mat(0x0369A1, { roughness: 0.80 });
+    const hikeBody = mesh(new THREE.BoxGeometry(0.44, 0.62, 0.22), hikeM);
+    hikeBody.position.set(0, 0.72, -0.34);
+    g.add(hikeBody);
+    const hikeLid = mesh(new THREE.BoxGeometry(0.44, 0.14, 0.14), hikeDarkM);
+    hikeLid.position.set(0, 1.06, -0.30);
+    hikeLid.rotation.x = 0.20;
+    g.add(hikeLid);
+    for (const sx of [-1, 1]) {
+      const hikeComp = mesh(new THREE.BoxGeometry(0.018, 0.40, 0.040), mat(0xFCD34D, { roughness: 0.72 }));
+      hikeComp.position.set(sx * 0.24, 0.76, -0.37);
+      g.add(hikeComp);
+      const hikeBuckle = mesh(new THREE.BoxGeometry(0.040, 0.040, 0.060), mat(0xC0C0C0, { metalness: 0.5 }));
+      hikeBuckle.position.set(sx * 0.24, 0.82, -0.39);
+      g.add(hikeBuckle);
+      const hikeStrap = mesh(new THREE.BoxGeometry(0.060, 0.56, 0.040), hikeDarkM);
+      hikeStrap.position.set(sx * 0.18, 0.84, -0.246);
+      g.add(hikeStrap);
+      const hikePad = mesh(new THREE.BoxGeometry(0.070, 0.16, 0.050), hikeM);
+      hikePad.position.set(sx * 0.18, 0.94, -0.242);
+      g.add(hikePad);
+    }
+    const hikeHipBelt = mesh(new THREE.BoxGeometry(0.50, 0.050, 0.050), hikeM);
+    hikeHipBelt.position.set(0, 0.44, -0.34);
+    g.add(hikeHipBelt);
+    for (let i = 0; i < 2; i++) {
+      const hikeLoop = mesh(new THREE.TorusGeometry(0.022, 0.008, 4, 10), mat(0xFCD34D, { roughness: 0.62 }));
+      hikeLoop.position.set(0, 0.84 - i * 0.16, -0.46);
+      g.add(hikeLoop);
+    }
   }
 
+  // School backpack
+  if (acc.includes('school-backpack')) {
+    const schoolM = mat(0x1D4ED8, { roughness: 0.76 });
+    const schoolBody = mesh(new THREE.BoxGeometry(0.40, 0.48, 0.18), schoolM);
+    schoolBody.position.set(0, 0.76, -0.31);
+    g.add(schoolBody);
+    const schoolPocket = mesh(new THREE.BoxGeometry(0.30, 0.16, 0.05), mat(0x1E40AF, { roughness: 0.78 }));
+    schoolPocket.position.set(0, 0.70, -0.42);
+    g.add(schoolPocket);
+    const schoolTrim = mesh(new THREE.BoxGeometry(0.40, 0.018, 0.19), mat(0xDC2626, { roughness: 0.72 }));
+    schoolTrim.position.set(0, 1.02, -0.31);
+    g.add(schoolTrim);
+    const schoolZip = mesh(new THREE.BoxGeometry(0.28, 0.010, 0.052), mat(0xC0C0C0, { metalness: 0.5 }));
+    schoolZip.position.set(0, 0.79, -0.436);
+    g.add(schoolZip);
+    for (const sx of [-1, 1]) {
+      const schoolStrap = mesh(new THREE.BoxGeometry(0.050, 0.50, 0.030), mat(0x1E3A5F, { roughness: 0.78 }));
+      schoolStrap.position.set(sx * 0.16, 0.80, -0.226);
+      g.add(schoolStrap);
+    }
+  }
+
+  // Guitar case
+  if (acc.includes('guitar-case')) {
+    const gcBodyM = mat(0x1C1917, { roughness: 0.80 });
+    const gcTrimM = mat(0xFCD34D, { metalness: 0.42, roughness: 0.38 });
+    const gcBody = mesh(new THREE.BoxGeometry(0.34, 0.68, 0.14), gcBodyM);
+    gcBody.position.set(-0.08, 0.72, -0.34);
+    g.add(gcBody);
+    const gcNeck = mesh(new THREE.BoxGeometry(0.13, 0.38, 0.10), gcBodyM);
+    gcNeck.position.set(-0.08, 1.12, -0.34);
+    g.add(gcNeck);
+    for (const sy of [0.58, 0.88]) {
+      const gcClasp = mesh(new THREE.BoxGeometry(0.050, 0.030, 0.16), gcTrimM);
+      gcClasp.position.set(-0.08, sy, -0.37);
+      g.add(gcClasp);
+    }
+    const gcHandle = mesh(new THREE.BoxGeometry(0.12, 0.030, 0.030), gcBodyM);
+    gcHandle.position.set(-0.08, 1.08, -0.40);
+    g.add(gcHandle);
+    const gcGrip = mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.10, 8), mat(0x92400E, { roughness: 0.74 }));
+    gcGrip.position.set(-0.08, 1.08, -0.40);
+    gcGrip.rotation.x = Math.PI / 2;
+    g.add(gcGrip);
+  }
+
+  // Butterfly wings
+  if (acc.includes('butterfly-wings')) {
+    for (const sx of [-1, 1]) {
+      const bwUpper = mesh(
+        new THREE.SphereGeometry(0.32, 10, 8),
+        mat(0xF472B6, { transparent: true, opacity: 0.68, roughness: 0.12 }),
+      );
+      bwUpper.scale.set(1.0, 1.2, 0.18);
+      bwUpper.position.set(sx * 0.44, 0.96, -0.22);
+      bwUpper.rotation.y = sx * 0.42;
+      g.add(bwUpper);
+      const bwLower = mesh(
+        new THREE.SphereGeometry(0.22, 10, 8),
+        mat(0x60A5FA, { transparent: true, opacity: 0.62, roughness: 0.12 }),
+      );
+      bwLower.scale.set(0.9, 0.9, 0.18);
+      bwLower.position.set(sx * 0.38, 0.64, -0.20);
+      bwLower.rotation.y = sx * 0.50;
+      g.add(bwLower);
+    }
+    const bwBody = mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.44, 8), mat(0x1C1917, { roughness: 0.72 }));
+    bwBody.position.set(0, 0.82, -0.16);
+    g.add(bwBody);
+    for (const sx of [-1, 1]) {
+      const bwAntenna = mesh(new THREE.CylinderGeometry(0.006, 0.010, 0.22, 5), mat(0x374151, { roughness: 0.72 }));
+      bwAntenna.position.set(sx * 0.05, 1.08, -0.14);
+      bwAntenna.rotation.z = sx * 0.50;
+      g.add(bwAntenna);
+      const bwTip = mesh(new THREE.SphereGeometry(0.020, 7, 7), mat(0xF472B6, { roughness: 0.55 }));
+      bwTip.position.set(sx * 0.10, 1.18, -0.13);
+      g.add(bwTip);
+    }
+  }
+
+  // ── BODY / HANDS ─────────────────────────────────────────────────────────
+
+  // Watch (left wrist: x=-0.72, y=0.32 in g-space)
+  if (acc.includes('watch')) {
+    const wFaceM = mat(0xD1D5DB, { metalness: 0.46, roughness: 0.36 });
+    const wStrapM = mat(0x1C1917, { roughness: 0.76 });
+    const wStrap = mesh(new THREE.TorusGeometry(0.088, 0.016, 5, 14), wStrapM);
+    wStrap.position.set(-0.72, 0.32, 0);
+    wStrap.rotation.y = Math.PI / 2;
+    g.add(wStrap);
+    const wCase = mesh(new THREE.CylinderGeometry(0.056, 0.056, 0.036, 14), wFaceM);
+    wCase.position.set(-0.72, 0.32, 0.090);
+    wCase.rotation.x = Math.PI / 2;
+    g.add(wCase);
+    const wDial = mesh(new THREE.CircleGeometry(0.046, 14), mat(0xFFFDE7, { roughness: 0.70 }));
+    wDial.position.set(-0.72, 0.32, 0.110);
+    g.add(wDial);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const wMarker = mesh(new THREE.BoxGeometry(0.006, 0.012, 0.004), mat(0x374151));
+      wMarker.position.set(-0.72 + Math.sin(a) * 0.034, 0.32 + Math.cos(a) * 0.034, 0.112);
+      g.add(wMarker);
+    }
+    const wHandH = mesh(new THREE.BoxGeometry(0.005, 0.020, 0.004), mat(0x1C1917));
+    wHandH.position.set(-0.714, 0.336, 0.113);
+    g.add(wHandH);
+    const wHandM2 = mesh(new THREE.BoxGeometry(0.004, 0.028, 0.004), mat(0xDC2626));
+    wHandM2.position.set(-0.728, 0.320, 0.113);
+    g.add(wHandM2);
+    const wCrown2 = mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.018, 5), wFaceM);
+    wCrown2.position.set(-0.72, 0.378, 0.090);
+    g.add(wCrown2);
+  }
+
+  // Bracelet (right wrist: x=0.72, y=0.32)
+  if (acc.includes('bracelet')) {
+    const brGoldM = mat(0xFCD34D, { metalness: 0.44, roughness: 0.36 });
+    const brRing = mesh(new THREE.TorusGeometry(0.090, 0.018, 6, 18), brGoldM);
+    brRing.position.set(0.72, 0.32, 0);
+    brRing.rotation.y = Math.PI / 2;
+    g.add(brRing);
+    const brBeadColors = [0xEF4444, 0xFB923C, 0xFCD34D, 0x34D399, 0x60A5FA, 0x818CF8, 0xF472B6, 0xA78BFA];
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const bead = mesh(new THREE.SphereGeometry(0.025, 7, 7), mat(brBeadColors[i], { roughness: 0.54 }));
+      bead.position.set(0.72, 0.32 + Math.sin(angle) * 0.090, Math.cos(angle) * 0.090);
+      g.add(bead);
+    }
+  }
+
+  // Gloves (both hands)
+  if (acc.includes('gloves')) {
+    for (const sx of [-1, 1]) {
+      const glPalm = mesh(new THREE.SphereGeometry(0.086, 10, 10), mat(0x7F1D1D, { roughness: 0.74 }));
+      glPalm.scale.set(1.0, 0.76, 0.86);
+      glPalm.position.set(sx * 0.72, 0.32, 0);
+      g.add(glPalm);
+      for (let k = 0; k < 4; k++) {
+        const knuckle = mesh(new THREE.SphereGeometry(0.022, 6, 6), mat(0x7F1D1D, { roughness: 0.74 }));
+        knuckle.position.set(sx * 0.72 + (k - 1.5) * 0.026, 0.354, 0.060);
+        g.add(knuckle);
+      }
+      const glCuff = mesh(new THREE.CylinderGeometry(0.062, 0.066, 0.044, 10), mat(0x6B1A1A, { roughness: 0.76 }));
+      glCuff.position.set(sx * 0.72, 0.366, 0);
+      g.add(glCuff);
+    }
+  }
+
+  // Belt bag (left hip)
+  if (acc.includes('belt-bag')) {
+    const bbBeltM = mat(0x1C1917, { roughness: 0.80 });
+    const bbBagM = mat(0x374151, { roughness: 0.74 });
+    const bbBelt = mesh(new THREE.BoxGeometry(0.52, 0.040, 0.030), bbBeltM);
+    bbBelt.position.set(0, 0.46, 0.29);
+    g.add(bbBelt);
+    const bbBeltBack = mesh(new THREE.BoxGeometry(0.52, 0.040, 0.030), bbBeltM);
+    bbBeltBack.position.set(0, 0.46, -0.29);
+    g.add(bbBeltBack);
+    const bbBuckle = mesh(new THREE.BoxGeometry(0.040, 0.052, 0.040), mat(0xD1D5DB, { metalness: 0.44, roughness: 0.36 }));
+    bbBuckle.position.set(0.22, 0.46, 0.30);
+    g.add(bbBuckle);
+    const bbBody = mesh(new THREE.BoxGeometry(0.22, 0.14, 0.08), bbBagM);
+    bbBody.position.set(-0.24, 0.46, 0.32);
+    g.add(bbBody);
+    const bbPocket = mesh(new THREE.BoxGeometry(0.16, 0.10, 0.030), mat(0x2D3748, { roughness: 0.76 }));
+    bbPocket.position.set(-0.24, 0.46, 0.37);
+    g.add(bbPocket);
+    const bbZip = mesh(new THREE.BoxGeometry(0.14, 0.008, 0.032), mat(0xC0C0C0, { metalness: 0.50 }));
+    bbZip.position.set(-0.24, 0.515, 0.375);
+    g.add(bbZip);
+  }
+
+  // Camera (improved)
   if (acc.includes('camera')) {
-    const camM = mat(0x1F2937, { roughness: 0.75 });
-    const body3d = mesh(new THREE.BoxGeometry(0.2, 0.14, 0.1), camM);
-    body3d.position.set(-0.38, 0.76, 0.22);
-    g.add(body3d);
-    const lens3d = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 12), mat(0x374151));
-    lens3d.position.set(-0.38, 0.76, 0.3);
-    lens3d.rotation.x = Math.PI / 2;
-    g.add(lens3d);
-    const strap = mesh(new THREE.BoxGeometry(0.03, 0.32, 0.02), mat(0x92400E));
-    strap.position.set(-0.2, 0.92, 0.18);
-    strap.rotation.z = -0.4;
-    g.add(strap);
+    const camBodyM2 = mat(0x1F2937, { roughness: 0.76 });
+    const camMetalM2 = mat(0x374151, { roughness: 0.48, metalness: 0.18 });
+    const camBody2 = mesh(new THREE.BoxGeometry(0.22, 0.15, 0.11), camBodyM2);
+    camBody2.position.set(-0.38, 0.76, 0.22);
+    g.add(camBody2);
+    const camDial = mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.014, 10), camMetalM2);
+    camDial.position.set(-0.29, 0.848, 0.22);
+    g.add(camDial);
+    const camShutter = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 8), mat(0xEF4444, { roughness: 0.60 }));
+    camShutter.position.set(-0.31, 0.850, 0.250);
+    g.add(camShutter);
+    const camBarrel1 = mesh(new THREE.CylinderGeometry(0.054, 0.058, 0.060, 14), camMetalM2);
+    camBarrel1.position.set(-0.38, 0.76, 0.295);
+    camBarrel1.rotation.x = Math.PI / 2;
+    g.add(camBarrel1);
+    const camBarrel2 = mesh(new THREE.CylinderGeometry(0.046, 0.050, 0.040, 14), camMetalM2);
+    camBarrel2.position.set(-0.38, 0.76, 0.329);
+    camBarrel2.rotation.x = Math.PI / 2;
+    g.add(camBarrel2);
+    const camGlass = mesh(new THREE.CircleGeometry(0.040, 14), mat(0x1E3A5F, { transparent: true, opacity: 0.82, roughness: 0.06 }));
+    camGlass.position.set(-0.38, 0.76, 0.352);
+    g.add(camGlass);
+    const camStrap2 = mesh(new THREE.BoxGeometry(0.028, 0.34, 0.018), mat(0x92400E, { roughness: 0.72 }));
+    camStrap2.position.set(-0.22, 0.92, 0.18);
+    camStrap2.rotation.z = -0.38;
+    g.add(camStrap2);
   }
 
+  // Medal (improved with star motif)
+  if (acc.includes('medal')) {
+    const mdRibM = mat(0xDC2626, { roughness: 0.72 });
+    const mdDiscM = mat(0xFCD34D, { metalness: 0.40, roughness: 0.36 });
+    const mdRib = mesh(new THREE.BoxGeometry(0.050, 0.24, 0.018), mdRibM);
+    mdRib.position.set(0.10, 1.04, 0.31);
+    mdRib.rotation.z = 0.12;
+    g.add(mdRib);
+    const mdDisc = mesh(new THREE.CylinderGeometry(0.092, 0.092, 0.026, 16), mdDiscM);
+    mdDisc.position.set(0.10, 0.89, 0.31);
+    mdDisc.rotation.x = Math.PI / 2;
+    g.add(mdDisc);
+    const mdRim = mesh(new THREE.TorusGeometry(0.092, 0.012, 5, 16), mat(0xD97706, { metalness: 0.42 }));
+    mdRim.position.set(0.10, 0.89, 0.325);
+    g.add(mdRim);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      const ray = mesh(new THREE.BoxGeometry(0.012, 0.062, 0.010), mat(0xD97706, { metalness: 0.36 }));
+      ray.position.set(0.10 + Math.cos(a) * 0.028, 0.89 + Math.sin(a) * 0.028, 0.338);
+      ray.rotation.z = a;
+      g.add(ray);
+    }
+  }
+
+  // Umbrella (improved)
   if (acc.includes('umbrella')) {
-    const dome = mesh(
-      new THREE.SphereGeometry(0.3, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
+    const umbDome = mesh(
+      new THREE.SphereGeometry(0.30, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
       mat(0xEF4444, { roughness: 0.65 }),
     );
-    dome.position.set(-0.8, 1.08, 0);
-    g.add(dome);
-    const pole = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.7, 6), mat(0x94A3B8, { roughness: 0.48, metalness: 0.22 }));
-    pole.position.set(-0.8, 0.72, 0);
-    g.add(pole);
-  }
-
-  if (acc.includes('binoculars')) {
-    const binoM = mat(0x374151, { roughness: 0.7 });
-    for (const sx of [-1, 1]) {
-      const tube = mesh(new THREE.CylinderGeometry(0.067, 0.067, 0.18, 12), binoM);
-      tube.position.set(sx * 0.1, 0.84, 0.28);
-      tube.rotation.x = Math.PI / 2;
-      g.add(tube);
+    umbDome.position.set(-0.80, 1.10, 0);
+    g.add(umbDome);
+    const umbPanelColors = [0xEF4444, 0xFFFDE7, 0xEF4444, 0xFFFDE7];
+    for (let i = 0; i < 4; i++) {
+      const umbPanel = mesh(
+        new THREE.SphereGeometry(0.296, 5, 10, (i / 4) * Math.PI * 2, Math.PI * 0.5, 0, Math.PI * 0.5),
+        mat(umbPanelColors[i], { roughness: 0.68 }),
+      );
+      umbPanel.position.set(-0.80, 1.10, 0);
+      g.add(umbPanel);
     }
-    const bridge2 = mesh(new THREE.BoxGeometry(0.12, 0.06, 0.05), binoM);
-    bridge2.position.set(0, 0.84, 0.28);
-    g.add(bridge2);
-    const binoStrap = mesh(new THREE.BoxGeometry(0.03, 0.26, 0.02), mat(0x92400E));
-    binoStrap.position.set(0, 0.98, 0.22);
-    g.add(binoStrap);
+    for (let i = 0; i < 8; i++) {
+      const sAngle = (i / 8) * Math.PI * 2;
+      const spoke = mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.32, 4), mat(0xD1D5DB, { metalness: 0.30 }));
+      spoke.position.set(-0.80 + Math.sin(sAngle) * 0.14, 1.08, Math.cos(sAngle) * 0.14);
+      spoke.rotation.z = -Math.atan2(Math.cos(sAngle), 0.5);
+      spoke.rotation.x = -Math.atan2(Math.sin(sAngle), 0.5);
+      g.add(spoke);
+    }
+    const umbShaft = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.72, 6), mat(0x94A3B8, { metalness: 0.22, roughness: 0.48 }));
+    umbShaft.position.set(-0.80, 0.72, 0);
+    g.add(umbShaft);
+    const umbHandle = mesh(new THREE.TorusGeometry(0.062, 0.016, 5, 12, Math.PI * 0.9), mat(0x92400E, { roughness: 0.74 }));
+    umbHandle.position.set(-0.80, 0.37, 0);
+    umbHandle.rotation.x = Math.PI / 2;
+    g.add(umbHandle);
   }
 
+  // Binoculars (improved)
+  if (acc.includes('binoculars')) {
+    const binoBodyM = mat(0x374151, { roughness: 0.72 });
+    const binoLensM = mat(0x1E3A5F, { transparent: true, opacity: 0.76, roughness: 0.06 });
+    for (const sx of [-1, 1]) {
+      const binoTube = mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.20, 12), binoBodyM);
+      binoTube.position.set(sx * 0.10, 0.84, 0.28);
+      binoTube.rotation.x = Math.PI / 2;
+      g.add(binoTube);
+      const binoRim = mesh(new THREE.TorusGeometry(0.068, 0.010, 5, 14), mat(0xD1D5DB, { metalness: 0.32 }));
+      binoRim.position.set(sx * 0.10, 0.84, 0.382);
+      g.add(binoRim);
+      const binoLens2 = mesh(new THREE.CircleGeometry(0.058, 14), binoLensM);
+      binoLens2.position.set(sx * 0.10, 0.84, 0.384);
+      g.add(binoLens2);
+      const binoFocusRing = mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.036, 12), mat(0x4B5563, { roughness: 0.68 }));
+      binoFocusRing.position.set(sx * 0.10, 0.84, 0.22);
+      binoFocusRing.rotation.x = Math.PI / 2;
+      g.add(binoFocusRing);
+    }
+    const binoBridge = mesh(new THREE.BoxGeometry(0.12, 0.060, 0.080), binoBodyM);
+    binoBridge.position.set(0, 0.84, 0.26);
+    g.add(binoBridge);
+    const binoWheel = mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.060, 10), mat(0x6B7280, { roughness: 0.62 }));
+    binoWheel.position.set(0, 0.876, 0.26);
+    g.add(binoWheel);
+    const binoStrap2 = mesh(new THREE.BoxGeometry(0.028, 0.28, 0.018), mat(0x92400E, { roughness: 0.72 }));
+    binoStrap2.position.set(0, 0.98, 0.22);
+    g.add(binoStrap2);
+  }
+
+  // Map (improved)
   if (acc.includes('map')) {
-    const mapM = mat(0xFFFDE7, { roughness: 0.82 });
-    const scroll = mesh(new THREE.BoxGeometry(0.22, 0.28, 0.03), mapM);
-    scroll.position.set(0.76, 0.62, 0.1);
-    scroll.rotation.z = -0.2;
-    g.add(scroll);
-    for (const sy of [0.76, 0.48]) {
-      const roll = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.24, 8), mat(0xD97706));
-      roll.position.set(0.76, sy, 0.1);
-      roll.rotation.z = Math.PI / 2;
-      g.add(roll);
+    const mapBodyM = mat(0xFFFDE7, { roughness: 0.82 });
+    const mapLineM = mat(0xC5B358, { roughness: 0.78 });
+    const mapScroll = mesh(new THREE.BoxGeometry(0.24, 0.30, 0.030), mapBodyM);
+    mapScroll.position.set(0.76, 0.62, 0.10);
+    mapScroll.rotation.z = -0.18;
+    g.add(mapScroll);
+    for (let i = 0; i < 3; i++) {
+      const hLine = mesh(new THREE.BoxGeometry(0.20, 0.006, 0.032), mapLineM);
+      hLine.position.set(0.76, 0.66 - i * 0.07, 0.116);
+      hLine.rotation.z = -0.18;
+      g.add(hLine);
+    }
+    for (let i = 0; i < 3; i++) {
+      const vLine = mesh(new THREE.BoxGeometry(0.006, 0.26, 0.032), mapLineM);
+      vLine.position.set(0.68 + i * 0.08, 0.62, 0.116);
+      vLine.rotation.z = -0.18;
+      g.add(vLine);
+    }
+    for (const sy of [0.78, 0.46]) {
+      const mapRoll = mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.26, 8), mat(0xD97706, { roughness: 0.74 }));
+      mapRoll.position.set(0.76, sy, 0.10);
+      mapRoll.rotation.z = Math.PI / 2;
+      g.add(mapRoll);
     }
   }
 
@@ -1457,8 +2037,6 @@ interface Props {
   background?: string;
   /** Optional outfit color override — affects main + bot shades */
   outfitColor?: string;
-  /** ISO-2 codes of countries the user has visited — rendered as flag patches */
-  visitedIsoCodes?: string[];
 }
 
 // Available illustrated background scenes
@@ -1467,7 +2045,7 @@ export const BACKGROUND_KEYS = ['studio','beach','mountain','city','home','fores
 export default function Avatar3D({
   avatar, width = 220, height = 300,
   expression: expressionProp, background = 'studio',
-  outfitColor, visitedIsoCodes,
+  outfitColor,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null);
@@ -1497,16 +2075,13 @@ export default function Avatar3D({
   const effectiveExpression: Expression = expressionProp ?? avatar.expression ?? 'smile';
   const effectiveFaceType: FaceType     = avatar.faceType ?? 'standard';
 
-  const visitedIsoMemo = useMemo(() => visitedIsoCodes ?? [], [visitedIsoCodes]);
-
   const avatarKey = useMemo(() => [
     avatar.hairStyle, avatar.hairColor, avatar.eyeColor,
     avatar.skinColor, avatar.outfit, avatar.user,
     effectiveFaceType, effectiveExpression,
     outfitColor ?? '',
-    visitedIsoMemo.join('|'),
     ...(avatar.accessories ?? []),
-  ].join(','), [avatar, effectiveFaceType, effectiveExpression, outfitColor, visitedIsoMemo]);
+  ].join(','), [avatar, effectiveFaceType, effectiveExpression, outfitColor]);
 
   // Mount: renderer, scene, camera, lights, initial character, RAF loop
   useEffect(() => {
@@ -1561,7 +2136,7 @@ export default function Avatar3D({
     rim.position.set(0, -1, -4);
     scene.add(rim);
 
-    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType, outfitColor, visitedIsoMemo);
+    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType, outfitColor);
     scene.add(char);
     rendererRef.current  = renderer;
     sceneRef.current     = scene;
@@ -1646,7 +2221,7 @@ export default function Avatar3D({
     const scene = sceneRef.current;
     if (!scene) return;
     if (characterRef.current) scene.remove(characterRef.current);
-    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType, outfitColor, visitedIsoMemo);
+    const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType, outfitColor);
     scene.add(char);
     char.rotation.y      = rotYRef.current;
     characterRef.current = char;
