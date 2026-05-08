@@ -70,6 +70,54 @@ const EXPRESSIONS: { value: Expression; label: string }[] = [
   { value: 'thinking',  label: '🤔 Мислещ' },
 ];
 
+const ACCESSORY_CATEGORIES: { label: string; items: { id: string; label: string }[] }[] = [
+  { label: 'Глава', items: [
+    { id: 'cap',          label: '🧢 Бейзболна' },
+    { id: 'winter-hat',   label: '🎩 Зимна' },
+    { id: 'explorer-hat', label: '🤠 Изследовател' },
+    { id: 'crown',        label: '👑 Корона' },
+    { id: 'flower-crown', label: '🌸 Цветна корона' },
+    { id: 'headphones',   label: '🎧 Слушалки' },
+    { id: 'pirate-hat',   label: '☠️ Пиратска' },
+    { id: 'wizard-hat',   label: '🧙 Магьосник' },
+    { id: 'animal-ears',  label: '🐱 Котешки уши' },
+  ]},
+  { label: 'Лице', items: [
+    { id: 'glasses',        label: '🔵 Очила' },
+    { id: 'sunglasses',     label: '😎 Слънчеви' },
+    { id: 'sporty-glasses', label: '🟠 Спортни' },
+    { id: 'ski-goggles',    label: '🎿 Ски' },
+    { id: 'monocle',        label: '🧐 Монокъл' },
+    { id: 'superhero-mask', label: '🦸 Маска' },
+  ]},
+  { label: 'Врат', items: [
+    { id: 'scarf',            label: '🧣 Шал' },
+    { id: 'tie',              label: '👔 Вратовръзка' },
+    { id: 'bow-tie',          label: '🎀 Папийонка' },
+    { id: 'necklace',         label: '📿 Огърлица' },
+    { id: 'compass-necklace', label: '🧭 Компас' },
+  ]},
+  { label: 'Гръб', items: [
+    { id: 'travel-backpack',  label: '🟢 Пътнически' },
+    { id: 'backpack',         label: '🟡 Раница' },
+    { id: 'hiking-backpack',  label: '🏔️ Туристическа' },
+    { id: 'school-backpack',  label: '🎒 Ученическа' },
+    { id: 'guitar-case',      label: '🎸 Китара' },
+    { id: 'butterfly-wings',  label: '🦋 Крила' },
+  ]},
+  { label: 'Тяло', items: [
+    { id: 'watch',      label: '⌚ Часовник' },
+    { id: 'bracelet',   label: '📿 Гривна' },
+    { id: 'gloves',     label: '🧤 Ръкавици' },
+    { id: 'belt-bag',   label: '👜 Чантичка' },
+    { id: 'camera',     label: '📷 Камера' },
+    { id: 'medal',      label: '🥇 Медал' },
+    { id: 'umbrella',   label: '☂️ Чадър' },
+    { id: 'binoculars', label: '🔭 Бинокъл' },
+    { id: 'map',        label: '🗺️ Карта' },
+  ]},
+];
+
 const SKIN_PRESETS = ['#FBBF8A', '#F4A460', '#D2691E', '#8B4513', '#FFDAB9', '#C68642'];
 const HAIR_PRESETS = ['#8B4513', '#1a1a1a', '#D4AF37', '#FF6B35', '#C0C0C0', '#FFFFFF'];
 const EYE_PRESETS  = ['#4B5563', '#3B82F6', '#10B981', '#8B4513', '#6B21A8', '#9CA3AF'];
@@ -109,7 +157,6 @@ export default function AvatarPage() {
   const [tab, setTab]                 = useState<'build' | 'import'>('build');
   const [backgrounds, setBackgrounds] = useState<Record<UserType, string>>({ tati: 'studio', iva: 'studio' });
   const [outfitColors, setOutfitColors] = useState<Record<UserType, string | null>>({ tati: null, iva: null });
-  const [visitedIso, setVisitedIso] = useState<Record<UserType, string[]>>({ tati: [], iva: [] });
 
   // Persist background choice per user in localStorage (no DB column needed)
   useEffect(() => {
@@ -146,20 +193,6 @@ export default function AvatarPage() {
       return next;
     });
   }, [activeUser]);
-
-  // Fetch visited countries — patches show flags of countries the user has visited
-  useEffect(() => {
-    fetch('/api/visits').then(r => r.json()).then(visits => {
-      if (!Array.isArray(visits)) return;
-      const map: Record<UserType, Set<string>> = { tati: new Set(), iva: new Set() };
-      for (const v of visits) {
-        const u = v.user as UserType;
-        const iso = v.country?.isoCode as string | undefined;
-        if (u && iso && map[u]) map[u].add(iso.toUpperCase());
-      }
-      setVisitedIso({ tati: Array.from(map.tati), iva: Array.from(map.iva) });
-    }).catch(() => {});
-  }, []);
 
   // Load persisted data on mount
   useEffect(() => {
@@ -284,7 +317,6 @@ export default function AvatarPage() {
             height={290}
             background={backgrounds[activeUser]}
             outfitColor={outfitColors[activeUser] ?? undefined}
-            visitedIsoCodes={visitedIso[activeUser]}
           />
         )}
       </div>
@@ -449,6 +481,38 @@ export default function AvatarPage() {
                   >
                     {label}
                   </Chip>
+                ))}
+              </div>
+            </Section>
+
+            {/* Accessories */}
+            <Section color={color} label="Аксесоари">
+              <div className="space-y-3">
+                {ACCESSORY_CATEGORIES.map(cat => (
+                  <div key={cat.label}>
+                    <p className="text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wide">{cat.label}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cat.items.map(({ id, label }) => {
+                        const curAcc = cfg.accessories ?? [];
+                        const active = curAcc.includes(id);
+                        return (
+                          <Chip
+                            key={id}
+                            active={active}
+                            color={color}
+                            onClick={() => {
+                              const next = active
+                                ? curAcc.filter(a => a !== id)
+                                : [...curAcc, id];
+                              updateConfig('accessories', next);
+                            }}
+                          >
+                            {label}
+                          </Chip>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ))}
               </div>
             </Section>
