@@ -26,7 +26,7 @@ function getFlagEmoji(iso: string): string {
     );
   } catch { return '🌍'; }
 }
-import XPBar from '@/components/XPBar/XPBar';
+import UserCard from '@/components/XPBar/XPBar';
 import VisitsTable from '@/components/VisitsTable';
 
 const Globe    = dynamic(() => import('@/components/Globe'), { ssr: false });
@@ -197,13 +197,11 @@ export default function Home() {
       {/* User switcher */}
       <div className="flex gap-3 w-full max-w-lg mt-3 px-2">
         {(['tati', 'iva'] as UserType[]).map((user) => (
-          <XPBar
+          <UserCard
             key={user}
             user={user}
-            progress={progress[user]}
             isActive={activeUser === user}
             onClick={() => { sounds.click(); resumeAudio(); setActiveUser(user); }}
-            compact
           />
         ))}
       </div>
@@ -248,19 +246,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap justify-center gap-3 mt-3">
-          {[
-            { color: '#F59E0B', label: `желано от ${USER_DISPLAY.tati}` },
-            { color: '#EC4899', label: `желано от ${USER_DISPLAY.iva}` },
-            { color: '#7C3AED', label: 'желано от двете' },
-          ].map(({ color, label }) => (
-            <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
-              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color }} />
-              {label}
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Fullscreen globe modal */}
