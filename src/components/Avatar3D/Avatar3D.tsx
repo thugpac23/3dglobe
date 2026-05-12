@@ -494,22 +494,12 @@ function buildCharacter(
   headMesh.scale.set(fsx, fsy, fsz);
   headGroup.add(headMesh);
 
-  // Ears — outer shell, inner concha, lobe (gives shape rather than a flat blob)
+  // Ears
   for (const sx of [-1, 1]) {
     const ear = mesh(new THREE.SphereGeometry(0.068, 12, 12), skinM);
     ear.scale.set(0.5, 1.0, 0.55);
     ear.position.set(sx * 0.316 * fsx, 0, 0);
     headGroup.add(ear);
-    // Inner ear (concha) — slightly darker recess
-    const concha = mesh(new THREE.SphereGeometry(0.040, 10, 10), mat(shadeHex(skinHex, -0.14), { roughness: 0.70 }));
-    concha.scale.set(0.30, 0.85, 0.45);
-    concha.position.set(sx * 0.325 * fsx, -0.005, 0.012);
-    headGroup.add(concha);
-    // Ear lobe — small fuller blob at the bottom
-    const lobe = mesh(new THREE.SphereGeometry(0.024, 8, 8), skinM);
-    lobe.scale.set(0.7, 0.9, 0.7);
-    lobe.position.set(sx * 0.314 * fsx, -0.058, 0.006);
-    headGroup.add(lobe);
   }
 
   // ── EYES (coords relative to headGroup center) ──
@@ -517,32 +507,15 @@ function buildCharacter(
   const eyeZ     = 0.27;
   const eyeScale = expression === 'surprised' ? 1.18 : 1.0;
 
-  // Helper: darken a skin hex by a small amount (HSL lightness shift)
-  function shadeHex(base: number, delta: number): number {
-    const c = new THREE.Color(base); const hsl = { h: 0, s: 0, l: 0 };
-    c.getHSL(hsl);
-    return new THREE.Color().setHSL(hsl.h, hsl.s, Math.max(0, Math.min(1, hsl.l + delta))).getHex();
-  }
-  const skinShadowHex   = shadeHex(skinHex, -0.10);
-  const skinDeepHex     = shadeHex(skinHex, -0.18);
-  const skinLipHex      = shadeHex(skinHex, -0.22);
-  const skinHighlightHex= shadeHex(skinHex, +0.08);
-
-  // Iris rim color — darker than iris for depth
-  const irisRingHex = (() => {
-    const c = new THREE.Color(eyeHex); const hsl = { h: 0, s: 0, l: 0 };
-    c.getHSL(hsl);
-    return new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s + 0.15), Math.max(0, hsl.l - 0.20)).getHex();
+  // Lip color — slight warm darkening of skin
+  const lipHex = (() => {
+    const c = new THREE.Color(skinHex); const h = { h: 0, s: 0, l: 0 };
+    c.getHSL(h);
+    return new THREE.Color().setHSL(h.h, Math.min(1, h.s + 0.05), Math.max(0, h.l - 0.14)).getHex();
   })();
 
   for (const sx of [-1, 1]) {
     const ex = sx * 0.113;
-
-    // Eye socket shadow — subtle darker recess around the eye
-    const socket = mesh(new THREE.SphereGeometry(0.084, 12, 10), mat(skinShadowHex, { roughness: 0.66 }));
-    socket.scale.set(1.10, 0.62, 0.28);
-    socket.position.set(ex, eyeBaseY - 0.004, eyeZ - 0.020);
-    headGroup.add(socket);
 
     // Eye white (sclera)
     const w = mesh(new THREE.SphereGeometry(0.062, 14, 12), whiteM);
@@ -556,37 +529,16 @@ function buildCharacter(
     iris.position.set(ex, eyeBaseY, eyeZ + 0.026);
     headGroup.add(iris);
 
-    // Iris outer rim — darker ring for depth & realism
-    const irisRing = mesh(new THREE.TorusGeometry(0.038, 0.006, 5, 18), mat(irisRingHex, { roughness: 0.30 }));
-    irisRing.position.set(ex, eyeBaseY, eyeZ + 0.040);
-    headGroup.add(irisRing);
-
     // Pupil
     const pupil = mesh(new THREE.SphereGeometry(0.019, 10, 10), mat(0x0a0a0a, { roughness: 0.14 }));
     pupil.scale.setScalar(eyeScale);
     pupil.position.set(ex, eyeBaseY, eyeZ + 0.043);
     headGroup.add(pupil);
 
-    // Primary specular highlight (catch-light)
+    // Specular highlight (catch-light)
     const spec = mesh(new THREE.SphereGeometry(0.009, 6, 6), mat(0xffffff, { roughness: 0.04, metalness: 0.24 }));
     spec.position.set(ex + 0.016 * sx, eyeBaseY + 0.022, eyeZ + 0.050);
     headGroup.add(spec);
-    // Secondary smaller highlight on opposite side
-    const spec2 = mesh(new THREE.SphereGeometry(0.004, 5, 5), mat(0xffffff, { roughness: 0.05, metalness: 0.20 }));
-    spec2.position.set(ex - 0.020 * sx, eyeBaseY - 0.014, eyeZ + 0.048);
-    headGroup.add(spec2);
-
-    // Tear duct (pink at inner corner)
-    const tearDuct = mesh(new THREE.SphereGeometry(0.013, 7, 6), mat(0xF87171, { roughness: 0.58 }));
-    tearDuct.scale.set(0.7, 0.6, 0.45);
-    tearDuct.position.set(ex - sx * 0.060, eyeBaseY + 0.002, eyeZ + 0.020);
-    headGroup.add(tearDuct);
-
-    // Lower eyelid line — subtle skin crease below the eye
-    const lowerLid = mesh(new THREE.BoxGeometry(0.130, 0.010, 0.008), mat(skinDeepHex, { roughness: 0.74 }));
-    lowerLid.position.set(ex, eyeBaseY - 0.050, eyeZ + 0.022);
-    lowerLid.rotation.z = -sx * 0.06;
-    headGroup.add(lowerLid);
   }
 
   // ── EYELIDS — for blink animation ──
@@ -616,128 +568,47 @@ function buildCharacter(
     }
   }
 
-  // ── NOSE — bridge + tip + nostrils + highlight ──
-  const noseSkinM = mat(skinHex, { roughness: 0.50 });
-  // Bridge — tapered cylinder running from between the eyes down to the tip
-  const noseBridge = mesh(new THREE.CylinderGeometry(0.018, 0.028, 0.13, 10), noseSkinM);
-  noseBridge.position.set(0, 0.005, 0.308);
-  noseBridge.rotation.x = 0.20;
-  headGroup.add(noseBridge);
-  // Tip — slightly squashed sphere
-  const noseTip = mesh(new THREE.SphereGeometry(0.040, 12, 10), noseSkinM);
-  noseTip.scale.set(1.05, 0.85, 1.10);
-  noseTip.position.set(0, -0.060, 0.322);
-  headGroup.add(noseTip);
-  // Wings of the nostrils — small bumps either side
-  for (const sx of [-1, 1]) {
-    const wing = mesh(new THREE.SphereGeometry(0.024, 8, 7), mat(skinShadowHex, { roughness: 0.58 }));
-    wing.scale.set(0.95, 0.70, 0.85);
-    wing.position.set(sx * 0.028, -0.062, 0.310);
-    headGroup.add(wing);
-  }
-  // Nostrils — small darker spheres on underside
-  for (const sx of [-1, 1]) {
-    const nostril = mesh(new THREE.SphereGeometry(0.010, 7, 6), mat(skinDeepHex, { roughness: 0.78 }));
-    nostril.scale.set(1, 0.5, 1.3);
-    nostril.position.set(sx * 0.014, -0.082, 0.330);
-    headGroup.add(nostril);
-  }
-  // Bridge highlight — subtle specular line down the bridge
-  const noseHi = mesh(new THREE.BoxGeometry(0.008, 0.080, 0.005), mat(0xFFFFFF, { transparent: true, opacity: 0.12, roughness: 0.20 }));
-  noseHi.position.set(0, -0.012, 0.342);
-  noseHi.rotation.x = 0.18;
-  headGroup.add(noseHi);
+  // ── NOSE ──
+  const nose = mesh(new THREE.SphereGeometry(0.038, 12, 10), skinM);
+  nose.scale.set(1.05, 0.80, 1.10);
+  nose.position.set(0, -0.05, 0.31);
+  headGroup.add(nose);
 
   // ── MOUTH — expression-specific ──
   const mouthY = -0.13;
   const mouthZ = 0.3;
-
-  const lipM      = mat(skinLipHex, { roughness: 0.48 });
-  const lipDarkM  = mat(shadeHex(skinLipHex, -0.06), { roughness: 0.54 });
+  const lipM = mat(lipHex, { roughness: 0.52 });
 
   if (expression === 'smile') {
-    // Upper lip (thinner, slightly darker)
-    const upperLip = mesh(new THREE.SphereGeometry(0.026, 12, 8), lipDarkM);
-    upperLip.scale.set(2.6, 0.50, 0.85);
-    upperLip.position.set(0, mouthY + 0.014, mouthZ);
-    headGroup.add(upperLip);
-    // Cupid's bow dip in the middle of upper lip
-    const cupidsBow = mesh(new THREE.SphereGeometry(0.010, 6, 6), mat(skinShadowHex, { roughness: 0.65 }));
-    cupidsBow.scale.set(0.8, 0.5, 0.5);
-    cupidsBow.position.set(0, mouthY + 0.022, mouthZ + 0.003);
-    headGroup.add(cupidsBow);
-    // Lower lip (fuller)
-    const lowerLip = mesh(new THREE.SphereGeometry(0.026, 12, 8), lipM);
-    lowerLip.scale.set(2.85, 0.72, 0.92);
-    lowerLip.position.set(0, mouthY - 0.020, mouthZ + 0.004);
-    headGroup.add(lowerLip);
-    // Smile crease — the actual mouth line between the lips
     const curve = new THREE.QuadraticBezierCurve3(
-      new THREE.Vector3(-0.108, mouthY, mouthZ + 0.002),
-      new THREE.Vector3(0, mouthY - 0.028, mouthZ + 0.022),
-      new THREE.Vector3(0.108, mouthY, mouthZ + 0.002),
+      new THREE.Vector3(-0.094, mouthY, mouthZ + 0.002),
+      new THREE.Vector3(0, mouthY - 0.030, mouthZ + 0.022),
+      new THREE.Vector3(0.094, mouthY, mouthZ + 0.002),
     );
-    const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(16));
-    headGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x5A2128 })));
-    // Hint of teeth (thin white strip just under upper lip)
-    const teeth = mesh(new THREE.BoxGeometry(0.10, 0.012, 0.006), mat(0xFFFAEC, { roughness: 0.30 }));
-    teeth.position.set(0, mouthY - 0.005, mouthZ + 0.014);
-    headGroup.add(teeth);
-    // Lower-lip highlight (subtle gloss)
-    const lipHi = mesh(new THREE.BoxGeometry(0.060, 0.006, 0.004), mat(0xFFFFFF, { transparent: true, opacity: 0.22, roughness: 0.10 }));
-    lipHi.position.set(0, mouthY - 0.018, mouthZ + 0.032);
-    headGroup.add(lipHi);
+    const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(14));
+    headGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x7A3030 })));
   } else if (expression === 'neutral') {
-    // Resting upper lip
-    const upperLip = mesh(new THREE.SphereGeometry(0.024, 10, 8), lipDarkM);
-    upperLip.scale.set(2.6, 0.40, 0.80);
-    upperLip.position.set(0, mouthY + 0.012, mouthZ);
-    headGroup.add(upperLip);
-    // Resting lower lip
-    const lowerLip = mesh(new THREE.SphereGeometry(0.024, 10, 8), lipM);
-    lowerLip.scale.set(2.7, 0.55, 0.86);
-    lowerLip.position.set(0, mouthY - 0.014, mouthZ + 0.003);
-    headGroup.add(lowerLip);
-    // Mouth seam
-    const pts = [new THREE.Vector3(-0.090, mouthY, mouthZ + 0.002), new THREE.Vector3(0.090, mouthY, mouthZ + 0.002)];
+    const pts = [new THREE.Vector3(-0.082, mouthY, mouthZ + 0.002), new THREE.Vector3(0.082, mouthY, mouthZ + 0.002)];
     headGroup.add(new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({ color: 0x5A2128 }),
+      new THREE.LineBasicMaterial({ color: 0x7A3030 }),
     ));
   } else if (expression === 'surprised') {
-    // Open-mouth ring (lips around an "O")
     const oval = mesh(new THREE.TorusGeometry(0.054, 0.020, 10, 20), lipM);
     oval.scale.y = 1.35;
     oval.position.set(0, mouthY - 0.020, mouthZ + 0.005);
     headGroup.add(oval);
-    // Dark inner mouth
     const inner = mesh(new THREE.CircleGeometry(0.040, 16), mat(0x1A0606));
     inner.position.set(0, mouthY - 0.020, mouthZ + 0.020);
     headGroup.add(inner);
-    // Top teeth row hint inside the mouth
-    const topTeeth = mesh(new THREE.BoxGeometry(0.060, 0.010, 0.006), mat(0xFFFAEC, { roughness: 0.28 }));
-    topTeeth.position.set(0, mouthY + 0.005, mouthZ + 0.024);
-    headGroup.add(topTeeth);
   } else if (expression === 'thinking') {
-    // Asymmetric pursed lips
-    const upperLip = mesh(new THREE.SphereGeometry(0.022, 10, 8), lipDarkM);
-    upperLip.scale.set(2.3, 0.40, 0.80);
-    upperLip.position.set(0.012, mouthY + 0.012, mouthZ);
-    upperLip.rotation.z = 0.04;
-    headGroup.add(upperLip);
-    const lowerLip = mesh(new THREE.SphereGeometry(0.022, 10, 8), lipM);
-    lowerLip.scale.set(2.4, 0.55, 0.86);
-    lowerLip.position.set(0.014, mouthY - 0.014, mouthZ + 0.003);
-    lowerLip.rotation.z = 0.04;
-    headGroup.add(lowerLip);
-    // Subtle asymmetric crease line (slight smirk)
     const curve = new THREE.QuadraticBezierCurve3(
       new THREE.Vector3(-0.052, mouthY, mouthZ + 0.002),
       new THREE.Vector3(0.026, mouthY - 0.012, mouthZ + 0.018),
       new THREE.Vector3(0.100, mouthY - 0.006, mouthZ + 0.002),
     );
     const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(12));
-    headGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x5A2128 })));
+    headGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x7A3030 })));
   }
 
   // ── EYEBROWS — expression-specific ──
@@ -761,41 +632,17 @@ function buildCharacter(
     brow.rotation.z = Math.PI / 2 + z;
     brow.position.set(x, y, 0.286);
     headGroup.add(brow);
-    // Subtle brow shadow underneath (skin tone darker)
-    const browShadow = mesh(new THREE.BoxGeometry(0.118, 0.010, 0.008), mat(skinShadowHex, { roughness: 0.68 }));
-    browShadow.position.set(x, y - 0.016, 0.288);
-    browShadow.rotation.z = z;
-    headGroup.add(browShadow);
   }
 
-  // ── CHEEKS — subtle warmth + cheekbone highlight ──
-  for (const sx of [-1, 1]) {
-    // Cheek blush — translucent rosy patch
-    const blush = mesh(new THREE.SphereGeometry(0.060, 12, 8), mat(0xFB7185, { transparent: true, opacity: 0.22, roughness: 0.85 }));
-    blush.scale.set(1.15, 0.62, 0.18);
-    blush.position.set(sx * 0.165, -0.030, 0.290);
-    headGroup.add(blush);
-    // Cheekbone highlight (subtle skin bump for structure)
-    const cheekbone = mesh(new THREE.SphereGeometry(0.044, 10, 8), mat(skinHighlightHex, { roughness: 0.58 }));
-    cheekbone.scale.set(1.05, 0.55, 0.20);
-    cheekbone.position.set(sx * 0.180, 0.020, 0.286);
-    headGroup.add(cheekbone);
+  // ── CHEEKS — pink blush for Ива only ──
+  if (!isMale) {
+    for (const sx of [-1, 1]) {
+      const blush = mesh(new THREE.SphereGeometry(0.060, 12, 8), mat(0xFB7185, { transparent: true, opacity: 0.22, roughness: 0.85 }));
+      blush.scale.set(1.15, 0.62, 0.18);
+      blush.position.set(sx * 0.165, -0.030, 0.290);
+      headGroup.add(blush);
+    }
   }
-
-  // ── CHIN — slight definition under the mouth ──
-  const chin = mesh(new THREE.SphereGeometry(0.060, 12, 10), mat(skinHex, { roughness: 0.54 }));
-  chin.scale.set(1.30, 0.55, 0.45);
-  chin.position.set(0, -0.215, 0.272);
-  headGroup.add(chin);
-  // Chin shadow line for definition
-  const chinShadow = mesh(new THREE.BoxGeometry(0.044, 0.008, 0.005), mat(skinDeepHex, { roughness: 0.72 }));
-  chinShadow.position.set(0, -0.185, 0.302);
-  headGroup.add(chinShadow);
-
-  // ── PHILTRUM — subtle vertical groove between nose and upper lip ──
-  const philtrum = mesh(new THREE.BoxGeometry(0.006, 0.034, 0.004), mat(skinShadowHex, { roughness: 0.70 }));
-  philtrum.position.set(0, mouthY + 0.040, mouthZ + 0.004);
-  headGroup.add(philtrum);
 
   // ── NINJA FACE MASK ──
   if (outfit === 'ninja') {
@@ -1021,20 +868,6 @@ function buildCharacter(
       headGroup.add(flare);
     }
 
-    // ── HAIR SHEEN — soft top highlight (catches light, suggests glossy hair) ──
-    const hairSheen = mesh(
-      new THREE.SphereGeometry(0.312, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.22),
-      mat(0xFFFFFF, { transparent: true, opacity: 0.16, roughness: 0.28, metalness: 0.08 }),
-    );
-    hairSheen.position.set(0, 0.06, 0.01);
-    headGroup.add(hairSheen);
-    // Secondary darker shade strands for depth on front-top of hair
-    const hairDeep = mesh(
-      new THREE.SphereGeometry(0.300, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.18),
-      mat(shadeHex(hairHex, -0.10), { transparent: true, opacity: 0.50, roughness: 0.76 }),
-    );
-    hairDeep.position.set(0, 0.02, -0.04);
-    headGroup.add(hairDeep);
   } else {
     // Bald shine
     const shine = mesh(

@@ -93,3 +93,17 @@ model Setting {
 
   @@map("settings")
 }
+
+model DiaryEntry {
+  id        String   @id @default(cuid())
+  user      User
+  title     String
+  content   String
+  date      DateTime @default(now())
+  photoUrl  String?
+  photoX    Float    @default(50)
+  photoY    Float    @default(50)
+  photoRot  Float    @default(-3)
+
+  @@map("diary_entries")
+}
