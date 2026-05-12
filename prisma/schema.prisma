@@ -95,15 +95,27 @@ model Setting {
 }
 
 model DiaryEntry {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   user      User
   title     String
   content   String
-  date      DateTime @default(now())
-  photoUrl  String?
-  photoX    Float    @default(50)
-  photoY    Float    @default(50)
-  photoRot  Float    @default(-3)
+  date      DateTime     @default(now())
+  photos    DiaryPhoto[]
 
   @@map("diary_entries")
+}
+
+model DiaryPhoto {
+  id           String     @id @default(cuid())
+  diaryEntryId String
+  url          String
+  positionX    Float      @default(50)
+  positionY    Float      @default(20)
+  rotation     Float      @default(-3)
+  caption      String     @default("")
+  createdAt    DateTime   @default(now())
+  diaryEntry   DiaryEntry @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+
+  @@index([diaryEntryId])
+  @@map("diary_photos")
 }

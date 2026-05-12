@@ -1,8 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { UserType, USER_DISPLAY, USER_COLOR } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
+
+interface DiaryPhoto {
+  id: string;
+  diaryEntryId: string;
+  url: string;
+  positionX: number;
+  positionY: number;
+  rotation: number;
+  caption: string;
+}
 
 interface DiaryEntry {
   id: string;
@@ -10,111 +20,278 @@ interface DiaryEntry {
   title: string;
   content: string;
   date: string;
-  photoUrl: string | null;
-  photoX: number;
-  photoY: number;
-  photoRot: number;
+  photos: DiaryPhoto[];
 }
 
-// Draggable polaroid component
-function Polaroid({
-  entry,
-  onMove,
-  onRotate,
-}: {
-  entry: DiaryEntry;
-  onMove: (id: string, x: number, y: number) => void;
-  onRotate: (id: string, rot: number) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null);
+// ── Image compression: resize to max 1200px and JPEG quality 0.82 ──
+async function compressImage(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = dataUrl;
+  });
+  const ratio = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const w = Math.round(img.width * ratio);
+  const h = Math.round(img.height * ratio);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas 2d unavailable');
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+// ── Polaroid: floated element with shape-outside for text reflow + drag ──
+function Polaroid({
+  photo,
+  side,
+  marginTop,
+  onUpdate,
+  onDelete,
+  containerRef,
+}: {
+  photo: DiaryPhoto;
+  side: 'left' | 'right';
+  marginTop: number;
+  onUpdate: (id: string, patch: Partial<DiaryPhoto>) => void;
+  onDelete: (id: string) => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const polRef = useRef<HTMLDivElement>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+  const [editingCaption, setEditingCaption] = useState(false);
+  const [captionDraft, setCaptionDraft] = useState(photo.caption);
+
+  useEffect(() => { setCaptionDraft(photo.caption); }, [photo.caption]);
+
+  const beginDrag = useCallback((clientX: number, clientY: number) => {
+    dragState.current = {
+      startX: clientX,
+      startY: clientY,
+      baseX: photo.positionX,
+      baseY: photo.positionY,
+    };
+    setDragOffset({ x: 0, y: 0 });
+  }, [photo.positionX, photo.positionY]);
+
+  const moveDrag = useCallback((clientX: number, clientY: number) => {
+    if (!dragState.current) return;
+    setDragOffset({
+      x: clientX - dragState.current.startX,
+      y: clientY - dragState.current.startY,
+    });
+  }, []);
+
+  const endDrag = useCallback((clientX: number, clientY: number) => {
+    if (!dragState.current || !containerRef.current) {
+      dragState.current = null;
+      setDragOffset(null);
+      return;
+    }
+    const rect = containerRef.current.getBoundingClientRect();
+    const relX = clientX - rect.left;
+    const relY = clientY - rect.top;
+    const newX = Math.max(0, Math.min(100, (relX / rect.width) * 100));
+    const newY = Math.max(0, Math.min(100, (relY / rect.height) * 100));
+    dragState.current = null;
+    setDragOffset(null);
+    onUpdate(photo.id, { positionX: newX, positionY: newY });
+  }, [containerRef, onUpdate, photo.id]);
+
+  // Mouse drag
+  const onMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.polaroid-no-drag')) return;
     e.preventDefault();
-    dragStart.current = { mx: e.clientX, my: e.clientY, ox: entry.photoX, oy: entry.photoY };
-    const handleDrag = (ev: MouseEvent) => {
-      if (!dragStart.current) return;
-      const dx = ev.clientX - dragStart.current.mx;
-      const dy = ev.clientY - dragStart.current.my;
-      onMove(entry.id, dragStart.current.ox + dx * 0.15, dragStart.current.oy + dy * 0.15);
-    };
-    const onUp = () => {
-      dragStart.current = null;
-      window.removeEventListener('mousemove', handleDrag);
+    beginDrag(e.clientX, e.clientY);
+    const onMove = (ev: MouseEvent) => moveDrag(ev.clientX, ev.clientY);
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      endDrag(ev.clientX, ev.clientY);
     };
-    window.addEventListener('mousemove', handleDrag);
+    window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  // Touch drag
+  const onTouchStart = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('.polaroid-no-drag')) return;
     const t = e.touches[0];
-    dragStart.current = { mx: t.clientX, my: t.clientY, ox: entry.photoX, oy: entry.photoY };
-    const onTouchMove = (ev: TouchEvent) => {
-      if (!dragStart.current) return;
-      const touch = ev.touches[0];
-      const dx = touch.clientX - dragStart.current.mx;
-      const dy = touch.clientY - dragStart.current.my;
-      onMove(entry.id, dragStart.current.ox + dx * 0.15, dragStart.current.oy + dy * 0.15);
+    beginDrag(t.clientX, t.clientY);
+    const onMove = (ev: TouchEvent) => {
+      ev.preventDefault();
+      const tt = ev.touches[0];
+      moveDrag(tt.clientX, tt.clientY);
     };
-    const onTouchEnd = () => {
-      dragStart.current = null;
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
+    const onUp = (ev: TouchEvent) => {
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+      window.removeEventListener('touchcancel', onUp);
+      const tt = ev.changedTouches[0];
+      endDrag(tt.clientX, tt.clientY);
     };
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+    window.addEventListener('touchcancel', onUp);
   };
 
-  if (!entry.photoUrl) return null;
+  const commitCaption = () => {
+    setEditingCaption(false);
+    if (captionDraft !== photo.caption) onUpdate(photo.id, { caption: captionDraft });
+  };
 
+  // The wrapper is in document flow (floated) so text reflows.
+  // The visible polaroid inside is rotated; while dragging it uses
+  // transform translate for smooth visual feedback before commit.
   return (
     <div
-      ref={ref}
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
-      className="absolute select-none cursor-grab active:cursor-grabbing"
+      ref={wrapperRef}
       style={{
-        left: `${Math.max(0, Math.min(80, entry.photoX))}%`,
-        top: `${Math.max(0, Math.min(80, entry.photoY))}%`,
-        transform: `rotate(${entry.photoRot}deg)`,
-        zIndex: 10,
-        filter: 'drop-shadow(2px 4px 8px rgba(0,0,0,0.22))',
-      }}
-      title="Плъзни поляроида"
+        float: side,
+        clear: 'both',
+        width: 152,
+        height: 196,
+        marginTop,
+        marginLeft: side === 'left' ? 0 : 18,
+        marginRight: side === 'right' ? 0 : 18,
+        marginBottom: 14,
+        shapeOutside: 'margin-box',
+        WebkitShapeOutside: 'margin-box',
+      } as React.CSSProperties}
     >
-      {/* Tape strip */}
-      <div style={{
-        position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
-        width: 48, height: 18,
-        background: 'rgba(255,255,190,0.72)',
-        borderRadius: 2,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-        zIndex: 11,
-      }} />
-      {/* Polaroid frame */}
-      <div style={{
-        background: 'white',
-        padding: '6px 6px 20px 6px',
-        boxShadow: '1px 2px 8px rgba(0,0,0,0.18)',
-        border: '1px solid #e5e7eb',
-        borderRadius: 2,
-        width: 120,
-      }}>
+      <div
+        ref={polRef}
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+        className="select-none"
+        style={{
+          width: 152,
+          background: 'white',
+          padding: '8px 8px 28px 8px',
+          boxShadow: dragOffset
+            ? '0 14px 30px rgba(0,0,0,0.32)'
+            : '2px 4px 12px rgba(0,0,0,0.18)',
+          border: '1px solid rgba(0,0,0,0.06)',
+          borderRadius: 2,
+          position: 'relative',
+          cursor: dragOffset ? 'grabbing' : 'grab',
+          transform: `rotate(${photo.rotation}deg) translate(${dragOffset?.x ?? 0}px, ${dragOffset?.y ?? 0}px)`,
+          transition: dragOffset ? 'none' : 'transform 0.25s ease, box-shadow 0.2s',
+          zIndex: dragOffset ? 50 : 1,
+          touchAction: 'none',
+        }}
+        title="Плъзни поляроида"
+      >
+        {/* Tape strip on top */}
+        <div style={{
+          position: 'absolute',
+          top: -10,
+          left: '50%',
+          transform: 'translateX(-50%) rotate(-4deg)',
+          width: 64,
+          height: 20,
+          background: 'rgba(255, 240, 160, 0.72)',
+          borderLeft: '1px dashed rgba(0,0,0,0.05)',
+          borderRight: '1px dashed rgba(0,0,0,0.05)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
+          zIndex: 2,
+        }} />
+
+        {/* Photo */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={entry.photoUrl}
-          alt={entry.title}
-          style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }}
+          src={photo.url}
+          alt={photo.caption || 'Спомен'}
           draggable={false}
+          style={{
+            width: '100%',
+            height: 124,
+            objectFit: 'cover',
+            display: 'block',
+            background: '#f4f4f4',
+          }}
         />
+
+        {/* Caption (handwritten) */}
+        <div className="polaroid-no-drag" style={{ marginTop: 6, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {editingCaption ? (
+            <input
+              autoFocus
+              value={captionDraft}
+              onChange={(e) => setCaptionDraft(e.target.value)}
+              onBlur={commitCaption}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitCaption(); }}
+              placeholder="Място / описание"
+              className="diary-font"
+              style={{
+                width: '100%',
+                fontSize: 17,
+                textAlign: 'center',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#2D1B0E',
+              }}
+            />
+          ) : (
+            <div
+              onClick={(e) => { e.stopPropagation(); setEditingCaption(true); }}
+              className="diary-font"
+              style={{
+                width: '100%',
+                fontSize: 17,
+                textAlign: 'center',
+                color: photo.caption ? '#2D1B0E' : '#A89478',
+                cursor: 'text',
+                lineHeight: 1.1,
+              }}
+            >
+              {photo.caption || '…'}
+            </div>
+          )}
+        </div>
+
+        {/* Delete button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(photo.id); }}
+          className="polaroid-no-drag"
+          style={{
+            position: 'absolute',
+            top: -8,
+            right: -8,
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background: 'rgba(220,38,38,0.95)',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 13,
+            lineHeight: 1,
+            zIndex: 3,
+            boxShadow: '0 2px 5px rgba(0,0,0,0.18)',
+          }}
+          title="Изтрий снимката"
+        >
+          ✕
+        </button>
       </div>
     </div>
   );
 }
 
-// Lined notebook paper background lines
-function NotebookLines({ lineCount = 24 }: { lineCount?: number }) {
+// ── Notebook paper background ──
+function NotebookLines({ height }: { height: number }) {
+  const lineCount = Math.ceil(height / 30);
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
       {Array.from({ length: lineCount }).map((_, i) => (
@@ -122,19 +299,183 @@ function NotebookLines({ lineCount = 24 }: { lineCount?: number }) {
           key={i}
           style={{
             position: 'absolute',
-            left: 52,
-            right: 12,
-            top: 60 + i * 28,
+            left: 56,
+            right: 14,
+            top: 64 + i * 30,
             height: 1,
-            background: 'rgba(100,149,237,0.18)',
+            background: 'rgba(100, 149, 237, 0.26)',
           }}
         />
       ))}
-      {/* Red margin line */}
       <div style={{
-        position: 'absolute', top: 0, bottom: 0, left: 48, width: 1,
-        background: 'rgba(220,80,80,0.22)',
+        position: 'absolute', top: 0, bottom: 0, left: 52, width: 1.5,
+        background: 'rgba(220,80,80,0.35)',
       }} />
+      {/* Margin holes (decorative) */}
+      {[0.2, 0.5, 0.8].map((y) => (
+        <div key={y} style={{
+          position: 'absolute', top: `${y * 100}%`, left: 18,
+          width: 14, height: 14, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.6)',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.12)',
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ── Entry card with reflowing text + floated polaroids ──
+function DiaryEntryCard({
+  entry,
+  rotation,
+  onEdit,
+  onDelete,
+  onAddPhoto,
+  onUpdatePhoto,
+  onDeletePhoto,
+}: {
+  entry: DiaryEntry;
+  rotation: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  onAddPhoto: (file: File) => Promise<void>;
+  onUpdatePhoto: (photoId: string, patch: Partial<DiaryPhoto>) => void;
+  onDeletePhoto: (photoId: string) => void;
+}) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // Sort photos by positionY ascending so vertical order matches drag intent.
+  // shape-outside on float wrapper handles text reflow.
+  const sortedPhotos = useMemo(() => {
+    return [...entry.photos].sort((a, b) => a.positionY - b.positionY);
+  }, [entry.photos]);
+
+  // Approximate margin-top per photo. positionY 0..100 maps to 0..~340px.
+  // Multiple photos on same side stack via float + clear:both; their effective
+  // vertical position is set by their order + margin-top relative to the
+  // previous floated item on that side.
+  const photoLayout = useMemo(() => {
+    const lastY: Record<'left' | 'right', number> = { left: 0, right: 0 };
+    return sortedPhotos.map((p) => {
+      const side: 'left' | 'right' = p.positionX < 50 ? 'left' : 'right';
+      const targetTop = (p.positionY / 100) * 340;
+      const gap = Math.max(0, targetTop - lastY[side]);
+      lastY[side] = targetTop + 196;
+      return { photo: p, side, marginTop: gap };
+    });
+  }, [sortedPhotos]);
+
+  const formatDate = (d: string) => {
+    try {
+      return new Date(d).toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' });
+    } catch { return d; }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await onAddPhoto(file);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden"
+      style={{
+        background: '#FFF9EE',
+        backgroundImage: 'linear-gradient(135deg, #FFF9EE 0%, #F8F2DF 100%)',
+        border: '1px solid rgba(0,0,0,0.08)',
+        boxShadow: '3px 5px 18px rgba(70,40,15,0.12)',
+        transform: `rotate(${rotation}deg)`,
+        padding: '28px 28px 26px 76px',
+        minHeight: 320,
+      }}
+    >
+      <NotebookLines height={contentRef.current?.scrollHeight ?? 320} />
+
+      <div className="relative" style={{ zIndex: 1 }} ref={contentRef}>
+        {/* Date */}
+        <div className="diary-font" style={{ color: '#B08050', fontSize: 16, marginBottom: 2 }}>
+          {formatDate(entry.date)}
+        </div>
+        {/* Title */}
+        <h3 className="diary-font font-bold" style={{ fontSize: 30, color: '#2D1B0E', lineHeight: 1.15, marginBottom: 12 }}>
+          {entry.title}
+        </h3>
+
+        {/* Floated polaroids + flowing text. Order: photos first, then text.
+            shape-outside makes text wrap around each photo's margin box. */}
+        <div style={{ overflow: 'hidden' }}>
+          {photoLayout.map(({ photo, side, marginTop }) => (
+            <Polaroid
+              key={photo.id}
+              photo={photo}
+              side={side}
+              marginTop={marginTop}
+              onUpdate={onUpdatePhoto}
+              onDelete={onDeletePhoto}
+              containerRef={contentRef}
+            />
+          ))}
+          <div
+            className="diary-font"
+            style={{
+              fontSize: 19,
+              color: '#2D1B0E',
+              lineHeight: '30px',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {entry.content}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 mt-5 flex-wrap" style={{ clear: 'both' }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="diary-font px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              background: 'rgba(34,197,94,0.10)',
+              color: '#15803D',
+              fontSize: 16,
+              opacity: uploading ? 0.6 : 1,
+            }}
+          >
+            {uploading ? 'Качване…' : '📷 Добави снимка'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={onEdit}
+            className="diary-font px-3 py-1.5 rounded-lg transition-all"
+            style={{ background: 'rgba(0,0,0,0.06)', color: '#5C3D1A', fontSize: 16 }}
+          >
+            ✏️ Редактирай
+          </button>
+          <button
+            onClick={onDelete}
+            className="diary-font px-3 py-1.5 rounded-lg transition-all"
+            style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626', fontSize: 16 }}
+          >
+            🗑️ Изтрий
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -151,7 +492,7 @@ export default function DnevnikPage() {
   useEffect(() => {
     fetch('/api/diary')
       .then(r => r.ok ? r.json() : [])
-      .then(setEntries)
+      .then((data) => setEntries(data.map((e: DiaryEntry) => ({ ...e, photos: e.photos ?? [] }))))
       .catch(() => setEntries([]))
       .finally(() => setLoading(false));
   }, []);
@@ -170,7 +511,7 @@ export default function DnevnikPage() {
         });
         if (r.ok) {
           const updated = await r.json();
-          setEntries(p => p.map(e => e.id === editingId ? { ...e, ...updated } : e));
+          setEntries(p => p.map(e => e.id === editingId ? { ...e, ...updated, photos: updated.photos ?? e.photos } : e));
         }
       } else {
         const r = await fetch('/api/diary', {
@@ -180,7 +521,7 @@ export default function DnevnikPage() {
         });
         if (r.ok) {
           const created = await r.json();
-          setEntries(p => [created, ...p]);
+          setEntries(p => [{ ...created, photos: created.photos ?? [] }, ...p]);
         }
       }
       setShowForm(false);
@@ -191,17 +532,9 @@ export default function DnevnikPage() {
   }, [form, editingId, activeUser]);
 
   const handleDelete = useCallback(async (id: string) => {
+    if (!window.confirm('Сигурен ли си, че искаш да изтриеш този запис?')) return;
     await fetch(`/api/diary/${id}`, { method: 'DELETE' });
     setEntries(p => p.filter(e => e.id !== id));
-  }, []);
-
-  const handlePolaroidMove = useCallback(async (id: string, x: number, y: number) => {
-    setEntries(p => p.map(e => e.id === id ? { ...e, photoX: x, photoY: y } : e));
-    await fetch(`/api/diary/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ photoX: x, photoY: y }),
-    });
   }, []);
 
   const startEdit = (entry: DiaryEntry) => {
@@ -210,27 +543,66 @@ export default function DnevnikPage() {
     setShowForm(true);
   };
 
-  const formatDate = (d: string) => {
+  // ── Photo handlers ──
+  const handleAddPhoto = useCallback(async (entryId: string, file: File) => {
     try {
-      return new Date(d).toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' });
-    } catch { return d; }
-  };
+      const url = await compressImage(file);
+      const r = await fetch(`/api/diary/${entryId}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          positionX: 20 + Math.random() * 60,
+          positionY: 10 + Math.random() * 40,
+          rotation: Math.random() * 8 - 4,
+          caption: '',
+        }),
+      });
+      if (r.ok) {
+        const photo = await r.json();
+        setEntries(p => p.map(e => e.id === entryId ? { ...e, photos: [...e.photos, photo] } : e));
+      }
+    } catch (err) {
+      console.error('addPhoto error:', err);
+    }
+  }, []);
+
+  const handleUpdatePhoto = useCallback(async (photoId: string, patch: Partial<DiaryPhoto>) => {
+    setEntries(p => p.map(e => ({
+      ...e,
+      photos: e.photos.map(ph => ph.id === photoId ? { ...ph, ...patch } : ph),
+    })));
+    try {
+      await fetch(`/api/diary/photos/${photoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+    } catch { /* swallow — optimistic update remains */ }
+  }, []);
+
+  const handleDeletePhoto = useCallback(async (photoId: string) => {
+    setEntries(p => p.map(e => ({ ...e, photos: e.photos.filter(ph => ph.id !== photoId) })));
+    try {
+      await fetch(`/api/diary/photos/${photoId}`, { method: 'DELETE' });
+    } catch { /* swallow */ }
+  }, []);
 
   return (
-    <main className="min-h-screen pb-24 px-3" style={{ background: 'linear-gradient(135deg, #f5f0e8 0%, #ede8d9 100%)' }}>
+    <main className="min-h-screen pb-24 px-3" style={{ background: 'linear-gradient(135deg, #f0e8d6 0%, #e3d9bf 100%)' }}>
       {/* Load handwriting font */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&display=swap');
-        .diary-font { font-family: 'Caveat', cursive !important; }
+        .diary-font { font-family: 'Caveat', 'Comic Sans MS', cursive !important; }
       `}</style>
 
       {/* Header */}
       <header className="w-full max-w-2xl mx-auto pt-5 pb-3 text-center">
-        <h1 className="diary-font text-4xl font-bold" style={{ color: '#2D1B0E', letterSpacing: '0.01em' }}>
+        <h1 className="diary-font font-bold" style={{ color: '#2D1B0E', fontSize: 42, letterSpacing: '0.01em' }}>
           📓 Пътешественически дневник
         </h1>
-        <p className="text-sm mt-1" style={{ color: '#7A5C3A', fontFamily: 'Caveat, cursive' }}>
-          Запиши своите приключения
+        <p className="diary-font" style={{ color: '#7A5C3A', fontSize: 18, marginTop: 2 }}>
+          Запиши своите приключения и спомени
         </p>
       </header>
 
@@ -240,12 +612,13 @@ export default function DnevnikPage() {
           <button
             key={u}
             onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); }}
-            className="flex-1 py-2 rounded-xl font-bold text-sm transition-all diary-font text-lg"
+            className="flex-1 py-2 rounded-xl font-bold transition-all diary-font"
             style={{
               background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.55)',
               color: activeUser === u ? 'white' : '#64748b',
               border: `2px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(0,0,0,0.08)'}`,
               boxShadow: activeUser === u ? `0 3px 10px ${USER_COLOR[u]}40` : 'none',
+              fontSize: 22,
             }}
           >
             {USER_DISPLAY[u]}
@@ -257,70 +630,67 @@ export default function DnevnikPage() {
       <div className="flex justify-center mb-6">
         <button
           onClick={() => { sounds.click(); resumeAudio(); setEditingId(null); setForm({ title: '', content: '', date: new Date().toISOString().slice(0, 10) }); setShowForm(true); }}
-          className="diary-font text-xl px-6 py-2.5 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95"
-          style={{ background: USER_COLOR[activeUser], color: 'white', boxShadow: `0 4px 14px ${USER_COLOR[activeUser]}50` }}
+          className="diary-font px-6 py-2.5 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95"
+          style={{ background: USER_COLOR[activeUser], color: 'white', boxShadow: `0 4px 14px ${USER_COLOR[activeUser]}50`, fontSize: 22 }}
         >
           ✏️ Нов запис
         </button>
       </div>
 
-      {/* Add/Edit form */}
+      {/* Add/Edit form modal */}
       {showForm && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.45)' }}>
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-3" style={{ background: 'rgba(0,0,0,0.45)' }}>
           <div
-            className="w-full max-w-lg mx-4 rounded-2xl p-6 relative"
+            className="w-full max-w-lg rounded-2xl p-6 relative"
             style={{
-              background: '#FFF9F0',
+              background: '#FFF9EE',
               border: '2px solid rgba(0,0,0,0.08)',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-              transform: 'rotate(-0.5deg)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.28)',
+              transform: 'rotate(-0.4deg)',
             }}
           >
-            <NotebookLines lineCount={16} />
-            <div className="relative" style={{ zIndex: 2 }}>
-              <h2 className="diary-font text-3xl font-bold mb-4" style={{ color: '#2D1B0E' }}>
-                {editingId ? '✏️ Редактирай запис' : '✏️ Нов запис'}
-              </h2>
-              <input
-                type="text"
-                placeholder="Заглавие…"
-                value={form.title}
-                onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                className="diary-font text-xl w-full mb-3 px-3 py-2 rounded-lg border-0 border-b-2 bg-transparent outline-none"
-                style={{ borderColor: USER_COLOR[activeUser], color: '#2D1B0E', fontSize: 22 }}
-              />
-              <input
-                type="date"
-                value={form.date}
-                onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
-                className="diary-font text-base w-full mb-3 px-3 py-1.5 rounded-lg outline-none bg-transparent border"
-                style={{ borderColor: 'rgba(0,0,0,0.12)', color: '#5C3D1A', fontSize: 16 }}
-              />
-              <textarea
-                placeholder="Разкажи за твоето приключение…"
-                value={form.content}
-                onChange={e => setForm(p => ({ ...p, content: e.target.value }))}
-                rows={7}
-                className="diary-font text-lg w-full px-3 py-2 rounded-lg border-0 bg-transparent outline-none resize-none"
-                style={{ color: '#2D1B0E', lineHeight: '28px', fontSize: 18 }}
-              />
-              <div className="flex gap-3 mt-4">
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !form.title.trim() || !form.content.trim()}
-                  className="flex-1 diary-font text-xl py-2.5 rounded-xl font-bold transition-all"
-                  style={{ background: USER_COLOR[activeUser], color: 'white', opacity: saving ? 0.7 : 1 }}
-                >
-                  {saving ? 'Запазване…' : '💾 Запази'}
-                </button>
-                <button
-                  onClick={() => { setShowForm(false); setEditingId(null); }}
-                  className="diary-font text-xl px-5 py-2.5 rounded-xl font-bold transition-all"
-                  style={{ background: 'rgba(0,0,0,0.07)', color: '#64748b' }}
-                >
-                  Отказ
-                </button>
-              </div>
+            <h2 className="diary-font font-bold mb-4" style={{ color: '#2D1B0E', fontSize: 28 }}>
+              {editingId ? '✏️ Редактирай запис' : '✏️ Нов запис'}
+            </h2>
+            <input
+              type="text"
+              placeholder="Заглавие…"
+              value={form.title}
+              onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              className="diary-font w-full mb-3 px-3 py-2 rounded-lg border-0 border-b-2 bg-transparent outline-none"
+              style={{ borderColor: USER_COLOR[activeUser], color: '#2D1B0E', fontSize: 22 }}
+            />
+            <input
+              type="date"
+              value={form.date}
+              onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+              className="diary-font w-full mb-3 px-3 py-1.5 rounded-lg outline-none bg-transparent border"
+              style={{ borderColor: 'rgba(0,0,0,0.12)', color: '#5C3D1A', fontSize: 16 }}
+            />
+            <textarea
+              placeholder="Разкажи за твоето приключение…"
+              value={form.content}
+              onChange={e => setForm(p => ({ ...p, content: e.target.value }))}
+              rows={8}
+              className="diary-font w-full px-3 py-2 rounded-lg border-0 bg-transparent outline-none resize-none"
+              style={{ color: '#2D1B0E', lineHeight: '30px', fontSize: 19, background: 'rgba(255,255,255,0.5)' }}
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.title.trim() || !form.content.trim()}
+                className="flex-1 diary-font py-2.5 rounded-xl font-bold transition-all"
+                style={{ background: USER_COLOR[activeUser], color: 'white', opacity: saving ? 0.7 : 1, fontSize: 22 }}
+              >
+                {saving ? 'Запазване…' : '💾 Запази'}
+              </button>
+              <button
+                onClick={() => { setShowForm(false); setEditingId(null); }}
+                className="diary-font px-5 py-2.5 rounded-xl font-bold transition-all"
+                style={{ background: 'rgba(0,0,0,0.07)', color: '#64748b', fontSize: 22 }}
+              >
+                Отказ
+              </button>
             </div>
           </div>
         </div>
@@ -328,87 +698,32 @@ export default function DnevnikPage() {
 
       {/* Diary entries */}
       {loading && (
-        <div className="text-center diary-font text-xl mt-12" style={{ color: '#7A5C3A' }}>
+        <div className="text-center diary-font mt-12" style={{ color: '#7A5C3A', fontSize: 22 }}>
           Зареждане на дневника…
         </div>
       )}
 
       {!loading && userEntries.length === 0 && (
-        <div className="text-center mt-12">
-          <div className="diary-font text-3xl mb-2" style={{ color: '#7A5C3A' }}>Все още няма записи</div>
-          <div className="diary-font text-lg" style={{ color: '#A08060' }}>
+        <div className="text-center mt-12 px-4">
+          <div className="diary-font mb-2" style={{ color: '#7A5C3A', fontSize: 30 }}>Все още няма записи</div>
+          <div className="diary-font" style={{ color: '#A08060', fontSize: 19 }}>
             Натисни „Нов запис" за да започнеш своя дневник ✨
           </div>
         </div>
       )}
 
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-2xl mx-auto space-y-10 px-1">
         {userEntries.map((entry, idx) => (
-          <div
+          <DiaryEntryCard
             key={entry.id}
-            className="relative rounded-2xl overflow-visible"
-            style={{
-              background: idx % 2 === 0 ? '#FFF9F0' : '#F8F4EC',
-              border: '1px solid rgba(0,0,0,0.07)',
-              boxShadow: '2px 4px 16px rgba(0,0,0,0.10)',
-              transform: `rotate(${idx % 2 === 0 ? '-0.4' : '0.4'}deg)`,
-              minHeight: 200,
-              padding: '24px 24px 24px 64px',
-            }}
-          >
-            <NotebookLines lineCount={Math.ceil((entry.content.length / 55) + 4)} />
-
-            {/* Polaroid photo */}
-            {entry.photoUrl && (
-              <Polaroid
-                entry={entry}
-                onMove={handlePolaroidMove}
-                onRotate={(id, rot) => setEntries(p => p.map(e => e.id === id ? { ...e, photoRot: rot } : e))}
-              />
-            )}
-
-            <div className="relative" style={{ zIndex: 1 }}>
-              {/* Date */}
-              <div className="diary-font text-sm mb-1" style={{ color: '#B08050', fontSize: 15 }}>
-                {formatDate(entry.date)}
-              </div>
-              {/* Title */}
-              <h3 className="diary-font font-bold mb-2" style={{ fontSize: 28, color: '#2D1B0E', lineHeight: 1.2 }}>
-                {entry.title}
-              </h3>
-              {/* Content — reflows naturally below polaroid */}
-              <div
-                className="diary-font"
-                style={{
-                  fontSize: 18,
-                  color: '#2D1B0E',
-                  lineHeight: '28px',
-                  whiteSpace: 'pre-wrap',
-                  paddingRight: entry.photoUrl ? '130px' : 0,
-                }}
-              >
-                {entry.content}
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={() => startEdit(entry)}
-                  className="diary-font text-sm px-3 py-1.5 rounded-lg transition-all"
-                  style={{ background: 'rgba(0,0,0,0.06)', color: '#5C3D1A' }}
-                >
-                  ✏️ Редактирай
-                </button>
-                <button
-                  onClick={() => handleDelete(entry.id)}
-                  className="diary-font text-sm px-3 py-1.5 rounded-lg transition-all"
-                  style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626' }}
-                >
-                  🗑️ Изтрий
-                </button>
-              </div>
-            </div>
-          </div>
+            entry={entry}
+            rotation={idx % 2 === 0 ? -0.4 : 0.4}
+            onEdit={() => startEdit(entry)}
+            onDelete={() => handleDelete(entry.id)}
+            onAddPhoto={(file) => handleAddPhoto(entry.id, file)}
+            onUpdatePhoto={handleUpdatePhoto}
+            onDeletePhoto={handleDeletePhoto}
+          />
         ))}
       </div>
     </main>

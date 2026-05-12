@@ -4,18 +4,15 @@ import { prisma } from '@/lib/prisma';
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
     const body = await request.json();
-    const { title, content, date, photoUrl, photoX, photoY, photoRot } = body;
+    const { title, content, date } = body;
     const entry = await prisma.diaryEntry.update({
       where: { id: params.id },
       data: {
         ...(title !== undefined && { title }),
         ...(content !== undefined && { content }),
         ...(date !== undefined && { date: new Date(date) }),
-        ...(photoUrl !== undefined && { photoUrl }),
-        ...(photoX !== undefined && { photoX }),
-        ...(photoY !== undefined && { photoY }),
-        ...(photoRot !== undefined && { photoRot }),
       },
+      include: { photos: { orderBy: { createdAt: 'asc' } } },
     });
     return NextResponse.json(entry);
   } catch (error) {
