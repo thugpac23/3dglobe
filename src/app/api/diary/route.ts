@@ -5,6 +5,7 @@ export async function GET() {
   try {
     const entries = await prisma.diaryEntry.findMany({
       orderBy: { date: 'desc' },
+      include: { photos: { orderBy: { createdAt: 'asc' } } },
     });
     return NextResponse.json(entries);
   } catch (error) {
@@ -16,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { user, title, content, date, photoUrl, photoX, photoY, photoRot } = body;
+    const { user, title, content, date } = body;
     if (!user || !title || !content) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -26,11 +27,8 @@ export async function POST(request: Request) {
         title,
         content,
         date: date ? new Date(date) : new Date(),
-        photoUrl: photoUrl ?? null,
-        photoX: photoX ?? 50,
-        photoY: photoY ?? 50,
-        photoRot: photoRot ?? -3,
       },
+      include: { photos: true },
     });
     return NextResponse.json(entry);
   } catch (error) {
