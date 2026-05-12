@@ -55,6 +55,7 @@ function Polaroid({
   marginTop,
   onUpdate,
   onDelete,
+  onOpen,
   containerRef,
 }: {
   photo: DiaryPhoto;
@@ -62,6 +63,7 @@ function Polaroid({
   marginTop: number;
   onUpdate: (id: string, patch: Partial<DiaryPhoto>) => void;
   onDelete: (id: string) => void;
+  onOpen: (photo: DiaryPhoto) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -100,8 +102,8 @@ function Polaroid({
     const rect = containerRef.current.getBoundingClientRect();
     const relX = clientX - rect.left;
     const relY = clientY - rect.top;
-    const newX = Math.max(0, Math.min(100, (relX / rect.width) * 100));
-    const newY = Math.max(0, Math.min(100, (relY / rect.height) * 100));
+    const newX = (relX / rect.width) * 100;
+    const newY = (relY / rect.height) * 100;
     dragState.current = null;
     setDragOffset(null);
     onUpdate(photo.id, { positionX: newX, positionY: newY });
@@ -158,8 +160,8 @@ function Polaroid({
       style={{
         float: side,
         clear: 'both',
-        width: 152,
-        height: 196,
+        width: 168,
+        height: 202,
         marginTop,
         marginLeft: side === 'left' ? 0 : 18,
         marginRight: side === 'right' ? 0 : 18,
@@ -174,7 +176,7 @@ function Polaroid({
         onTouchStart={onTouchStart}
         className="select-none"
         style={{
-          width: 152,
+          width: 168,
           background: 'white',
           padding: '8px 8px 28px 8px',
           boxShadow: dragOffset
@@ -206,18 +208,21 @@ function Polaroid({
           zIndex: 2,
         }} />
 
-        {/* Photo */}
+        {/* Photo — click opens fullscreen */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photo.url}
           alt={photo.caption || 'Спомен'}
           draggable={false}
+          onClick={(e) => { e.stopPropagation(); onOpen(photo); }}
+          className="polaroid-no-drag"
           style={{
             width: '100%',
-            height: 124,
+            height: 136,
             objectFit: 'cover',
             display: 'block',
             background: '#f4f4f4',
+            cursor: 'zoom-in',
           }}
         />
 
@@ -259,31 +264,6 @@ function Polaroid({
             </div>
           )}
         </div>
-
-        {/* Delete button */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(photo.id); }}
-          className="polaroid-no-drag"
-          style={{
-            position: 'absolute',
-            top: -8,
-            right: -8,
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
-            background: 'rgba(220,38,38,0.95)',
-            color: 'white',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 13,
-            lineHeight: 1,
-            zIndex: 3,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.18)',
-          }}
-          title="Изтрий снимката"
-        >
-          ✕
-        </button>
       </div>
     </div>
   );
@@ -345,6 +325,7 @@ function DiaryEntryCard({
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<DiaryPhoto | null>(null);
 
   // Sort photos by positionY ascending so vertical order matches drag intent.
   // shape-outside on float wrapper handles text reflow.
@@ -362,7 +343,7 @@ function DiaryEntryCard({
       const side: 'left' | 'right' = p.positionX < 50 ? 'left' : 'right';
       const targetTop = (p.positionY / 100) * 340;
       const gap = Math.max(0, targetTop - lastY[side]);
-      lastY[side] = targetTop + 196;
+      lastY[side] = targetTop + 202;
       return { photo: p, side, marginTop: gap };
     });
   }, [sortedPhotos]);
@@ -421,6 +402,7 @@ function DiaryEntryCard({
               marginTop={marginTop}
               onUpdate={onUpdatePhoto}
               onDelete={onDeletePhoto}
+              onOpen={setFullscreenPhoto}
               containerRef={contentRef}
             />
           ))}
@@ -476,6 +458,89 @@ function DiaryEntryCard({
           </button>
         </div>
       </div>
+
+      {/* Fullscreen photo preview */}
+      {fullscreenPhoto && (
+        <div
+          className="fixed inset-0 flex flex-col items-center justify-center z-[100]"
+          style={{ background: 'rgba(0,0,0,0.92)' }}
+          onClick={() => setFullscreenPhoto(null)}
+        >
+          {/* Close button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setFullscreenPhoto(null); }}
+            style={{
+              position: 'fixed',
+              top: 20,
+              right: 24,
+              background: '#111',
+              color: 'white',
+              border: '1.5px solid rgba(255,255,255,0.35)',
+              borderRadius: '50%',
+              width: 40,
+              height: 40,
+              fontSize: 20,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 101,
+            }}
+            title="Затвори"
+          >
+            ✕
+          </button>
+
+          {/* Photo */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={fullscreenPhoto.url}
+            alt={fullscreenPhoto.caption || 'Снимка'}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '78vh',
+              objectFit: 'contain',
+              borderRadius: 4,
+              boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+            }}
+          />
+
+          {/* Caption */}
+          {fullscreenPhoto.caption && (
+            <div
+              className="diary-font"
+              style={{ color: 'rgba(255,255,255,0.85)', fontSize: 22, marginTop: 14, textAlign: 'center' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {fullscreenPhoto.caption}
+            </div>
+          )}
+
+          {/* Delete button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const id = fullscreenPhoto.id;
+              setFullscreenPhoto(null);
+              onDeletePhoto(id);
+            }}
+            className="diary-font"
+            style={{
+              marginTop: 18,
+              background: 'rgba(220,38,38,0.85)',
+              color: 'white',
+              border: 'none',
+              borderRadius: 10,
+              padding: '8px 24px',
+              fontSize: 18,
+              cursor: 'pointer',
+            }}
+          >
+            🗑️ Изтрий снимката
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -554,7 +619,7 @@ export default function DnevnikPage() {
           url,
           positionX: 20 + Math.random() * 60,
           positionY: 10 + Math.random() * 40,
-          rotation: Math.random() * 8 - 4,
+          rotation: Math.random() * 5 + 2,
           caption: '',
         }),
       });
