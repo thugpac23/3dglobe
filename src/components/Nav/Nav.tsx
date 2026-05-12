@@ -6,13 +6,12 @@ import { setSoundEnabled, resumeAudio } from '@/lib/sounds';
 import { useState, useEffect } from 'react';
 
 const ITEMS = [
-  { href: '/',             icon: '⭐', label: 'Искам да посетя' },
-  { href: '/poseteno',     icon: '🗺️', label: 'Посетено' },
-  { href: '/dnevnik',      icon: '📓', label: 'Дневник' },
-  { href: '/pasport',      icon: '📕', label: 'Паспорт' },
-  { href: '/igra',         icon: '🎮', label: 'Игра' },
-  { href: '/postizheniya', icon: '🏅', label: 'Постижения' },
-  { href: '/avatar',       icon: '🧑', label: 'Моят герой' },
+  { href: '/',         icon: '⭐', label: 'Искам да посетя' },
+  { href: '/poseteno', icon: '🌍', label: 'Посетено' },
+  { href: '/dnevnik',  icon: '📓', label: 'Дневник' },
+  { href: '/pasport',  icon: '📕', label: 'Паспорт' },
+  { href: '/igra',     icon: '🎮', label: 'Игра' },
+  { href: '/avatar',   icon: '🧑', label: 'Моят герой' },
 ];
 
 export default function Nav() {
@@ -56,11 +55,7 @@ export default function Nav() {
         boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
       }}
     >
-      <span className="text-sm font-extrabold text-sky-600 mr-2 shrink-0 hidden sm:block">
-        🌍 Пътешествия
-      </span>
-
-      <div className="flex gap-1 flex-1 overflow-x-auto">
+      <div className="flex gap-1 flex-1 overflow-x-auto justify-center">
         {ITEMS.map(({ href, icon, label }) => {
           const active = href === '/' ? path === '/' : path.startsWith(href);
           return (
