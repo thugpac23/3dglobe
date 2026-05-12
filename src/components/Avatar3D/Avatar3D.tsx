@@ -861,149 +861,232 @@ function buildCharacter(
   // ACCESSORIES — head-attached go into headGroup; body accessories into g
   // ──────────────────────────────────────────────────────────────────────────
 
+  // Adaptive vertical offset so hats sit on top of hair rather than clipping
+  const hairLift =
+    hair === 'bald'                       ? 0.00 :
+    hair === 'curly'                      ? 0.05 :
+    hair === 'longest'                    ? 0.030 :
+    hair === 'long' || hair === 'loose'   ? 0.020 :
+                                            0.010;
+  // Face-type Y scale (head sphere is scaled by FACE_SCALE[faceType][1])
+  const faceY = FACE_SCALE[faceType]?.[1] ?? 1;
+  // Bring face-mounted items just outside the head surface (in front of eyes).
+  // Eyes sit at z=eyeZ=0.27, head surface at (x≈0.113, y≈0.03) is ~0.298.
+  const faceFrontZ = eyeZ + 0.045;
+
   // ── HEAD ─────────────────────────────────────────────────────────────────
 
   // Winter hat / pompom beanie  (also matches legacy key 'hat')
   if (acc.includes('hat') || acc.includes('winter-hat')) {
-    const beanieM = mat(0xDC2626, { roughness: 0.76 });
-    const bBody = mesh(new THREE.SphereGeometry(0.342, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), beanieM);
-    bBody.position.set(0, 0.02, 0);
+    const beanieM = mat(0xDC2626, { roughness: 0.78 });
+    const cuffM   = mat(0xB91C1C, { roughness: 0.74 });
+    const baseY = 0.18 * faceY + hairLift;
+    // Dome — half-sphere, bottom edge at hairline (above eyebrows)
+    const bBody = mesh(new THREE.SphereGeometry(0.348, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), beanieM);
+    bBody.position.set(0, baseY, 0);
     headGroup.add(bBody);
-    const bCuff = mesh(new THREE.CylinderGeometry(0.342, 0.338, 0.09, 16), mat(0xB91C1C, { roughness: 0.74 }));
-    bCuff.position.set(0, 0.04, 0);
+    // Rolled cuff fold — slightly wider, just below dome edge
+    const bCuff = mesh(new THREE.CylinderGeometry(0.354, 0.350, 0.080, 18), cuffM);
+    bCuff.position.set(0, baseY - 0.022, 0);
     headGroup.add(bCuff);
+    // Subtle cuff seam (lighter highlight on top edge)
+    const cuffSeam = mesh(new THREE.TorusGeometry(0.352, 0.005, 4, 22), mat(0xFCA5A5, { roughness: 0.72 }));
+    cuffSeam.position.set(0, baseY + 0.018, 0);
+    cuffSeam.rotation.x = Math.PI / 2;
+    headGroup.add(cuffSeam);
+    // 3 knit ribs running over the dome (smaller toward apex)
     for (let i = 0; i < 3; i++) {
-      const rib = mesh(new THREE.TorusGeometry(0.334, 0.011, 4, 20), mat(0xEF4444, { roughness: 0.72 }));
-      rib.position.set(0, 0.13 + i * 0.09, 0);
+      const fr = 1 - (i + 1) / 5;
+      const rib = mesh(new THREE.TorusGeometry(0.336 * fr + 0.02, 0.010, 4, 22), mat(0xEF4444, { roughness: 0.74 }));
+      rib.position.set(0, baseY + 0.06 + i * 0.085, 0);
       rib.rotation.x = Math.PI / 2;
       headGroup.add(rib);
     }
-    const pompom = mesh(new THREE.SphereGeometry(0.080, 10, 10), mat(0xFECACA, { roughness: 0.82 }));
-    pompom.position.set(0, 0.44, 0);
+    // Pompom at top
+    const pompom = mesh(new THREE.SphereGeometry(0.078, 12, 12), mat(0xFECACA, { roughness: 0.84 }));
+    pompom.position.set(0, baseY + 0.36, 0);
     headGroup.add(pompom);
+    // Pompom string base (small connector)
+    const pompomBase = mesh(new THREE.CylinderGeometry(0.014, 0.012, 0.020, 6), beanieM);
+    pompomBase.position.set(0, baseY + 0.32, 0);
+    headGroup.add(pompomBase);
   }
 
   // Baseball cap (improved)
   if (acc.includes('cap')) {
-    const capM = mat(0x1D4ED8, { roughness: 0.70 });
-    const capDarkM = mat(0x1E3A5F, { roughness: 0.72 });
-    const capDome = mesh(new THREE.SphereGeometry(0.342, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), capM);
+    const capM = mat(0x1D4ED8, { roughness: 0.72 });
+    const capDarkM = mat(0x1E3A5F, { roughness: 0.74 });
+    const baseY = 0.16 * faceY + hairLift;
+    // Cap dome (full half-sphere)
+    const capDome = mesh(new THREE.SphereGeometry(0.348, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), capM);
+    capDome.position.set(0, baseY, 0);
     headGroup.add(capDome);
-    const sweatband = mesh(new THREE.CylinderGeometry(0.338, 0.338, 0.055, 16), mat(0xFCD34D, { roughness: 0.68 }));
-    sweatband.position.set(0, 0.01, 0);
+    // Stitched seams running over the dome
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const seamArc = mesh(new THREE.TorusGeometry(0.348, 0.0035, 3, 12, Math.PI * 0.5), mat(0x172554, { roughness: 0.74 }));
+      seamArc.position.set(0, baseY, 0);
+      seamArc.rotation.y = a;
+      seamArc.rotation.z = Math.PI / 2;
+      headGroup.add(seamArc);
+    }
+    // Sweatband (gold/contrast strip at base)
+    const sweatband = mesh(new THREE.CylinderGeometry(0.350, 0.350, 0.034, 18), mat(0xFCD34D, { roughness: 0.68 }));
+    sweatband.position.set(0, baseY - 0.018, 0);
     headGroup.add(sweatband);
+    // Visor (top — main fabric)
     const visor = mesh(
-      new THREE.CylinderGeometry(0.34, 0.36, 0.05, 14, 1, false, -Math.PI * 0.15, Math.PI * 0.8),
+      new THREE.CylinderGeometry(0.34, 0.38, 0.040, 16, 1, false, -Math.PI * 0.15, Math.PI * 0.8),
       capDarkM,
     );
-    visor.position.set(0, 0.02, 0.26);
-    visor.rotation.x = 0.34;
+    visor.position.set(0, baseY + 0.005, 0.30);
+    visor.rotation.x = 0.30;
     headGroup.add(visor);
+    // Visor underside (darker for depth)
     const visorUnder = mesh(
-      new THREE.CylinderGeometry(0.32, 0.34, 0.03, 14, 1, false, -Math.PI * 0.15, Math.PI * 0.8),
-      mat(0x172554, { roughness: 0.76 }),
+      new THREE.CylinderGeometry(0.32, 0.36, 0.022, 16, 1, false, -Math.PI * 0.15, Math.PI * 0.8),
+      mat(0x172554, { roughness: 0.78 }),
     );
-    visorUnder.position.set(0, 0.01, 0.265);
-    visorUnder.rotation.x = 0.34;
+    visorUnder.position.set(0, baseY - 0.008, 0.305);
+    visorUnder.rotation.x = 0.30;
     headGroup.add(visorUnder);
-    const capTopBtn = mesh(new THREE.SphereGeometry(0.026, 7, 7), capDarkM);
-    capTopBtn.position.set(0, 0.35, 0);
+    // Top button on dome apex
+    const capTopBtn = mesh(new THREE.SphereGeometry(0.024, 8, 8), capDarkM);
+    capTopBtn.position.set(0, baseY + 0.348, 0);
     headGroup.add(capTopBtn);
   }
 
   // Explorer / fedora hat
   if (acc.includes('explorer-hat')) {
     const feltM = mat(0x78350F, { roughness: 0.82 });
-    const hatCrown = mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.30, 14), feltM);
-    hatCrown.position.set(0, 0.45, 0);
-    headGroup.add(hatCrown);
-    const hatDomeTop = mesh(new THREE.SphereGeometry(0.22, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), feltM);
-    hatDomeTop.position.set(0, 0.60, 0);
-    headGroup.add(hatDomeTop);
-    const hatBrim = mesh(new THREE.CylinderGeometry(0.52, 0.54, 0.05, 16), feltM);
-    hatBrim.position.set(0, 0.31, 0);
+    const baseY = 0.19 * faceY + hairLift;
+    // Wide brim at hairline
+    const hatBrim = mesh(new THREE.CylinderGeometry(0.52, 0.54, 0.05, 18), feltM);
+    hatBrim.position.set(0, baseY, 0);
     headGroup.add(hatBrim);
-    const hatBand = mesh(new THREE.CylinderGeometry(0.245, 0.245, 0.07, 14), mat(0x1C1917, { roughness: 0.72 }));
-    hatBand.position.set(0, 0.316, 0);
+    // Brim underside (darker)
+    const brimUnder = mesh(new THREE.CylinderGeometry(0.48, 0.50, 0.020, 18), mat(0x451A03, { roughness: 0.84 }));
+    brimUnder.position.set(0, baseY - 0.028, 0);
+    headGroup.add(brimUnder);
+    // Crown (cylinder) sitting on the brim
+    const hatCrown = mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.30, 16), feltM);
+    hatCrown.position.set(0, baseY + 0.18, 0);
+    headGroup.add(hatCrown);
+    // Domed top
+    const hatDomeTop = mesh(new THREE.SphereGeometry(0.22, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), feltM);
+    hatDomeTop.position.set(0, baseY + 0.33, 0);
+    headGroup.add(hatDomeTop);
+    // Crown pinch (front dent)
+    const pinch = mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0x5C2F0A, { roughness: 0.84 }));
+    pinch.scale.set(0.7, 0.5, 1.2);
+    pinch.position.set(0, baseY + 0.36, 0.10);
+    headGroup.add(pinch);
+    // Dark band
+    const hatBand = mesh(new THREE.CylinderGeometry(0.245, 0.245, 0.07, 16), mat(0x1C1917, { roughness: 0.72 }));
+    hatBand.position.set(0, baseY + 0.05, 0);
     headGroup.add(hatBand);
-    const hatBuckle = mesh(new THREE.BoxGeometry(0.052, 0.042, 0.022), mat(0xFCD34D, { metalness: 0.42, roughness: 0.38 }));
-    hatBuckle.position.set(0, 0.316, 0.248);
+    // Gold buckle on band (front)
+    const hatBuckle = mesh(new THREE.BoxGeometry(0.054, 0.044, 0.022), mat(0xFCD34D, { metalness: 0.46, roughness: 0.36 }));
+    hatBuckle.position.set(0, baseY + 0.05, 0.248);
     headGroup.add(hatBuckle);
   }
 
   // Crown
   if (acc.includes('crown')) {
-    const goldM2 = mat(0xFCD34D, { roughness: 0.38, metalness: 0.32 });
-    const crownBase = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.10, 14), goldM2);
-    crownBase.position.set(0, 0.35, 0);
+    const goldM2 = mat(0xFCD34D, { roughness: 0.36, metalness: 0.38 });
+    const baseY = 0.22 * faceY + hairLift;
+    const crownBase = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.10, 16), goldM2);
+    crownBase.position.set(0, baseY, 0);
     headGroup.add(crownBase);
-    const crownRidge = mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.024, 14), mat(0xD97706, { metalness: 0.38, roughness: 0.42 }));
-    crownRidge.position.set(0, 0.40, 0);
+    const crownRidge = mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.024, 16), mat(0xD97706, { metalness: 0.40, roughness: 0.40 }));
+    crownRidge.position.set(0, baseY + 0.05, 0);
     headGroup.add(crownRidge);
     const gemColors = [0xEF4444, 0x60A5FA, 0x34D399, 0xF472B6, 0xFBBF24];
     for (let i = 0; i < 5; i++) {
       const angle = (i / 5) * Math.PI * 2;
       const spike = mesh(new THREE.ConeGeometry(0.058, 0.22, 6), goldM2);
-      spike.position.set(Math.sin(angle) * 0.30, 0.52, Math.cos(angle) * 0.30);
+      spike.position.set(Math.sin(angle) * 0.30, baseY + 0.17, Math.cos(angle) * 0.30);
       headGroup.add(spike);
-      const gem = mesh(new THREE.SphereGeometry(0.036, 6, 6), mat(gemColors[i], { roughness: 0.14, metalness: 0.1 }));
-      gem.position.set(Math.sin(angle) * 0.30, 0.43, Math.cos(angle) * 0.30);
+      const gem = mesh(new THREE.SphereGeometry(0.036, 8, 8), mat(gemColors[i], { roughness: 0.12, metalness: 0.16 }));
+      gem.position.set(Math.sin(angle) * 0.30, baseY + 0.08, Math.cos(angle) * 0.30);
       headGroup.add(gem);
     }
     for (let i = 0; i < 10; i++) {
       const angle = (i / 10) * Math.PI * 2;
-      const stud = mesh(new THREE.SphereGeometry(0.020, 5, 5), mat(0xD97706, { metalness: 0.4 }));
-      stud.position.set(Math.sin(angle) * 0.37, 0.36, Math.cos(angle) * 0.37);
+      const stud = mesh(new THREE.SphereGeometry(0.020, 6, 6), mat(0xD97706, { metalness: 0.42 }));
+      stud.position.set(Math.sin(angle) * 0.37, baseY + 0.01, Math.cos(angle) * 0.37);
       headGroup.add(stud);
     }
   }
 
   // Flower crown
   if (acc.includes('flower-crown')) {
-    const vine = mesh(new THREE.TorusGeometry(0.34, 0.024, 5, 24), mat(0x15803D, { roughness: 0.78 }));
-    vine.position.set(0, 0.16, 0);
+    const baseY = 0.21 * faceY + hairLift;
+    const vine = mesh(new THREE.TorusGeometry(0.34, 0.026, 6, 26), mat(0x15803D, { roughness: 0.78 }));
+    vine.position.set(0, baseY, 0);
     vine.rotation.x = Math.PI / 2;
     headGroup.add(vine);
+    // Small leaves on vine
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.2;
+      const leaf = mesh(new THREE.SphereGeometry(0.028, 6, 5), mat(0x22C55E, { roughness: 0.72 }));
+      leaf.scale.set(0.5, 0.25, 1.2);
+      leaf.position.set(Math.sin(a) * 0.345, baseY + 0.012, Math.cos(a) * 0.345);
+      leaf.rotation.y = a;
+      headGroup.add(leaf);
+    }
     const flPetalColors = [0xFB7185, 0xF9A8D4, 0xFDE68A, 0x86EFAC, 0xBAE6FD, 0xC4B5FD, 0xFDB87A];
     for (let f = 0; f < 7; f++) {
       const fAngle = (f / 7) * Math.PI * 2;
       const fx2 = Math.sin(fAngle) * 0.34;
       const fz2 = Math.cos(fAngle) * 0.34;
-      const flCenter = mesh(new THREE.SphereGeometry(0.030, 7, 7), mat(0xFEF08A, { roughness: 0.65 }));
-      flCenter.position.set(fx2, 0.19, fz2);
+      const flCenter = mesh(new THREE.SphereGeometry(0.030, 7, 7), mat(0xFEF08A, { roughness: 0.62 }));
+      flCenter.position.set(fx2, baseY + 0.03, fz2);
       headGroup.add(flCenter);
       for (let p = 0; p < 5; p++) {
         const pAngle = (p / 5) * Math.PI * 2;
-        const petal = mesh(new THREE.SphereGeometry(0.034, 6, 5), mat(flPetalColors[f], { roughness: 0.68 }));
+        const petal = mesh(new THREE.SphereGeometry(0.036, 6, 5), mat(flPetalColors[f], { roughness: 0.66 }));
         petal.scale.set(0.7, 0.42, 1.1);
-        petal.position.set(fx2 + Math.sin(pAngle) * 0.050, 0.19, fz2 + Math.cos(pAngle) * 0.050);
+        petal.position.set(fx2 + Math.sin(pAngle) * 0.052, baseY + 0.03, fz2 + Math.cos(pAngle) * 0.052);
         headGroup.add(petal);
       }
     }
   }
 
-  // Headphones (improved)
+  // Headphones (improved)  (arc goes OVER the head, not down the side)
   if (acc.includes('headphones')) {
-    const hpM = mat(0x374151, { roughness: 0.62 });
-    const arc = mesh(new THREE.TorusGeometry(0.34, 0.032, 6, 16, Math.PI), hpM);
-    arc.position.set(0, 0.08, 0);
-    arc.rotation.z = Math.PI / 2;
+    const hpM = mat(0x374151, { roughness: 0.60 });
+    // Headband — half-torus from ear to ear over the top of the head.
+    // Default torus is in XY plane (hole along Z); upper-half ring (phi=0..π)
+    // already arcs from (+R,0,0) via (0,+R,0) to (-R,0,0) — exactly what we want.
+    const arc = mesh(new THREE.TorusGeometry(0.36 + hairLift * 0.4, 0.030, 6, 20, Math.PI), hpM);
+    arc.position.set(0, 0, 0);
     headGroup.add(arc);
-    const hpTopPad = mesh(new THREE.SphereGeometry(0.048, 8, 6), mat(0x111827, { roughness: 0.74 }));
-    hpTopPad.scale.set(0.6, 0.38, 1);
-    hpTopPad.position.set(0, 0.38, 0);
+    // Padded top cushion on band apex
+    const hpTopPad = mesh(new THREE.SphereGeometry(0.046, 10, 8), mat(0x111827, { roughness: 0.74 }));
+    hpTopPad.scale.set(0.65, 0.40, 1);
+    hpTopPad.position.set(0, 0.36 + hairLift * 0.4, 0);
     headGroup.add(hpTopPad);
+    // Sliders that connect band to cups
     for (const sx of [-1, 1]) {
-      const cup = mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.08, 12), hpM);
-      cup.position.set(sx * 0.34, 0.01, 0);
+      const slider = mesh(new THREE.BoxGeometry(0.022, 0.030, 0.045), mat(0xC0C0C0, { metalness: 0.35, roughness: 0.40 }));
+      slider.position.set(sx * 0.36, 0.05, 0);
+      headGroup.add(slider);
+    }
+    // Ear cups (left and right)
+    for (const sx of [-1, 1]) {
+      const cup = mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.082, 14), hpM);
+      cup.position.set(sx * 0.36, 0.005, 0);
       cup.rotation.z = Math.PI / 2;
       headGroup.add(cup);
-      const driver = mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.02, 12), mat(0x111827, { roughness: 0.74 }));
-      driver.position.set(sx * 0.395, 0.01, 0);
+      // Soft pad (driver enclosure)
+      const driver = mesh(new THREE.CylinderGeometry(0.074, 0.074, 0.024, 14), mat(0x111827, { roughness: 0.78 }));
+      driver.position.set(sx * 0.418, 0.005, 0);
       driver.rotation.z = Math.PI / 2;
       headGroup.add(driver);
-      const hpRing = mesh(new THREE.TorusGeometry(0.090, 0.013, 5, 14), mat(0x6B7280, { roughness: 0.5 }));
-      hpRing.position.set(sx * 0.388, 0.01, 0);
+      // Accent ring
+      const hpRing = mesh(new THREE.TorusGeometry(0.092, 0.012, 5, 16), mat(0x6B7280, { roughness: 0.46 }));
+      hpRing.position.set(sx * 0.410, 0.005, 0);
       hpRing.rotation.z = Math.PI / 2;
       headGroup.add(hpRing);
     }
@@ -1012,30 +1095,34 @@ function buildCharacter(
   // Pirate hat (bicorne style)
   if (acc.includes('pirate-hat')) {
     const pirateHatM = mat(0x111827, { roughness: 0.74 });
-    const pirateTrimM = mat(0xFCD34D, { metalness: 0.36, roughness: 0.40 });
+    const pirateTrimM = mat(0xFCD34D, { metalness: 0.40, roughness: 0.40 });
+    const baseY = 0.19 * faceY + hairLift;
+    // Crown body
     const pirateBody = mesh(new THREE.CylinderGeometry(0.28, 0.30, 0.28, 4), pirateHatM);
-    pirateBody.position.set(0, 0.42, 0);
+    pirateBody.position.set(0, baseY + 0.14, 0);
     pirateBody.rotation.y = Math.PI / 4;
     headGroup.add(pirateBody);
+    // Side brims (left / right, tilted upward)
     for (const sx of [-1, 1]) {
       const brimPiece = mesh(
-        new THREE.CylinderGeometry(0.46, 0.46, 0.05, 10, 1, false, -Math.PI * 0.42, Math.PI * 0.84),
+        new THREE.CylinderGeometry(0.46, 0.46, 0.05, 12, 1, false, -Math.PI * 0.42, Math.PI * 0.84),
         pirateHatM,
       );
-      brimPiece.position.set(sx * 0.10, 0.30, 0);
+      brimPiece.position.set(sx * 0.10, baseY + 0.02, 0);
       brimPiece.rotation.z = sx * 0.68;
       headGroup.add(brimPiece);
       const goldTrim = mesh(new THREE.BoxGeometry(0.038, 0.34, 0.028), pirateTrimM);
-      goldTrim.position.set(sx * 0.40, 0.30, 0);
+      goldTrim.position.set(sx * 0.40, baseY + 0.02, 0);
       goldTrim.rotation.z = sx * 0.68;
       headGroup.add(goldTrim);
     }
-    const pirateSkull = mesh(new THREE.SphereGeometry(0.065, 10, 8), mat(0xFFFDE7, { roughness: 0.66 }));
-    pirateSkull.position.set(0, 0.44, 0.27);
+    // Skull at front
+    const pirateSkull = mesh(new THREE.SphereGeometry(0.060, 10, 8), mat(0xFFFDE7, { roughness: 0.66 }));
+    pirateSkull.position.set(0, baseY + 0.16, 0.27);
     headGroup.add(pirateSkull);
     for (const sx of [-1, 1]) {
       const bone = mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.14, 5), mat(0xFFFDE7, { roughness: 0.66 }));
-      bone.position.set(sx * 0.04, 0.34, 0.27);
+      bone.position.set(sx * 0.04, baseY + 0.06, 0.27);
       bone.rotation.z = sx * 0.72;
       headGroup.add(bone);
     }
@@ -1043,38 +1130,49 @@ function buildCharacter(
 
   // Wizard hat
   if (acc.includes('wizard-hat')) {
-    const wizM = mat(0x5B21B6, { roughness: 0.72 });
-    const wizBrim = mesh(new THREE.CylinderGeometry(0.50, 0.52, 0.06, 16), wizM);
-    wizBrim.position.set(0, 0.30, 0);
+    const wizM = mat(0x5B21B6, { roughness: 0.74 });
+    const baseY = 0.19 * faceY + hairLift;
+    // Wide brim at hairline
+    const wizBrim = mesh(new THREE.CylinderGeometry(0.50, 0.52, 0.06, 18), wizM);
+    wizBrim.position.set(0, baseY, 0);
     headGroup.add(wizBrim);
-    const wizCone = mesh(new THREE.ConeGeometry(0.30, 0.68, 14), wizM);
-    wizCone.position.set(0, 0.68, 0);
+    // Brim underside (darker)
+    const wizBrimUnder = mesh(new THREE.CylinderGeometry(0.46, 0.48, 0.02, 18), mat(0x3B0764, { roughness: 0.80 }));
+    wizBrimUnder.position.set(0, baseY - 0.030, 0);
+    headGroup.add(wizBrimUnder);
+    // Tall cone
+    const wizCone = mesh(new THREE.ConeGeometry(0.30, 0.68, 16), wizM);
+    wizCone.position.set(0, baseY + 0.36, 0);
     headGroup.add(wizCone);
-    const wizBand = mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.058, 14), mat(0xFCD34D, { metalness: 0.38, roughness: 0.42 }));
-    wizBand.position.set(0, 0.34, 0);
+    // Gold band at base of cone
+    const wizBand = mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.058, 16), mat(0xFCD34D, { metalness: 0.40, roughness: 0.40 }));
+    wizBand.position.set(0, baseY + 0.04, 0);
     headGroup.add(wizBand);
+    // Stars spiraling up the cone
     const wizStarColors = [0xFCD34D, 0x60A5FA, 0xF9A8D4, 0x86EFAC];
     for (let i = 0; i < 4; i++) {
-      const star = mesh(new THREE.SphereGeometry(0.032, 6, 6), mat(wizStarColors[i], { roughness: 0.5 }));
+      const star = mesh(new THREE.SphereGeometry(0.032, 7, 7), mat(wizStarColors[i], { roughness: 0.46 }));
       const angle = (i / 4) * Math.PI * 2;
-      star.position.set(Math.sin(angle) * (0.18 - i * 0.028), 0.44 + i * 0.08, Math.cos(angle) * (0.18 - i * 0.028));
+      star.position.set(Math.sin(angle) * (0.20 - i * 0.034), baseY + 0.14 + i * 0.10, Math.cos(angle) * (0.20 - i * 0.034));
       headGroup.add(star);
     }
-    const moon = mesh(new THREE.TorusGeometry(0.060, 0.020, 6, 14, Math.PI * 1.4), mat(0xFCD34D, { metalness: 0.3 }));
-    moon.position.set(-0.08, 0.74, 0.15);
+    // Crescent moon at front
+    const moon = mesh(new THREE.TorusGeometry(0.060, 0.020, 6, 14, Math.PI * 1.4), mat(0xFCD34D, { metalness: 0.30 }));
+    moon.position.set(-0.08, baseY + 0.42, 0.15);
     moon.rotation.z = 0.82;
     headGroup.add(moon);
   }
 
   // Animal ears (cat)
   if (acc.includes('animal-ears')) {
+    const baseY = 0.28 * faceY + hairLift * 0.4;
     for (const sx of [-1, 1]) {
-      const earOuter = mesh(new THREE.ConeGeometry(0.10, 0.22, 4), mat(0xD97706, { roughness: 0.72 }));
-      earOuter.position.set(sx * 0.22, 0.44, -0.04);
+      const earOuter = mesh(new THREE.ConeGeometry(0.10, 0.22, 5), mat(0xD97706, { roughness: 0.72 }));
+      earOuter.position.set(sx * 0.22, baseY, -0.04);
       earOuter.rotation.z = sx * 0.22;
       headGroup.add(earOuter);
-      const earInner = mesh(new THREE.ConeGeometry(0.057, 0.14, 4), mat(0xFBBF8A, { roughness: 0.72 }));
-      earInner.position.set(sx * 0.22, 0.46, 0.02);
+      const earInner = mesh(new THREE.ConeGeometry(0.054, 0.14, 5), mat(0xFBBF8A, { roughness: 0.72 }));
+      earInner.position.set(sx * 0.22, baseY + 0.02, 0.02);
       earInner.rotation.z = sx * 0.22;
       headGroup.add(earInner);
     }
@@ -1084,23 +1182,32 @@ function buildCharacter(
 
   // Sunglasses
   if (acc.includes('sunglasses')) {
-    const sunFrameM = mat(0x111827, { roughness: 0.38 });
-    const sunLensM = mat(0x030712, { transparent: true, opacity: 0.90, roughness: 0.06, metalness: 0.10 });
+    const sunFrameM = mat(0x111827, { roughness: 0.36 });
+    const sunLensM = mat(0x030712, { transparent: true, opacity: 0.90, roughness: 0.06, metalness: 0.12 });
     for (const fx of [-0.113, 0.113]) {
-      const sunFrame = mesh(new THREE.TorusGeometry(0.072, 0.014, 7, 18), sunFrameM);
-      sunFrame.position.set(fx, eyeBaseY, eyeZ + 0.022);
+      const sunFrame = mesh(new THREE.TorusGeometry(0.072, 0.014, 8, 20), sunFrameM);
+      sunFrame.position.set(fx, eyeBaseY, faceFrontZ);
       headGroup.add(sunFrame);
-      const sunFill = mesh(new THREE.CircleGeometry(0.072, 18), sunLensM);
-      sunFill.position.set(fx, eyeBaseY, eyeZ + 0.027);
+      const sunFill = mesh(new THREE.CircleGeometry(0.072, 20), sunLensM);
+      sunFill.position.set(fx, eyeBaseY, faceFrontZ + 0.004);
       headGroup.add(sunFill);
     }
-    const sunBridge = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.085, 5), sunFrameM);
-    sunBridge.position.set(0, eyeBaseY, eyeZ + 0.022);
+    const sunBridge = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.085, 6), sunFrameM);
+    sunBridge.position.set(0, eyeBaseY + 0.004, faceFrontZ);
     sunBridge.rotation.z = Math.PI / 2;
     headGroup.add(sunBridge);
+    // Nose-bridge pads
+    for (const fx of [-0.058, 0.058]) {
+      const pad = mesh(new THREE.SphereGeometry(0.008, 6, 5), sunFrameM);
+      pad.scale.set(0.5, 0.9, 0.5);
+      pad.position.set(fx, eyeBaseY - 0.025, faceFrontZ - 0.005);
+      headGroup.add(pad);
+    }
+    // Temple arms folding back to the ears
     for (const fx of [-0.113, 0.113]) {
-      const sunArm = mesh(new THREE.BoxGeometry(0.018, 0.010, 0.20), sunFrameM);
-      sunArm.position.set(fx + Math.sign(fx) * 0.195, eyeBaseY, eyeZ - 0.08);
+      const sunArm = mesh(new THREE.BoxGeometry(0.018, 0.010, 0.22), sunFrameM);
+      sunArm.position.set(fx + Math.sign(fx) * 0.16, eyeBaseY + 0.010, faceFrontZ - 0.13);
+      sunArm.rotation.y = -Math.sign(fx) * 0.18;
       headGroup.add(sunArm);
     }
   }
@@ -1108,80 +1215,101 @@ function buildCharacter(
   // Regular glasses
   if (acc.includes('glasses')) {
     const glFrameM = mat(0x92400E, { roughness: 0.54 });
-    const glLensM = mat(0xBAE6FD, { transparent: true, opacity: 0.38, roughness: 0.08 });
+    const glLensM = mat(0xBAE6FD, { transparent: true, opacity: 0.34, roughness: 0.08 });
     for (const fx of [-0.113, 0.113]) {
-      const glFrame = mesh(new THREE.TorusGeometry(0.070, 0.012, 7, 18), glFrameM);
-      glFrame.position.set(fx, eyeBaseY, eyeZ + 0.022);
+      const glFrame = mesh(new THREE.TorusGeometry(0.070, 0.012, 8, 20), glFrameM);
+      glFrame.position.set(fx, eyeBaseY, faceFrontZ);
       headGroup.add(glFrame);
-      const glFill = mesh(new THREE.CircleGeometry(0.070, 18), glLensM);
-      glFill.position.set(fx, eyeBaseY, eyeZ + 0.027);
+      const glFill = mesh(new THREE.CircleGeometry(0.070, 20), glLensM);
+      glFill.position.set(fx, eyeBaseY, faceFrontZ + 0.004);
       headGroup.add(glFill);
     }
-    const glBridge = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.085, 5), glFrameM);
-    glBridge.position.set(0, eyeBaseY, eyeZ + 0.022);
+    const glBridge = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.085, 6), glFrameM);
+    glBridge.position.set(0, eyeBaseY + 0.004, faceFrontZ);
     glBridge.rotation.z = Math.PI / 2;
     headGroup.add(glBridge);
+    for (const fx of [-0.058, 0.058]) {
+      const pad = mesh(new THREE.SphereGeometry(0.007, 6, 5), glFrameM);
+      pad.scale.set(0.5, 0.9, 0.5);
+      pad.position.set(fx, eyeBaseY - 0.025, faceFrontZ - 0.005);
+      headGroup.add(pad);
+    }
     for (const fx of [-0.113, 0.113]) {
-      const glArm = mesh(new THREE.BoxGeometry(0.016, 0.008, 0.20), glFrameM);
-      glArm.position.set(fx + Math.sign(fx) * 0.188, eyeBaseY, eyeZ - 0.078);
+      const glArm = mesh(new THREE.BoxGeometry(0.016, 0.008, 0.22), glFrameM);
+      glArm.position.set(fx + Math.sign(fx) * 0.16, eyeBaseY + 0.008, faceFrontZ - 0.13);
+      glArm.rotation.y = -Math.sign(fx) * 0.18;
       headGroup.add(glArm);
     }
   }
 
   // Sporty glasses
   if (acc.includes('sporty-glasses')) {
-    const spFrameM = mat(0xC2410C, { roughness: 0.46 });
+    const spFrameM = mat(0xC2410C, { roughness: 0.44 });
     const spLensM = mat(0xFEF3C7, { transparent: true, opacity: 0.46, roughness: 0.06 });
     for (const fx of [-0.113, 0.113]) {
-      const spFrame = mesh(new THREE.TorusGeometry(0.080, 0.014, 7, 18), spFrameM);
+      const spFrame = mesh(new THREE.TorusGeometry(0.080, 0.014, 8, 20), spFrameM);
       spFrame.scale.x = 1.28;
-      spFrame.position.set(fx, eyeBaseY, eyeZ + 0.022);
+      spFrame.position.set(fx, eyeBaseY, faceFrontZ);
       headGroup.add(spFrame);
-      const spFill = mesh(new THREE.SphereGeometry(0.070, 14, 10), spLensM);
-      spFill.scale.set(1.28, 0.66, 0.18);
-      spFill.position.set(fx, eyeBaseY, eyeZ + 0.030);
+      const spFill = mesh(new THREE.SphereGeometry(0.070, 16, 12), spLensM);
+      spFill.scale.set(1.28, 0.66, 0.16);
+      spFill.position.set(fx, eyeBaseY, faceFrontZ + 0.005);
       headGroup.add(spFill);
     }
     const spNose = mesh(new THREE.BoxGeometry(0.08, 0.020, 0.018), spFrameM);
-    spNose.position.set(0, eyeBaseY - 0.022, eyeZ + 0.026);
+    spNose.position.set(0, eyeBaseY - 0.020, faceFrontZ + 0.004);
     headGroup.add(spNose);
+    // Temple arms
+    for (const fx of [-0.113, 0.113]) {
+      const spArm = mesh(new THREE.BoxGeometry(0.018, 0.010, 0.22), spFrameM);
+      spArm.position.set(fx + Math.sign(fx) * 0.18, eyeBaseY + 0.008, faceFrontZ - 0.13);
+      spArm.rotation.y = -Math.sign(fx) * 0.18;
+      headGroup.add(spArm);
+    }
   }
 
   // Ski goggles
   if (acc.includes('ski-goggles')) {
     const gogFrameM = mat(0x1E40AF, { roughness: 0.62 });
-    const gogLensM = mat(0xFDE68A, { transparent: true, opacity: 0.58, roughness: 0.06, metalness: 0.08 });
+    const gogLensM = mat(0xFDE68A, { transparent: true, opacity: 0.58, roughness: 0.06, metalness: 0.10 });
     for (const fx of [-0.113, 0.113]) {
-      const gogFrame = mesh(new THREE.TorusGeometry(0.085, 0.022, 8, 18), gogFrameM);
+      const gogFrame = mesh(new THREE.TorusGeometry(0.090, 0.024, 8, 20), gogFrameM);
       gogFrame.scale.y = 0.72;
-      gogFrame.position.set(fx, eyeBaseY, eyeZ + 0.012);
+      gogFrame.position.set(fx, eyeBaseY, faceFrontZ - 0.006);
       headGroup.add(gogFrame);
-      const gogFill = mesh(new THREE.CircleGeometry(0.085, 18), gogLensM);
+      const gogFill = mesh(new THREE.CircleGeometry(0.090, 20), gogLensM);
       gogFill.scale.y = 0.72;
-      gogFill.position.set(fx, eyeBaseY, eyeZ + 0.035);
+      gogFill.position.set(fx, eyeBaseY, faceFrontZ + 0.012);
       headGroup.add(gogFill);
     }
-    const gogBridge = mesh(new THREE.BoxGeometry(0.08, 0.042, 0.022), gogFrameM);
-    gogBridge.position.set(0, eyeBaseY, eyeZ + 0.012);
+    const gogBridge = mesh(new THREE.BoxGeometry(0.06, 0.046, 0.022), gogFrameM);
+    gogBridge.position.set(0, eyeBaseY, faceFrontZ - 0.006);
     headGroup.add(gogBridge);
-    const gogElastic = mesh(new THREE.TorusGeometry(0.34, 0.013, 5, 16, Math.PI), mat(0x1D4ED8, { roughness: 0.72 }));
+    // Elastic band around back of head
+    const gogElastic = mesh(new THREE.TorusGeometry(0.34, 0.014, 5, 18, Math.PI), mat(0x1D4ED8, { roughness: 0.72 }));
     gogElastic.position.set(0, eyeBaseY, 0);
     gogElastic.rotation.y = Math.PI;
     headGroup.add(gogElastic);
+    // Strap detail (small buckles on sides)
+    for (const sx of [-1, 1]) {
+      const buckle = mesh(new THREE.BoxGeometry(0.024, 0.018, 0.016), mat(0xC0C0C0, { metalness: 0.45, roughness: 0.4 }));
+      buckle.position.set(sx * 0.30, eyeBaseY, -0.10);
+      headGroup.add(buckle);
+    }
   }
 
   // Monocle
   if (acc.includes('monocle')) {
-    const monoGoldM = mat(0xD97706, { metalness: 0.42, roughness: 0.38 });
-    const monoFrame = mesh(new THREE.TorusGeometry(0.068, 0.014, 7, 16), monoGoldM);
-    monoFrame.position.set(0.113, eyeBaseY, eyeZ + 0.022);
+    const monoGoldM = mat(0xD97706, { metalness: 0.46, roughness: 0.36 });
+    const monoFrame = mesh(new THREE.TorusGeometry(0.068, 0.014, 8, 18), monoGoldM);
+    monoFrame.position.set(0.113, eyeBaseY, faceFrontZ);
     headGroup.add(monoFrame);
-    const monoGlass = mesh(new THREE.CircleGeometry(0.068, 16), mat(0xBAE6FD, { transparent: true, opacity: 0.34, roughness: 0.06 }));
-    monoGlass.position.set(0.113, eyeBaseY, eyeZ + 0.028);
+    const monoGlass = mesh(new THREE.CircleGeometry(0.068, 18), mat(0xBAE6FD, { transparent: true, opacity: 0.34, roughness: 0.06 }));
+    monoGlass.position.set(0.113, eyeBaseY, faceFrontZ + 0.004);
     headGroup.add(monoGlass);
     for (let i = 0; i < 6; i++) {
       const link = mesh(new THREE.TorusGeometry(0.013, 0.005, 4, 10), monoGoldM);
-      link.position.set(0.113 + i * 0.021, eyeBaseY - 0.030 - i * 0.016, eyeZ + 0.020);
+      link.position.set(0.113 + i * 0.021, eyeBaseY - 0.030 - i * 0.016, faceFrontZ - 0.004);
       link.rotation.z = (i % 2) ? Math.PI / 2 : 0;
       headGroup.add(link);
     }
@@ -1190,20 +1318,24 @@ function buildCharacter(
   // Superhero mask
   if (acc.includes('superhero-mask')) {
     const maskM2 = mat(0x7C3AED, { roughness: 0.58 });
-    const maskBand = mesh(new THREE.BoxGeometry(0.68, 0.10, 0.060), maskM2);
-    maskBand.position.set(0, eyeBaseY, eyeZ - 0.04);
-    maskBand.rotation.x = 0.18;
-    headGroup.add(maskBand);
+    // Curved mask shell wrapping the eye/brow band
+    for (const fx of [-0.113, 0, 0.113]) {
+      const seg = mesh(new THREE.SphereGeometry(0.130, 12, 8, 0, Math.PI * 2, Math.PI * 0.40, Math.PI * 0.20), maskM2);
+      seg.position.set(fx * 0.6, eyeBaseY + 0.014, 0);
+      headGroup.add(seg);
+    }
+    // Eye holes
     for (const fx of [-0.113, 0.113]) {
-      const maskHole = mesh(new THREE.CircleGeometry(0.055, 14), mat(0x1C1917, { roughness: 0.80 }));
-      maskHole.position.set(fx, eyeBaseY, eyeZ + 0.032);
+      const maskHole = mesh(new THREE.CircleGeometry(0.054, 16), mat(0x1C1917, { roughness: 0.84 }));
+      maskHole.position.set(fx, eyeBaseY, faceFrontZ + 0.004);
       headGroup.add(maskHole);
     }
+    // Wing flares on sides
     for (const sx of [-1, 1]) {
-      const wingFlare = mesh(new THREE.BoxGeometry(0.12, 0.08, 0.030), maskM2);
-      wingFlare.position.set(sx * 0.36, eyeBaseY + 0.024, eyeZ - 0.08);
-      wingFlare.rotation.z = sx * 0.28;
-      wingFlare.rotation.y = sx * 0.28;
+      const wingFlare = mesh(new THREE.BoxGeometry(0.12, 0.080, 0.028), maskM2);
+      wingFlare.position.set(sx * 0.36, eyeBaseY + 0.026, faceFrontZ - 0.08);
+      wingFlare.rotation.z = sx * 0.30;
+      wingFlare.rotation.y = sx * 0.30;
       headGroup.add(wingFlare);
     }
   }
