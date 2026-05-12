@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { UserType, USER_DISPLAY, USER_COLOR } from '@/types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { UserType, USER_COLOR } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
+import UserCard from '@/components/XPBar/XPBar';
 
 interface DiaryPhoto {
   id: string;
@@ -48,26 +49,20 @@ async function compressImage(file: File, maxDim = 1200, quality = 0.82): Promise
   return canvas.toDataURL('image/jpeg', quality);
 }
 
-// ── Polaroid: floated element with shape-outside for text reflow + drag ──
+// ── Polaroid: absolutely positioned on the entry card, freely draggable ──
 function Polaroid({
   photo,
-  side,
-  marginTop,
   onUpdate,
   onDelete,
   onOpen,
   containerRef,
 }: {
   photo: DiaryPhoto;
-  side: 'left' | 'right';
-  marginTop: number;
   onUpdate: (id: string, patch: Partial<DiaryPhoto>) => void;
   onDelete: (id: string) => void;
   onOpen: (photo: DiaryPhoto) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const polRef = useRef<HTMLDivElement>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
   const lastTapRef = useRef<number>(0);
@@ -94,6 +89,8 @@ function Polaroid({
     });
   }, []);
 
+  // endDrag: compute new position as (basePos + delta) in % of container.
+  // This preserves grab offset — no jump on release.
   const endDrag = useCallback((clientX: number, clientY: number) => {
     if (!dragState.current || !containerRef.current) {
       dragState.current = null;
@@ -101,23 +98,22 @@ function Polaroid({
       return;
     }
     const rect = containerRef.current.getBoundingClientRect();
-    const relX = clientX - rect.left;
-    const relY = clientY - rect.top;
-    const newX = (relX / rect.width) * 100;
-    const newY = (relY / rect.height) * 100;
+    const dxPct = ((clientX - dragState.current.startX) / rect.width) * 100;
+    const dyPct = ((clientY - dragState.current.startY) / rect.height) * 100;
+    const newX = dragState.current.baseX + dxPct;
+    const newY = dragState.current.baseY + dyPct;
     dragState.current = null;
     setDragOffset(null);
     onUpdate(photo.id, { positionX: newX, positionY: newY });
   }, [containerRef, onUpdate, photo.id]);
 
-  // Mouse drag — drag starts only after small threshold so clicks pass through.
+  // Mouse drag — starts only after 4px threshold so clicks pass through.
   const onMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.polaroid-no-drag')) return;
     if (e.button !== 0) return;
     const startX = e.clientX;
     const startY = e.clientY;
     let started = false;
-
     const onMove = (ev: MouseEvent) => {
       if (!started) {
         if (Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
@@ -136,7 +132,7 @@ function Polaroid({
     window.addEventListener('mouseup', onUp);
   };
 
-  // Touch drag with double-tap detection (mobile equivalent of double-click).
+  // Touch drag with double-tap detection.
   const onTouchStart = (e: React.TouchEvent) => {
     if ((e.target as HTMLElement).closest('.polaroid-no-drag')) return;
     const t = e.touches[0];
@@ -146,7 +142,6 @@ function Polaroid({
     const isDoubleTap = now - lastTapRef.current < 350;
     lastTapRef.current = now;
     let started = false;
-
     const onMove = (ev: TouchEvent) => {
       const tt = ev.touches[0];
       if (!started) {
@@ -162,8 +157,7 @@ function Polaroid({
       window.removeEventListener('touchend', onUp);
       window.removeEventListener('touchcancel', onUp);
       if (started) {
-        const tt = ev.changedTouches[0];
-        endDrag(tt.clientX, tt.clientY);
+        endDrag(ev.changedTouches[0].clientX, ev.changedTouches[0].clientY);
       } else if (isDoubleTap) {
         onOpen(photo);
       }
@@ -178,120 +172,84 @@ function Polaroid({
     if (captionDraft !== photo.caption) onUpdate(photo.id, { caption: captionDraft });
   };
 
-  // The wrapper is in document flow (floated) so text reflows.
-  // The visible polaroid inside is rotated; while dragging it uses
-  // transform translate for smooth visual feedback before commit.
   return (
     <div
-      ref={wrapperRef}
+      onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
+      className="select-none"
       style={{
-        float: side,
-        clear: 'both',
+        position: 'absolute',
+        left: `${photo.positionX}%`,
+        top: `${photo.positionY}%`,
         width: 168,
-        height: 202,
-        marginTop,
-        marginLeft: side === 'left' ? 0 : 18,
-        marginRight: side === 'right' ? 0 : 18,
-        marginBottom: 14,
-        shapeOutside: 'margin-box',
-        WebkitShapeOutside: 'margin-box',
-      } as React.CSSProperties}
+        background: 'white',
+        padding: '8px 8px 28px 8px',
+        boxShadow: dragOffset
+          ? '0 14px 30px rgba(0,0,0,0.32)'
+          : '2px 4px 12px rgba(0,0,0,0.18)',
+        border: '1px solid rgba(0,0,0,0.06)',
+        borderRadius: 2,
+        cursor: dragOffset ? 'grabbing' : 'grab',
+        transform: `rotate(${photo.rotation}deg) translate(${dragOffset?.x ?? 0}px, ${dragOffset?.y ?? 0}px)`,
+        transition: dragOffset ? 'none' : 'transform 0.25s ease, box-shadow 0.2s',
+        zIndex: dragOffset ? 100 : 10,
+        touchAction: 'none',
+      }}
+      title="Плъзни за преместване · двоен клик за уголемяване"
     >
-      <div
-        ref={polRef}
-        onMouseDown={onMouseDown}
-        onTouchStart={onTouchStart}
-        className="select-none"
+      {/* Tape strip */}
+      <div style={{
+        position: 'absolute',
+        top: -10,
+        left: '50%',
+        transform: 'translateX(-50%) rotate(-4deg)',
+        width: 64,
+        height: 20,
+        background: 'rgba(255, 240, 160, 0.72)',
+        borderLeft: '1px dashed rgba(0,0,0,0.05)',
+        borderRight: '1px dashed rgba(0,0,0,0.05)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
+        zIndex: 2,
+      }} />
+
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo.url}
+        alt={photo.caption || 'Спомен'}
+        draggable={false}
+        onDoubleClick={(e) => { e.stopPropagation(); onOpen(photo); }}
         style={{
-          width: 168,
-          background: 'white',
-          padding: '8px 8px 28px 8px',
-          boxShadow: dragOffset
-            ? '0 14px 30px rgba(0,0,0,0.32)'
-            : '2px 4px 12px rgba(0,0,0,0.18)',
-          border: '1px solid rgba(0,0,0,0.06)',
-          borderRadius: 2,
-          position: 'relative',
-          cursor: dragOffset ? 'grabbing' : 'grab',
-          transform: `rotate(${photo.rotation}deg) translate(${dragOffset?.x ?? 0}px, ${dragOffset?.y ?? 0}px)`,
-          transition: dragOffset ? 'none' : 'transform 0.25s ease, box-shadow 0.2s',
-          zIndex: dragOffset ? 50 : 1,
-          touchAction: 'none',
+          width: '100%',
+          height: 136,
+          objectFit: 'cover',
+          display: 'block',
+          background: '#f4f4f4',
+          cursor: 'inherit',
         }}
-        title="Плъзни за преместване · двоен клик за уголемяване"
-      >
-        {/* Tape strip on top */}
-        <div style={{
-          position: 'absolute',
-          top: -10,
-          left: '50%',
-          transform: 'translateX(-50%) rotate(-4deg)',
-          width: 64,
-          height: 20,
-          background: 'rgba(255, 240, 160, 0.72)',
-          borderLeft: '1px dashed rgba(0,0,0,0.05)',
-          borderRight: '1px dashed rgba(0,0,0,0.05)',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
-          zIndex: 2,
-        }} />
+      />
 
-        {/* Photo — double-click opens fullscreen; single click does nothing.
-            Drag passes through naturally because we don't stop the mousedown. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.url}
-          alt={photo.caption || 'Спомен'}
-          draggable={false}
-          onDoubleClick={(e) => { e.stopPropagation(); onOpen(photo); }}
-          style={{
-            width: '100%',
-            height: 136,
-            objectFit: 'cover',
-            display: 'block',
-            background: '#f4f4f4',
-            cursor: 'inherit',
-            pointerEvents: 'auto',
-          }}
-        />
-
-        {/* Caption (handwritten) */}
-        <div className="polaroid-no-drag" style={{ marginTop: 6, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {editingCaption ? (
-            <input
-              autoFocus
-              value={captionDraft}
-              onChange={(e) => setCaptionDraft(e.target.value)}
-              onBlur={commitCaption}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitCaption(); }}
-              placeholder="Място / описание"
-              className="diary-font"
-              style={{
-                width: '100%',
-                fontSize: 17,
-                textAlign: 'center',
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                color: '#2D1B0E',
-              }}
-            />
-          ) : (
-            <div
-              onClick={(e) => { e.stopPropagation(); setEditingCaption(true); }}
-              className="diary-font"
-              style={{
-                width: '100%',
-                fontSize: 17,
-                textAlign: 'center',
-                color: photo.caption ? '#2D1B0E' : '#A89478',
-                cursor: 'text',
-                lineHeight: 1.1,
-              }}
-            >
-              {photo.caption || '…'}
-            </div>
-          )}
-        </div>
+      {/* Caption */}
+      <div className="polaroid-no-drag" style={{ marginTop: 6, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {editingCaption ? (
+          <input
+            autoFocus
+            value={captionDraft}
+            onChange={(e) => setCaptionDraft(e.target.value)}
+            onBlur={commitCaption}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitCaption(); }}
+            placeholder="Място / описание"
+            className="diary-font"
+            style={{ width: '100%', fontSize: 17, textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', color: '#2D1B0E' }}
+          />
+        ) : (
+          <div
+            onClick={(e) => { e.stopPropagation(); setEditingCaption(true); }}
+            className="diary-font"
+            style={{ width: '100%', fontSize: 17, textAlign: 'center', color: photo.caption ? '#2D1B0E' : '#A89478', cursor: 'text', lineHeight: 1.1 }}
+          >
+            {photo.caption || '…'}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -332,7 +290,7 @@ function NotebookLines({ height }: { height: number }) {
   );
 }
 
-// ── Entry card with reflowing text + floated polaroids ──
+// ── Entry card: text flows freely, photos are absolutely positioned on top ──
 function DiaryEntryCard({
   entry,
   rotation,
@@ -350,31 +308,11 @@ function DiaryEntryCard({
   onUpdatePhoto: (photoId: string, patch: Partial<DiaryPhoto>) => void;
   onDeletePhoto: (photoId: string) => void;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<DiaryPhoto | null>(null);
-
-  // Sort photos by positionY ascending so vertical order matches drag intent.
-  // shape-outside on float wrapper handles text reflow.
-  const sortedPhotos = useMemo(() => {
-    return [...entry.photos].sort((a, b) => a.positionY - b.positionY);
-  }, [entry.photos]);
-
-  // Approximate margin-top per photo. positionY 0..100 maps to 0..~340px.
-  // Multiple photos on same side stack via float + clear:both; their effective
-  // vertical position is set by their order + margin-top relative to the
-  // previous floated item on that side.
-  const photoLayout = useMemo(() => {
-    const lastY: Record<'left' | 'right', number> = { left: 0, right: 0 };
-    return sortedPhotos.map((p) => {
-      const side: 'left' | 'right' = p.positionX < 50 ? 'left' : 'right';
-      const targetTop = (p.positionY / 100) * 340;
-      const gap = Math.max(0, targetTop - lastY[side]);
-      lastY[side] = targetTop + 202;
-      return { photo: p, side, marginTop: gap };
-    });
-  }, [sortedPhotos]);
 
   const formatDate = (d: string) => {
     try {
@@ -394,9 +332,13 @@ function DiaryEntryCard({
     }
   };
 
+  // Extra height when photos exist so there's room to place them
+  const minHeight = entry.photos.length > 0 ? 480 : 320;
+
   return (
     <div
-      className="relative rounded-2xl overflow-hidden"
+      ref={cardRef}
+      className="relative rounded-2xl"
       style={{
         background: '#FFF9EE',
         backgroundImage: 'linear-gradient(135deg, #FFF9EE 0%, #F8F2DF 100%)',
@@ -404,11 +346,24 @@ function DiaryEntryCard({
         boxShadow: '3px 5px 18px rgba(70,40,15,0.12)',
         transform: `rotate(${rotation}deg)`,
         padding: '28px 28px 26px 76px',
-        minHeight: 320,
+        minHeight,
       }}
     >
-      <NotebookLines height={contentRef.current?.scrollHeight ?? 320} />
+      <NotebookLines height={contentRef.current?.scrollHeight ?? minHeight} />
 
+      {/* Absolutely positioned polaroids sit on top of text */}
+      {entry.photos.map(photo => (
+        <Polaroid
+          key={photo.id}
+          photo={photo}
+          onUpdate={onUpdatePhoto}
+          onDelete={onDeletePhoto}
+          onOpen={setFullscreenPhoto}
+          containerRef={cardRef}
+        />
+      ))}
+
+      {/* Text content — unaffected by photos */}
       <div className="relative" style={{ zIndex: 1 }} ref={contentRef}>
         {/* Date */}
         <div className="diary-font" style={{ color: '#B08050', fontSize: 16, marginBottom: 2 }}>
@@ -419,57 +374,30 @@ function DiaryEntryCard({
           {entry.title}
         </h3>
 
-        {/* Floated polaroids + flowing text. Order: photos first, then text.
-            shape-outside makes text wrap around each photo's margin box. */}
-        <div style={{ overflow: 'hidden' }}>
-          {photoLayout.map(({ photo, side, marginTop }) => (
-            <Polaroid
-              key={photo.id}
-              photo={photo}
-              side={side}
-              marginTop={marginTop}
-              onUpdate={onUpdatePhoto}
-              onDelete={onDeletePhoto}
-              onOpen={setFullscreenPhoto}
-              containerRef={contentRef}
-            />
-          ))}
-          <div
-            className="diary-font"
-            style={{
-              fontSize: 19,
-              color: '#2D1B0E',
-              lineHeight: '30px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {entry.content}
-          </div>
+        <div
+          className="diary-font"
+          style={{
+            fontSize: 19,
+            color: '#2D1B0E',
+            lineHeight: '30px',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {entry.content}
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2 mt-5 flex-wrap" style={{ clear: 'both' }}>
+        <div className="flex gap-2 mt-5 flex-wrap">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             className="diary-font px-3 py-1.5 rounded-lg transition-all"
-            style={{
-              background: 'rgba(34,197,94,0.10)',
-              color: '#15803D',
-              fontSize: 16,
-              opacity: uploading ? 0.6 : 1,
-            }}
+            style={{ background: 'rgba(34,197,94,0.10)', color: '#15803D', fontSize: 16, opacity: uploading ? 0.6 : 1 }}
           >
             {uploading ? 'Качване…' : '📷 Добави снимка'}
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-          />
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
           <button
             onClick={onEdit}
             className="diary-font px-3 py-1.5 rounded-lg transition-all"
@@ -702,20 +630,12 @@ export default function DnevnikPage() {
       {/* User switcher */}
       <div className="flex gap-3 max-w-lg mx-auto mb-4">
         {(['tati', 'iva'] as UserType[]).map(u => (
-          <button
+          <UserCard
             key={u}
+            user={u}
+            isActive={activeUser === u}
             onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); }}
-            className="flex-1 py-2 rounded-xl font-bold transition-all diary-font"
-            style={{
-              background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.55)',
-              color: activeUser === u ? 'white' : '#64748b',
-              border: `2px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(0,0,0,0.08)'}`,
-              boxShadow: activeUser === u ? `0 3px 10px ${USER_COLOR[u]}40` : 'none',
-              fontSize: 22,
-            }}
-          >
-            {USER_DISPLAY[u]}
-          </button>
+          />
         ))}
       </div>
 

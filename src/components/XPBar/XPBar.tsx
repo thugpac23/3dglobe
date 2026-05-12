@@ -1,105 +1,116 @@
 'use client';
 
-import { UserType, UserProgress, USER_DISPLAY, USER_COLOR } from '@/types';
-import { getLevelTitle, xpProgress, xpToNextLevel } from '@/lib/xp';
+import { useState, useEffect, useRef } from 'react';
+import { UserType, USER_DISPLAY, USER_COLOR } from '@/types';
 
-interface XPBarProps {
+const DEFAULT_EMOJIS: Record<UserType, string> = { tati: '🧳', iva: '🌸' };
+
+const EMOJI_CHOICES = [
+  '🧳', '🌸', '✈️', '🌍', '🗺️', '⭐', '🏔️', '🌊', '🌺', '🦋',
+  '🌈', '🎒', '📸', '🎭', '🌙', '☀️', '🍀', '🌴', '🦁', '🐬',
+  '🦊', '🌹', '🎨', '🏖️', '🚀', '🌻', '🦄', '🎵',
+];
+
+interface UserCardProps {
   user: UserType;
-  progress: UserProgress;
   isActive: boolean;
   onClick: () => void;
-  /** compact=true: name + level only, no XP bar or numbers (for homepage banner) */
-  compact?: boolean;
 }
 
-const AVATARS: Record<UserType, string> = { tati: '🧳', iva: '🌸' };
-
-export default function XPBar({ user, progress, isActive, onClick, compact = false }: XPBarProps) {
+export default function UserCard({ user, isActive, onClick }: UserCardProps) {
   const color = USER_COLOR[user];
-  const title = getLevelTitle(progress.level);
+  const [emoji, setEmoji] = useState(DEFAULT_EMOJIS[user]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
-  if (compact) {
-    return (
-      <button
-        onClick={onClick}
-        className="flex-1 text-left transition-all duration-200"
-        style={{
-          background: isActive ? 'white' : 'rgba(255,255,255,0.55)',
-          border: `2px solid ${isActive ? color : 'rgba(0,0,0,0.08)'}`,
-          borderRadius: 14,
-          padding: '8px 12px',
-          boxShadow: isActive ? `0 3px 14px ${color}28` : '0 1px 4px rgba(0,0,0,0.07)',
-          cursor: 'pointer',
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-xl leading-none">{AVATARS[user]}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-bold text-sm text-slate-800">{USER_DISPLAY[user]}</span>
-              <span
-                className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white"
-                style={{ background: color }}
-              >
-                Ниво {progress.level}
-              </span>
-            </div>
-            <div className="text-xs text-slate-400 truncate leading-tight">{title}</div>
-          </div>
-        </div>
-      </button>
-    );
-  }
+  useEffect(() => {
+    fetch('/api/settings', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, string>) => {
+        const saved = data[`emoji_${user}`];
+        if (saved) setEmoji(saved);
+      })
+      .catch(() => {});
+  }, [user]);
 
-  const { pct, current, needed } = xpProgress(progress.xp, progress.level);
-  const isMaxLevel = progress.level >= 5;
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [pickerOpen]);
+
+  const handleEmojiSelect = (newEmoji: string) => {
+    setEmoji(newEmoji);
+    setPickerOpen(false);
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: `emoji_${user}`, value: newEmoji }),
+    }).catch(() => {});
+  };
 
   return (
-    <button
-      onClick={onClick}
-      className="flex-1 max-w-xs text-left transition-all duration-200"
+    <div
+      className="flex-1 relative transition-all duration-200 select-none"
       style={{
         background: isActive ? 'white' : 'rgba(255,255,255,0.55)',
         border: `2px solid ${isActive ? color : 'rgba(0,0,0,0.08)'}`,
-        borderRadius: 16,
-        padding: '12px 14px',
-        boxShadow: isActive ? `0 4px 20px ${color}30` : '0 1px 4px rgba(0,0,0,0.08)',
+        borderRadius: 14,
+        padding: '8px 12px',
+        boxShadow: isActive ? `0 3px 14px ${color}28` : '0 1px 4px rgba(0,0,0,0.07)',
         cursor: 'pointer',
       }}
+      onClick={onClick}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-2xl leading-none">{AVATARS[user]}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-bold text-sm text-slate-800">{USER_DISPLAY[user]}</span>
-            <span
-              className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
-              style={{ background: color }}
-            >
-              Ниво {progress.level}
-            </span>
-          </div>
-          <div className="text-xs text-slate-500 truncate">{title}</div>
-        </div>
+      <div className="flex items-center gap-2">
+        <span
+          onClick={(e) => { e.stopPropagation(); setPickerOpen(p => !p); }}
+          style={{ fontSize: 22, lineHeight: 1, cursor: 'pointer' }}
+          title="Смени иконата"
+        >
+          {emoji}
+        </span>
+        <span className="font-bold text-sm text-slate-800">{USER_DISPLAY[user]}</span>
       </div>
 
-      {/* XP bar */}
-      <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.08)' }}>
+      {/* macOS-style emoji picker */}
+      {pickerOpen && (
         <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}cc, ${color})` }}
-        />
-      </div>
-      <div className="flex justify-between items-center mt-1">
-        <span className="text-xs text-slate-400">
-          {isMaxLevel ? `${progress.xp} XP — Максимално ниво!` : `${current} / ${needed} XP`}
-        </span>
-        {!isMaxLevel && (
-          <span className="text-xs" style={{ color }}>
-            → Ниво {progress.level + 1} при {xpToNextLevel(progress.level)} XP
-          </span>
-        )}
-      </div>
-    </button>
+          ref={pickerRef}
+          className="absolute z-50 rounded-2xl shadow-2xl p-3"
+          style={{
+            top: 'calc(100% + 6px)',
+            left: 0,
+            background: 'rgba(255,255,255,0.97)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(0,0,0,0.1)',
+            minWidth: 224,
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="text-xs text-slate-400 mb-2 font-medium px-1">Избери иконa</div>
+          <div className="grid grid-cols-7 gap-1">
+            {EMOJI_CHOICES.map(e => (
+              <button
+                key={e}
+                onClick={() => handleEmojiSelect(e)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-xl transition-all hover:scale-125 active:scale-95"
+                style={{
+                  background: e === emoji ? `${color}22` : 'transparent',
+                  border: `1.5px solid ${e === emoji ? color : 'transparent'}`,
+                }}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
