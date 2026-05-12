@@ -70,6 +70,7 @@ function Polaroid({
   const polRef = useRef<HTMLDivElement>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+  const lastTapRef = useRef<number>(0);
   const [editingCaption, setEditingCaption] = useState(false);
   const [captionDraft, setCaptionDraft] = useState(photo.caption);
 
@@ -109,37 +110,63 @@ function Polaroid({
     onUpdate(photo.id, { positionX: newX, positionY: newY });
   }, [containerRef, onUpdate, photo.id]);
 
-  // Mouse drag
+  // Mouse drag — drag starts only after small threshold so clicks pass through.
   const onMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.polaroid-no-drag')) return;
-    e.preventDefault();
-    beginDrag(e.clientX, e.clientY);
-    const onMove = (ev: MouseEvent) => moveDrag(ev.clientX, ev.clientY);
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let started = false;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!started) {
+        if (Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
+        started = true;
+        beginDrag(startX, startY);
+      }
+      ev.preventDefault();
+      moveDrag(ev.clientX, ev.clientY);
+    };
     const onUp = (ev: MouseEvent) => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      endDrag(ev.clientX, ev.clientY);
+      if (started) endDrag(ev.clientX, ev.clientY);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
 
-  // Touch drag
+  // Touch drag with double-tap detection (mobile equivalent of double-click).
   const onTouchStart = (e: React.TouchEvent) => {
     if ((e.target as HTMLElement).closest('.polaroid-no-drag')) return;
     const t = e.touches[0];
-    beginDrag(t.clientX, t.clientY);
+    const startX = t.clientX;
+    const startY = t.clientY;
+    const now = Date.now();
+    const isDoubleTap = now - lastTapRef.current < 350;
+    lastTapRef.current = now;
+    let started = false;
+
     const onMove = (ev: TouchEvent) => {
-      ev.preventDefault();
       const tt = ev.touches[0];
+      if (!started) {
+        if (Math.abs(tt.clientX - startX) < 6 && Math.abs(tt.clientY - startY) < 6) return;
+        started = true;
+        beginDrag(startX, startY);
+      }
+      ev.preventDefault();
       moveDrag(tt.clientX, tt.clientY);
     };
     const onUp = (ev: TouchEvent) => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
       window.removeEventListener('touchcancel', onUp);
-      const tt = ev.changedTouches[0];
-      endDrag(tt.clientX, tt.clientY);
+      if (started) {
+        const tt = ev.changedTouches[0];
+        endDrag(tt.clientX, tt.clientY);
+      } else if (isDoubleTap) {
+        onOpen(photo);
+      }
     };
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
@@ -191,7 +218,7 @@ function Polaroid({
           zIndex: dragOffset ? 50 : 1,
           touchAction: 'none',
         }}
-        title="Плъзни поляроида"
+        title="Плъзни за преместване · двоен клик за уголемяване"
       >
         {/* Tape strip on top */}
         <div style={{
@@ -208,21 +235,22 @@ function Polaroid({
           zIndex: 2,
         }} />
 
-        {/* Photo — click opens fullscreen */}
+        {/* Photo — double-click opens fullscreen; single click does nothing.
+            Drag passes through naturally because we don't stop the mousedown. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photo.url}
           alt={photo.caption || 'Спомен'}
           draggable={false}
-          onClick={(e) => { e.stopPropagation(); onOpen(photo); }}
-          className="polaroid-no-drag"
+          onDoubleClick={(e) => { e.stopPropagation(); onOpen(photo); }}
           style={{
             width: '100%',
             height: 136,
             objectFit: 'cover',
             display: 'block',
             background: '#f4f4f4',
-            cursor: 'zoom-in',
+            cursor: 'inherit',
+            pointerEvents: 'auto',
           }}
         />
 
