@@ -6,7 +6,9 @@ import { setSoundEnabled, resumeAudio } from '@/lib/sounds';
 import { useState, useEffect } from 'react';
 
 const ITEMS = [
-  { href: '/',             icon: '🌍', label: 'Начало' },
+  { href: '/',             icon: '⭐', label: 'Искам да посетя' },
+  { href: '/poseteno',     icon: '🗺️', label: 'Посетено' },
+  { href: '/dnevnik',      icon: '📓', label: 'Дневник' },
   { href: '/pasport',      icon: '📕', label: 'Паспорт' },
   { href: '/igra',         icon: '🎮', label: 'Игра' },
   { href: '/postizheniya', icon: '🏅', label: 'Постижения' },

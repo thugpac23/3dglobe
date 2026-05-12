@@ -224,6 +224,11 @@ export default function CountryShapeGame({ activeUser }: { activeUser: UserType 
       {/* Shape display */}
       <div className="rounded-2xl mb-5 overflow-hidden shadow-sm" style={{ border: `2px solid ${USER_COLOR[activeUser]}30` }}>
         <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width="100%" style={{ display: 'block', background: `linear-gradient(180deg, ${OCEAN_TOP}, ${OCEAN_BOTTOM})` }}>
+          <defs>
+            <clipPath id={`country-clip-${round}`}>
+              <path d={current.path} />
+            </clipPath>
+          </defs>
           {/* Subtle ocean wave hints */}
           {[0.32, 0.55, 0.78].map((y, i) => (
             <path
@@ -234,7 +239,19 @@ export default function CountryShapeGame({ activeUser }: { activeUser: UserType 
               fill="none"
             />
           ))}
+          {/* Country shape base fill */}
           <path d={current.path} fill={LAND_FILL} stroke={LAND_STROKE} strokeWidth={1.6} strokeLinejoin="round" />
+          {/* Semi-transparent flag clipped to country shape (~45% opacity) */}
+          <image
+            href={`https://flagcdn.com/w160/${current.iso.toLowerCase()}.png`}
+            x={0} y={0}
+            width={SVG_W} height={SVG_H}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#country-clip-${round})`}
+            opacity={0.45}
+          />
+          {/* Country outline on top for crispness */}
+          <path d={current.path} fill="none" stroke={LAND_STROKE} strokeWidth={1.6} strokeLinejoin="round" />
         </svg>
       </div>
 

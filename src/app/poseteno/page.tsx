@@ -3,14 +3,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  UserType, Visit, WishlistItem,
+  UserType, Visit,
   VisitsByCountry, WishlistByCountry,
   UserProgress, USER_DISPLAY, USER_COLOR,
 } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
 import {
   fetchVisits, fetchProgress,
-  fetchWishlist, addWishlist, removeWishlist,
+  fetchWishlist, addVisit, removeVisit,
   addXP,
 } from '@/lib/api';
 import { ACHIEVEMENTS } from '@/lib/xp';
@@ -36,9 +36,9 @@ interface Toast { id: number; message: string; type: 'add' | 'remove' | 'xp' | '
 
 const DEFAULT_PROGRESS: UserProgress = { id: '', user: 'tati', xp: 0, level: 1, achievements: [] };
 
-export default function Home() {
+export default function Poseteno() {
   const [visits, setVisits] = useState<Visit[]>([]);
-  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [wishlist, setWishlist] = useState<import('@/types').WishlistItem[]>([]);
   const [progress, setProgress] = useState<{ tati: UserProgress; iva: UserProgress }>({
     tati: { ...DEFAULT_PROGRESS, user: 'tati' },
     iva:  { ...DEFAULT_PROGRESS, user: 'iva' },
@@ -114,6 +114,16 @@ export default function Home() {
     return map;
   }, [wishlist]);
 
+  const visitCount = useMemo(() => {
+    let tati = 0, iva = 0, both = 0;
+    for (const e of Object.values(visitsByCountry)) {
+      if (e.tati && e.iva) both++;
+      else if (e.tati) tati++;
+      else if (e.iva) iva++;
+    }
+    return { tati, iva, both };
+  }, [visitsByCountry]);
+
   const handleAwardXP = useCallback(async (user: UserType, amount: number) => {
     try {
       const result = await addXP(user, amount);
@@ -140,20 +150,21 @@ export default function Home() {
   const handleCountryClick = useCallback(async (isoCode: string, countryName: string) => {
     showFactPopup(isoCode);
 
-    const onWishlist = wishlistByCountry[isoCode]?.[activeUser] ?? false;
+    const entry = visitsByCountry[isoCode];
+    const alreadyVisited = entry?.[activeUser] ?? false;
     const displayName = USER_DISPLAY[activeUser];
 
-    if (onWishlist) {
-      const item = wishlist.find((w) => w.country.isoCode === isoCode && w.user === activeUser);
-      if (!item) return;
-      setWishlist((p) => p.filter((w) => w.id !== item.id));
-      showToast(`${countryName} премахната от желаните на ${displayName}`, 'remove');
-      try { await removeWishlist(item.countryId, activeUser); }
-      catch { setWishlist((p) => [...p, item]); }
+    if (alreadyVisited) {
+      const visit = visits.find((v) => v.country.isoCode === isoCode && v.user === activeUser);
+      if (!visit) return;
+      setVisits((p) => p.filter((v) => v.id !== visit.id));
+      showToast(`${countryName} премахната от ${displayName}`, 'remove');
+      try { await removeVisit(visit.countryId, activeUser); }
+      catch { setVisits((p) => [...p, visit]); showToast('Грешка при премахване', 'remove'); }
     } else {
       let countryId: string | null = null;
-      const existing = visits.find((v) => v.country.isoCode === isoCode) ?? wishlist.find((w) => w.country.isoCode === isoCode);
-      if (existing) { countryId = existing.countryId; }
+      const anyVisit = visits.find((v) => v.country.isoCode === isoCode);
+      if (anyVisit) { countryId = anyVisit.countryId; }
       else {
         try {
           const r = await fetch(`/api/country?iso=${isoCode}`);
@@ -161,37 +172,45 @@ export default function Home() {
           countryId = (await r.json()).id;
         } catch { showToast(`${countryName} не е намерена`, 'remove'); return; }
       }
-      const optimistic: WishlistItem = {
+
+      const isShared = entry && (entry.tati || entry.iva);
+      const xpAmount = isShared ? 15 : 10;
+
+      const optimistic: Visit = {
         id: `tmp-${Date.now()}`, countryId: countryId!,
         user: activeUser,
-        country: wishlistByCountry[isoCode]?.country ?? visitsByCountry[isoCode]?.country ?? { id: countryId!, name: countryName, capital: '', isoCode },
+        country: entry?.country ?? { id: countryId!, name: countryName, capital: '', isoCode },
       };
-      setWishlist((p) => [...p, optimistic]);
-      showToast(`⭐ ${countryName} добавена в желаните на ${displayName}`, 'add');
-      handleAwardXP(activeUser, 5);
+      setVisits((p) => [...p, optimistic]);
+      showToast(`✓ ${countryName} добавена към ${displayName}`, 'add');
+      handleAwardXP(activeUser, xpAmount);
       try {
-        const real = await addWishlist(countryId!, activeUser);
-        setWishlist((p) => [...p.filter((w) => w.id !== optimistic.id), real]);
+        const real = await addVisit(countryId!, activeUser);
+        setVisits((p) => [...p.filter((v) => v.id !== optimistic.id), real]);
       } catch {
-        setWishlist((p) => p.filter((w) => w.id !== optimistic.id));
+        setVisits((p) => p.filter((v) => v.id !== optimistic.id));
         showToast('Грешка при запазване', 'remove');
       }
     }
-  }, [wishlistByCountry, wishlist, visits, visitsByCountry, activeUser, showToast, handleAwardXP, showFactPopup]);
+  }, [visitsByCountry, visits, activeUser, showToast, handleAwardXP, showFactPopup]);
 
   const toastColors: Record<Toast['type'], string> = {
     add: '#059669', remove: '#DC2626',
     xp: '#F59E0B', level: '#7C3AED', achievement: '#0EA5E9',
   };
 
+  const totalVisited = visitCount.tati + visitCount.iva + visitCount.both;
+
   return (
     <main className="min-h-screen flex flex-col items-center pb-20 px-2">
       {/* Header */}
       <header className="w-full max-w-2xl pt-5 pb-2 text-center">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800" style={{ letterSpacing: '-0.02em' }}>
-          ⭐ Искам да посетя
+          🗺️ Посетено
         </h1>
-        <p className="text-slate-500 text-xs mt-1 tracking-widest uppercase">Списък с мечтани дестинации</p>
+        <p className="text-slate-500 text-xs mt-1 tracking-widest uppercase">
+          {totalVisited > 0 ? `${totalVisited} държав${totalVisited === 1 ? 'а' : 'и'} посетени` : 'Открийте света заедно'}
+        </p>
       </header>
 
       {/* User switcher */}
@@ -209,7 +228,7 @@ export default function Home() {
       </div>
 
       <p className="text-xs text-slate-500 mt-2">
-        Кликни върху държава, за да я добавиш/премахнеш от списъка на {USER_DISPLAY[activeUser]}
+        Кликни върху държава, за да я отбележиш за {USER_DISPLAY[activeUser]}
       </p>
 
       {/* Map section */}
@@ -219,7 +238,7 @@ export default function Home() {
           <WorldMap
             visitsByCountry={visitsByCountry}
             wishlistByCountry={wishlistByCountry}
-            mode="wishlist"
+            mode="visited"
             onCountryClick={handleCountryClick}
             height={300}
           />
@@ -230,7 +249,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Buttons below map */}
         <div className="flex gap-2 mt-3">
           <button
             onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
@@ -251,9 +269,9 @@ export default function Home() {
         {/* Legend */}
         <div className="flex flex-wrap justify-center gap-3 mt-3">
           {[
-            { color: '#F59E0B', label: `желано от ${USER_DISPLAY.tati}` },
-            { color: '#EC4899', label: `желано от ${USER_DISPLAY.iva}` },
-            { color: '#7C3AED', label: 'желано от двете' },
+            { color: '#F59E0B', label: `само ${USER_DISPLAY.tati}` },
+            { color: '#EC4899', label: `само ${USER_DISPLAY.iva}` },
+            { color: '#7C3AED', label: 'двете заедно' },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
               <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color }} />
@@ -290,7 +308,7 @@ export default function Home() {
               visitsByCountry={visitsByCountry}
               wishlistByCountry={wishlistByCountry}
               activeUser={activeUser}
-              mode="wishlist"
+              mode="visited"
               onCountryClick={handleCountryClick}
               fullscreen
             />
@@ -312,7 +330,7 @@ export default function Home() {
             </div>
           )}
           <div className="text-center pb-2 text-xs shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            Кликни двукратно върху държава — добавя/премахва от желаните на {USER_DISPLAY[activeUser]}
+            Кликни двукратно върху държава — добавя/премахва за {USER_DISPLAY[activeUser]}
           </div>
         </div>
       )}
@@ -342,7 +360,7 @@ export default function Home() {
             <WorldMap
               visitsByCountry={visitsByCountry}
               wishlistByCountry={wishlistByCountry}
-              mode="wishlist"
+              mode="visited"
               onCountryClick={handleCountryClick}
               fullscreen
             />
@@ -365,16 +383,16 @@ export default function Home() {
           )}
           <div className="text-center py-2 text-xs shrink-0"
             style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(6,18,36,0.7)' }}>
-            Кликни върху държава — добавя/премахва от желаните на {USER_DISPLAY[activeUser]}
+            Кликни върху държава — добавя/премахва за {USER_DISPLAY[activeUser]}
           </div>
         </div>
       )}
 
-      {/* Wishlist table */}
+      {/* Visits table */}
       <VisitsTable
         visitsByCountry={visitsByCountry}
         wishlistByCountry={wishlistByCountry}
-        mode="wishlist"
+        mode="visited"
       />
 
       {/* Toasts */}
