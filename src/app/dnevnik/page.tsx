@@ -52,14 +52,14 @@ async function compressImage(file: File, maxDim = 1200, quality = 0.82): Promise
 // ── Polaroid: absolutely positioned on the entry card, freely draggable ──
 function Polaroid({
   photo,
+  isDeleting,
   onUpdate,
-  onDelete,
   onOpen,
   containerRef,
 }: {
   photo: DiaryPhoto;
+  isDeleting: boolean;
   onUpdate: (id: string, patch: Partial<DiaryPhoto>) => void;
-  onDelete: (id: string) => void;
   onOpen: (photo: DiaryPhoto) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -190,10 +190,16 @@ function Polaroid({
         border: '1px solid rgba(0,0,0,0.06)',
         borderRadius: 2,
         cursor: dragOffset ? 'grabbing' : 'grab',
-        transform: `rotate(${photo.rotation}deg) translate(${dragOffset?.x ?? 0}px, ${dragOffset?.y ?? 0}px)`,
-        transition: dragOffset ? 'none' : 'transform 0.25s ease, box-shadow 0.2s',
+        transform: isDeleting
+          ? `rotate(${photo.rotation}deg) scale(0.6)`
+          : `rotate(${photo.rotation}deg) translate(${dragOffset?.x ?? 0}px, ${dragOffset?.y ?? 0}px)`,
+        opacity: isDeleting ? 0 : 1,
+        transition: isDeleting
+          ? 'opacity 0.28s ease, transform 0.28s ease'
+          : dragOffset ? 'none' : 'transform 0.25s ease, box-shadow 0.2s',
         zIndex: dragOffset ? 100 : 10,
         touchAction: 'none',
+        pointerEvents: isDeleting ? 'none' : 'auto',
       }}
       title="Плъзни за преместване · двоен клик за уголемяване"
     >
@@ -255,9 +261,9 @@ function Polaroid({
   );
 }
 
-// ── Notebook paper background ──
+// ── Notebook paper background — always at least 20 lines ──
 function NotebookLines({ height }: { height: number }) {
-  const lineCount = Math.ceil(height / 30);
+  const lineCount = Math.max(Math.ceil(height / 30), 20);
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
       {Array.from({ length: lineCount }).map((_, i) => (
@@ -313,6 +319,16 @@ function DiaryEntryCard({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<DiaryPhoto | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
+
+  const handleDeletePhoto = (photoId: string) => {
+    setFullscreenPhoto(null);
+    setDeletingPhotoId(photoId);
+    setTimeout(() => {
+      setDeletingPhotoId(null);
+      onDeletePhoto(photoId);
+    }, 300);
+  };
 
   const formatDate = (d: string) => {
     try {
@@ -332,8 +348,8 @@ function DiaryEntryCard({
     }
   };
 
-  // Extra height when photos exist so there's room to place them
-  const minHeight = entry.photos.length > 0 ? 480 : 320;
+  // 700px fits 20+ notebook lines (lines start at y=64, spaced 30px)
+  const minHeight = 700;
 
   return (
     <div
@@ -356,8 +372,8 @@ function DiaryEntryCard({
         <Polaroid
           key={photo.id}
           photo={photo}
+          isDeleting={deletingPhotoId === photo.id}
           onUpdate={onUpdatePhoto}
-          onDelete={onDeletePhoto}
           onOpen={setFullscreenPhoto}
           containerRef={cardRef}
         />
@@ -387,28 +403,28 @@ function DiaryEntryCard({
           {entry.content}
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2 mt-5 flex-wrap">
+        {/* Actions — single row, no wrap */}
+        <div className="flex gap-2 mt-5" style={{ flexWrap: 'nowrap' }}>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="diary-font px-3 py-1.5 rounded-lg transition-all"
-            style={{ background: 'rgba(34,197,94,0.10)', color: '#15803D', fontSize: 16, opacity: uploading ? 0.6 : 1 }}
+            className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
+            style={{ background: 'rgba(34,197,94,0.10)', color: '#15803D', fontSize: 15, opacity: uploading ? 0.6 : 1 }}
           >
-            {uploading ? 'Качване…' : '📷 Добави снимка'}
+            {uploading ? '⏳' : '📷 Снимка'}
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
           <button
             onClick={onEdit}
-            className="diary-font px-3 py-1.5 rounded-lg transition-all"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#5C3D1A', fontSize: 16 }}
+            className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
+            style={{ background: 'rgba(0,0,0,0.06)', color: '#5C3D1A', fontSize: 15 }}
           >
             ✏️ Редактирай
           </button>
           <button
             onClick={onDelete}
-            className="diary-font px-3 py-1.5 rounded-lg transition-all"
-            style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626', fontSize: 16 }}
+            className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
+            style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626', fontSize: 15 }}
           >
             🗑️ Изтрий
           </button>
@@ -418,83 +434,77 @@ function DiaryEntryCard({
       {/* Fullscreen photo preview */}
       {fullscreenPhoto && (
         <div
-          className="fixed inset-0 flex flex-col items-center justify-center z-[100]"
+          className="fixed inset-0 flex items-center justify-center z-[100]"
           style={{ background: 'rgba(0,0,0,0.92)' }}
           onClick={() => setFullscreenPhoto(null)}
         >
-          {/* Close button */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setFullscreenPhoto(null); }}
-            style={{
-              position: 'fixed',
-              top: 20,
-              right: 24,
-              background: '#111',
-              color: 'white',
-              border: '1.5px solid rgba(255,255,255,0.35)',
-              borderRadius: '50%',
-              width: 40,
-              height: 40,
-              fontSize: 20,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 101,
-            }}
-            title="Затвори"
-          >
-            ✕
-          </button>
-
-          {/* Photo */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={fullscreenPhoto.url}
-            alt={fullscreenPhoto.caption || 'Снимка'}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: '90vw',
-              maxHeight: '78vh',
-              objectFit: 'contain',
-              borderRadius: 4,
-              boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
-            }}
-          />
-
-          {/* Caption */}
-          {fullscreenPhoto.caption && (
-            <div
-              className="diary-font"
-              style={{ color: 'rgba(255,255,255,0.85)', fontSize: 22, marginTop: 14, textAlign: 'center' }}
-              onClick={(e) => e.stopPropagation()}
+          {/* Top-right controls: X close + trash delete */}
+          <div style={{ position: 'fixed', top: 18, right: 20, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 101 }}>
+            {/* Close */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setFullscreenPhoto(null); }}
+              style={{
+                background: '#111',
+                color: 'white',
+                border: '1.5px solid rgba(255,255,255,0.35)',
+                borderRadius: '50%',
+                width: 40,
+                height: 40,
+                fontSize: 20,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Затвори"
             >
-              {fullscreenPhoto.caption}
-            </div>
-          )}
+              ✕
+            </button>
+            {/* Delete */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeletePhoto(fullscreenPhoto.id); }}
+              style={{
+                background: 'rgba(220,38,38,0.9)',
+                color: 'white',
+                border: '1.5px solid rgba(255,255,255,0.2)',
+                borderRadius: '50%',
+                width: 40,
+                height: 40,
+                fontSize: 18,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Изтрий снимката"
+            >
+              🗑
+            </button>
+          </div>
 
-          {/* Delete button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              const id = fullscreenPhoto.id;
-              setFullscreenPhoto(null);
-              onDeletePhoto(id);
-            }}
-            className="diary-font"
-            style={{
-              marginTop: 18,
-              background: 'rgba(220,38,38,0.85)',
-              color: 'white',
-              border: 'none',
-              borderRadius: 10,
-              padding: '8px 24px',
-              fontSize: 18,
-              cursor: 'pointer',
-            }}
-          >
-            🗑️ Изтрий снимката
-          </button>
+          {/* Photo + optional caption — centered */}
+          <div className="flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={fullscreenPhoto.url}
+              alt={fullscreenPhoto.caption || 'Снимка'}
+              style={{
+                maxWidth: '88vw',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: 4,
+                boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+              }}
+            />
+            {fullscreenPhoto.caption && (
+              <div
+                className="diary-font"
+                style={{ color: 'rgba(255,255,255,0.85)', fontSize: 22, marginTop: 14, textAlign: 'center' }}
+              >
+                {fullscreenPhoto.caption}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
