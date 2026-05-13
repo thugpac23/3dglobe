@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model UserProfile {
+  id          String   @id
+  displayName String
+  color       String
+  protected   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  stamps   PassportStamp[]
+  visits   Visit[]
+  wishlist Wishlist[]
+  progress UserProgress?
+  avatar   Avatar?
+  entries  DiaryEntry[]
+
+  @@map("user_profiles")
+}
+
 model Country {
   id             String          @id @default(cuid())
   name           String
@@ -20,71 +37,71 @@ model Country {
 }
 
 model PassportStamp {
-  id        String   @id @default(cuid())
-  user      User
+  id        String      @id @default(cuid())
+  userId    String
+  user      UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
   countryId String
-  stampedAt DateTime @default(now())
-  page      Int      @default(0)
-  positionX Float    @default(50)
-  positionY Float    @default(50)
-  rotation  Float    @default(0)
-  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  stampedAt DateTime    @default(now())
+  page      Int         @default(0)
+  positionX Float       @default(50)
+  positionY Float       @default(50)
+  rotation  Float       @default(0)
+  country   Country     @relation(fields: [countryId], references: [id], onDelete: Cascade)
 
-  @@unique([countryId, user])
+  @@unique([countryId, userId])
   @@map("passport_stamps")
 }
 
 model Visit {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   countryId String
-  user      User
-  createdAt DateTime @default(now())
-  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  userId    String
+  user      UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  country   Country     @relation(fields: [countryId], references: [id], onDelete: Cascade)
 
-  @@unique([countryId, user])
+  @@unique([countryId, userId])
   @@map("visits")
 }
 
 model Wishlist {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   countryId String
-  user      User
-  createdAt DateTime @default(now())
-  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  userId    String
+  user      UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  country   Country     @relation(fields: [countryId], references: [id], onDelete: Cascade)
 
-  @@unique([countryId, user])
+  @@unique([countryId, userId])
   @@map("wishlists")
 }
 
 model UserProgress {
-  id           String @id @default(cuid())
-  user         User   @unique
-  xp           Int    @default(0)
-  level        Int    @default(1)
-  achievements String @default("[]")
+  id           String      @id @default(cuid())
+  userId       String      @unique
+  user         UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xp           Int         @default(0)
+  level        Int         @default(1)
+  achievements String      @default("[]")
 
   @@map("user_progress")
 }
 
 model Avatar {
-  id          String  @id @default(cuid())
-  user        User    @unique
-  hairStyle   String  @default("short")
-  hairColor   String  @default("#8B4513")
-  eyeColor    String  @default("#4B5563")
-  skinColor   String  @default("#FBBF8A")
-  outfit      String  @default("casual")
-  accessories String  @default("[]")
-  faceType    String  @default("standard")
-  expression  String  @default("smile")
+  id          String      @id @default(cuid())
+  userId      String      @unique
+  user        UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hairStyle   String      @default("short")
+  hairColor   String      @default("#8B4513")
+  eyeColor    String      @default("#4B5563")
+  skinColor   String      @default("#FBBF8A")
+  outfit      String      @default("casual")
+  accessories String      @default("[]")
+  faceType    String      @default("standard")
+  expression  String      @default("smile")
   avatarUrl   String?
 
   @@map("avatars")
-}
-
-enum User {
-  tati
-  iva
 }
 
 model Setting {
@@ -96,7 +113,8 @@ model Setting {
 
 model DiaryEntry {
   id        String       @id @default(cuid())
-  user      User
+  userId    String
+  user      UserProfile  @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   content   String
   date      DateTime     @default(now())

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 export async function GET() {
   try {
     const visits = await prisma.visit.findMany({
-      include: { country: true },
+      include: { country: true, user: true },
       orderBy: { createdAt: 'asc' },
     });
     return NextResponse.json(visits);

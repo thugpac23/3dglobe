@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { UserType, XPResult } from '@/types';
+import { XPResult } from '@/types';
 import { calculateLevel, ACHIEVEMENTS } from '@/lib/xp';
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, amount } = (await req.json()) as { user: UserType; amount: number };
-    if (!user || !['tati', 'iva'].includes(user) || typeof amount !== 'number') {
+    const { userId, amount } = (await req.json()) as { userId: string; amount: number };
+    if (!userId || typeof amount !== 'number') {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
 
     const [current, visitCount, wishlistCount] = await Promise.all([
       prisma.userProgress.upsert({
-        where: { user },
+        where: { userId },
         update: {},
-        create: { user, xp: 0, level: 1, achievements: '[]' },
+        create: { userId, xp: 0, level: 1, achievements: '[]' },
       }),
-      prisma.visit.count({ where: { user } }),
-      prisma.wishlist.count({ where: { user } }),
+      prisma.visit.count({ where: { userId } }),
+      prisma.wishlist.count({ where: { userId } }),
     ]);
 
     const unlocked: string[] = JSON.parse(current.achievements) as string[];
@@ -40,14 +40,14 @@ export async function POST(req: NextRequest) {
     const newLevel = calculateLevel(newXp);
 
     const updated = await prisma.userProgress.update({
-      where: { user },
+      where: { userId },
       data: { xp: newXp, level: newLevel, achievements: JSON.stringify(unlocked) },
     });
 
     const result: XPResult = {
       progress: {
         id: updated.id,
-        user: updated.user as UserType,
+        userId: updated.userId,
         xp: updated.xp,
         level: updated.level,
         achievements: unlocked,

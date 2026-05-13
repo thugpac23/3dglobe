@@ -17,13 +17,13 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { user, title, content, date } = body;
-    if (!user || !title || !content) {
+    const { userId, title, content, date } = body;
+    if (!userId || !title || !content) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
     const entry = await prisma.diaryEntry.create({
       data: {
-        user,
+        userId,
         title,
         content,
         date: date ? new Date(date) : new Date(),

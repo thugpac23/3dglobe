@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  UserType, Visit, WishlistItem,
-  VisitsByCountry, WishlistByCountry,
-  UserProgress, USER_DISPLAY, USER_COLOR,
+  UserProfile, Visit, WishlistItem,
+  VisitsByCountry, WishlistByCountry, UserProgress,
 } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
 import {
+  fetchUsers, createUser, deleteUser,
   fetchVisits, fetchProgress,
   fetchWishlist, addWishlist, removeWishlist,
   addXP,
@@ -16,6 +16,11 @@ import {
 import { ACHIEVEMENTS } from '@/lib/xp';
 import { getFact } from '@/data/countryFacts';
 import { BG_NAMES } from '@/data/countryNamesBg';
+import UserCard from '@/components/XPBar/XPBar';
+import VisitsTable from '@/components/VisitsTable';
+
+const Globe    = dynamic(() => import('@/components/Globe'), { ssr: false });
+const WorldMap = dynamic(() => import('@/components/WorldMap/WorldMap'), { ssr: false });
 
 function getFlagEmoji(iso: string): string {
   if (!iso || iso.length !== 2) return '🌍';
@@ -26,29 +31,125 @@ function getFlagEmoji(iso: string): string {
     );
   } catch { return '🌍'; }
 }
-import UserCard from '@/components/XPBar/XPBar';
-import VisitsTable from '@/components/VisitsTable';
 
-const Globe    = dynamic(() => import('@/components/Globe'), { ssr: false });
-const WorldMap = dynamic(() => import('@/components/WorldMap/WorldMap'), { ssr: false });
+const USER_COLORS = ['#8B5CF6','#10B981','#3B82F6','#F97316','#06B6D4','#EF4444','#84CC16','#EC4899'];
+
+const EMOJI_CHOICES = [
+  '🧳','🌸','✈️','🌍','🗺️','⭐','🏔️','🌊','🌺','🦋',
+  '🌈','🎒','📸','🎭','🌙','☀️','🍀','🌴','🦁','🐬',
+  '🦊','🌹','🎨','🏖️','🚀','🌻','🦄','🎵',
+];
 
 interface Toast { id: number; message: string; type: 'add' | 'remove' | 'xp' | 'level' | 'achievement' }
 
-const DEFAULT_PROGRESS: UserProgress = { id: '', user: 'tati', xp: 0, level: 1, achievements: [] };
+const DEFAULT_PROGRESS: UserProgress = { id: '', userId: '', xp: 0, level: 1, achievements: [] };
+
+// Inline "add user" form
+function AddUserForm({
+  usedColors,
+  onAdd,
+  onCancel,
+}: {
+  usedColors: string[];
+  onAdd: (displayName: string, color: string, emoji: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const nextColor = USER_COLORS.find(c => !usedColors.includes(c)) ?? USER_COLORS[0];
+  const [name, setName] = useState('');
+  const [color, setColor] = useState(nextColor);
+  const [emoji, setEmoji] = useState('🌍');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    await onAdd(name.trim(), color, emoji);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{
+      background: 'white', borderRadius: 16, padding: '14px 16px',
+      border: '1.5px solid #E2E8F0', boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+    }}>
+      {/* Name + emoji row */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+        <button
+          onClick={() => {
+            const idx = EMOJI_CHOICES.indexOf(emoji);
+            setEmoji(EMOJI_CHOICES[(idx + 1) % EMOJI_CHOICES.length]);
+          }}
+          style={{ fontSize: 26, background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+          title="Смени иконата"
+        >{emoji}</button>
+        <input
+          autoFocus
+          placeholder="Въведи име..."
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onCancel(); }}
+          style={{
+            flex: 1, padding: '7px 12px', borderRadius: 10,
+            border: '1.5px solid #E2E8F0', fontSize: 14, outline: 'none',
+          }}
+        />
+      </div>
+
+      {/* Color palette */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {USER_COLORS.map(c => (
+          <button
+            key={c}
+            onClick={() => setColor(c)}
+            style={{
+              width: 24, height: 24, borderRadius: '50%', background: c,
+              border: color === c ? '3px solid #1e293b' : '2px solid transparent',
+              cursor: 'pointer', padding: 0,
+              boxShadow: color === c ? `0 0 0 2px white inset` : 'none',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Buttons */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={submit}
+          disabled={!name.trim() || saving}
+          style={{
+            flex: 1, padding: '8px 0', borderRadius: 10, fontWeight: 700, fontSize: 13,
+            background: color, color: 'white', border: 'none', cursor: 'pointer',
+            opacity: (!name.trim() || saving) ? 0.5 : 1,
+          }}
+        >
+          {saving ? 'Запазване…' : '+ Добави'}
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '8px 16px', borderRadius: 10, fontSize: 13,
+            background: '#F1F5F9', color: '#64748b', border: 'none', cursor: 'pointer',
+          }}
+        >
+          Откажи
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
-  const [visits, setVisits] = useState<Visit[]>([]);
+  const [users, setUsers]       = useState<UserProfile[]>([]);
+  const [visits, setVisits]     = useState<Visit[]>([]);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
-  const [progress, setProgress] = useState<{ tati: UserProgress; iva: UserProgress }>({
-    tati: { ...DEFAULT_PROGRESS, user: 'tati' },
-    iva:  { ...DEFAULT_PROGRESS, user: 'iva' },
-  });
-  const [activeUser, setActiveUser] = useState<UserType>('iva');
-  const [loading, setLoading] = useState(true);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [globeOpen, setGlobeOpen] = useState(false);
-  const [mapOpen, setMapOpen]     = useState(false);
-  const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
+  const [progress, setProgress] = useState<Record<string, UserProgress>>({});
+  const [activeUser, setActiveUser]   = useState<UserProfile | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [toasts, setToasts]           = useState<Toast[]>([]);
+  const [globeOpen, setGlobeOpen]     = useState(false);
+  const [mapOpen, setMapOpen]         = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [factPopup, setFactPopup]     = useState<{ iso: string; name: string; fact: string } | null>(null);
   const xpPopRef = useRef<HTMLDivElement>(null);
   const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -59,8 +160,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchVisits(), fetchProgress(), fetchWishlist()])
-      .then(([v, p, w]) => { setVisits(v); setProgress(p); setWishlist(w); })
+    Promise.all([fetchUsers(), fetchVisits(), fetchProgress(), fetchWishlist()])
+      .then(([u, v, p, w]) => {
+        setUsers(u);
+        setActiveUser(u[0] ?? null);
+        setVisits(v);
+        setProgress(p);
+        setWishlist(w);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -98,8 +205,8 @@ export default function Home() {
     const map: VisitsByCountry = {};
     for (const v of visits) {
       const iso = v.country.isoCode;
-      if (!map[iso]) map[iso] = { country: v.country, tati: false, iva: false };
-      map[iso][v.user] = true;
+      if (!map[iso]) map[iso] = { country: v.country };
+      (map[iso] as Record<string, unknown>)[v.userId] = true;
     }
     return map;
   }, [visits]);
@@ -108,24 +215,24 @@ export default function Home() {
     const map: WishlistByCountry = {};
     for (const w of wishlist) {
       const iso = w.country.isoCode;
-      if (!map[iso]) map[iso] = { country: w.country, tati: false, iva: false };
-      map[iso][w.user] = true;
+      if (!map[iso]) map[iso] = { country: w.country };
+      (map[iso] as Record<string, unknown>)[w.userId] = true;
     }
     return map;
   }, [wishlist]);
 
-  const handleAwardXP = useCallback(async (user: UserType, amount: number) => {
+  const handleAwardXP = useCallback(async (userId: string, displayName: string, amount: number) => {
     try {
-      const result = await addXP(user, amount);
-      setProgress((p) => ({ ...p, [user]: result.progress }));
+      const result = await addXP(userId, amount);
+      setProgress((p) => ({ ...p, [userId]: result.progress }));
       if (result.leveledUp) {
-        showToast(`🎉 ${USER_DISPLAY[user]} достигна Ниво ${result.progress.level}!`, 'level');
+        showToast(`🎉 ${displayName} достигна Ниво ${result.progress.level}!`, 'level');
       }
       for (const achId of result.newAchievements) {
         const ach = ACHIEVEMENTS.find((a) => a.id === achId);
         if (ach) showToast(`${ach.emoji} Постижение: ${ach.title}!`, 'achievement');
       }
-    } catch { /* silent fail */ }
+    } catch { /* silent */ }
   }, [showToast]);
 
   const showFactPopup = useCallback((isoCode: string) => {
@@ -138,17 +245,17 @@ export default function Home() {
   }, []);
 
   const handleCountryClick = useCallback(async (isoCode: string, countryName: string) => {
+    if (!activeUser) return;
     showFactPopup(isoCode);
 
-    const onWishlist = wishlistByCountry[isoCode]?.[activeUser] ?? false;
-    const displayName = USER_DISPLAY[activeUser];
+    const onWishlist = wishlistByCountry[isoCode]?.[activeUser.id] === true;
 
     if (onWishlist) {
-      const item = wishlist.find((w) => w.country.isoCode === isoCode && w.user === activeUser);
+      const item = wishlist.find((w) => w.country.isoCode === isoCode && w.userId === activeUser.id);
       if (!item) return;
       setWishlist((p) => p.filter((w) => w.id !== item.id));
-      showToast(`${countryName} премахната от желаните на ${displayName}`, 'remove');
-      try { await removeWishlist(item.countryId, activeUser); }
+      showToast(`${countryName} премахната от желаните на ${activeUser.displayName}`, 'remove');
+      try { await removeWishlist(item.countryId, activeUser.id); }
       catch { setWishlist((p) => [...p, item]); }
     } else {
       let countryId: string | null = null;
@@ -163,14 +270,15 @@ export default function Home() {
       }
       const optimistic: WishlistItem = {
         id: `tmp-${Date.now()}`, countryId: countryId!,
-        user: activeUser,
+        userId: activeUser.id,
+        user: { id: activeUser.id, displayName: activeUser.displayName, color: activeUser.color },
         country: wishlistByCountry[isoCode]?.country ?? visitsByCountry[isoCode]?.country ?? { id: countryId!, name: countryName, capital: '', isoCode },
       };
       setWishlist((p) => [...p, optimistic]);
-      showToast(`⭐ ${countryName} добавена в желаните на ${displayName}`, 'add');
-      handleAwardXP(activeUser, 5);
+      showToast(`⭐ ${countryName} добавена в желаните на ${activeUser.displayName}`, 'add');
+      handleAwardXP(activeUser.id, activeUser.displayName, 5);
       try {
-        const real = await addWishlist(countryId!, activeUser);
+        const real = await addWishlist(countryId!, activeUser.id);
         setWishlist((p) => [...p.filter((w) => w.id !== optimistic.id), real]);
       } catch {
         setWishlist((p) => p.filter((w) => w.id !== optimistic.id));
@@ -179,10 +287,31 @@ export default function Home() {
     }
   }, [wishlistByCountry, wishlist, visits, visitsByCountry, activeUser, showToast, handleAwardXP, showFactPopup]);
 
+  const handleAddUser = useCallback(async (displayName: string, color: string, emoji: string) => {
+    const newUser = await createUser(displayName, color, emoji);
+    setUsers(prev => [...prev, newUser]);
+    setActiveUser(newUser);
+    setShowAddForm(false);
+  }, []);
+
+  const handleDeleteUser = useCallback(async (userId: string) => {
+    await deleteUser(userId);
+    setUsers(prev => {
+      const next = prev.filter(u => u.id !== userId);
+      if (activeUser?.id === userId) setActiveUser(next[0] ?? null);
+      return next;
+    });
+    setVisits(prev => prev.filter(v => v.userId !== userId));
+    setWishlist(prev => prev.filter(w => w.userId !== userId));
+    setProgress(prev => { const n = { ...prev }; delete n[userId]; return n; });
+  }, [activeUser]);
+
   const toastColors: Record<Toast['type'], string> = {
     add: '#059669', remove: '#DC2626',
     xp: '#F59E0B', level: '#7C3AED', achievement: '#0EA5E9',
   };
+
+  const activeColor = activeUser?.color ?? '#64748b';
 
   return (
     <main className="min-h-screen flex flex-col items-center pb-20 px-2">
@@ -195,25 +324,48 @@ export default function Home() {
       </header>
 
       {/* User switcher */}
-      <div className="flex gap-3 w-full max-w-lg mt-3 px-2">
-        {(['iva', 'tati'] as UserType[]).map((user) => (
+      <div className="flex gap-3 w-full max-w-lg mt-3 px-2 flex-wrap">
+        {users.map((u) => (
           <UserCard
-            key={user}
-            user={user}
-            isActive={activeUser === user}
-            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(user); }}
+            key={u.id}
+            user={u}
+            isActive={activeUser?.id === u.id}
+            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setShowAddForm(false); }}
+            onDelete={handleDeleteUser}
           />
         ))}
+        {/* Add user button */}
+        {!showAddForm && (
+          <button
+            onClick={() => { sounds.click(); resumeAudio(); setShowAddForm(true); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 14, fontSize: 13,
+              background: 'rgba(255,255,255,0.7)', color: '#64748b',
+              border: '2px dashed #CBD5E1', cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            + Добави
+          </button>
+        )}
       </div>
 
-      <p className="text-xs text-slate-500 mt-2">
-        Кликни върху държава, за да я добавиш/премахнеш от списъка на {USER_DISPLAY[activeUser]}
-      </p>
+      {/* Add user form */}
+      {showAddForm && (
+        <div className="w-full max-w-lg mt-3 px-2">
+          <AddUserForm
+            usedColors={users.map(u => u.color)}
+            onAdd={handleAddUser}
+            onCancel={() => setShowAddForm(false)}
+          />
+        </div>
+      )}
 
       {/* Map section */}
       <div className="w-full max-w-2xl mt-4 px-2">
         <h2 className="text-base font-bold text-slate-700 mb-1.5 text-center">🗺️ Карта на пътешествието</h2>
-        {!loading && (
+        {!loading && activeUser && (
           <WorldMap
             visitsByCountry={visitsByCountry}
             wishlistByCountry={wishlistByCountry}
@@ -233,19 +385,18 @@ export default function Home() {
           <button
             onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold border-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: 'white', color: USER_COLOR[activeUser], borderColor: USER_COLOR[activeUser] }}
+            style={{ background: 'white', color: activeColor, borderColor: activeColor }}
           >
             🌍 Покажи интерактивен глобус
           </button>
           <button
             onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: USER_COLOR[activeUser], color: 'white', boxShadow: `0 3px 12px ${USER_COLOR[activeUser]}40` }}
+            style={{ background: activeColor, color: 'white', boxShadow: `0 3px 12px ${activeColor}40` }}
           >
             🗺️ Покажи на цял екран
           </button>
         </div>
-
       </div>
 
       {/* Fullscreen globe modal */}
@@ -253,15 +404,15 @@ export default function Home() {
         <div className="fixed inset-0 flex flex-col" style={{ background: '#040c18', zIndex: 9999 }}>
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
             style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(80,140,230,0.15)' }}>
-            {(['iva', 'tati'] as UserType[]).map(u => (
-              <button key={u} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
+            {users.map(u => (
+              <button key={u.id} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
                 className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
                 style={{
-                  background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.07)',
-                  color: activeUser === u ? 'white' : 'rgba(255,255,255,0.5)',
-                  border: `1.5px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.1)'}`,
+                  background: activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.07)',
+                  color: activeUser?.id === u.id ? 'white' : 'rgba(255,255,255,0.5)',
+                  border: `1.5px solid ${activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.1)'}`,
                 }}>
-                {USER_DISPLAY[u]}
+                {u.displayName}
               </button>
             ))}
             <button onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(false); setFactPopup(null); }}
@@ -271,14 +422,16 @@ export default function Home() {
           </div>
           <div className="flex-1 flex items-center justify-center overflow-hidden"
             style={{ filter: 'drop-shadow(0 0 40px rgba(14,100,148,0.4))', touchAction: 'none' }}>
-            <Globe
-              visitsByCountry={visitsByCountry}
-              wishlistByCountry={wishlistByCountry}
-              activeUser={activeUser}
-              mode="wishlist"
-              onCountryClick={handleCountryClick}
-              fullscreen
-            />
+            {activeUser && (
+              <Globe
+                visitsByCountry={visitsByCountry}
+                wishlistByCountry={wishlistByCountry}
+                activeUser={activeUser.id}
+                mode="wishlist"
+                onCountryClick={handleCountryClick}
+                fullscreen
+              />
+            )}
           </div>
           {factPopup && (
             <div className="fact-popup-enter" style={{
@@ -297,7 +450,7 @@ export default function Home() {
             </div>
           )}
           <div className="text-center pb-2 text-xs shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            Кликни двукратно върху държава — добавя/премахва от желаните на {USER_DISPLAY[activeUser]}
+            Кликни двукратно върху държава — добавя/премахва от желаните на {activeUser?.displayName}
           </div>
         </div>
       )}
@@ -307,15 +460,15 @@ export default function Home() {
         <div className="fixed inset-0 flex flex-col" style={{ background: '#040c18', zIndex: 9999 }}>
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
             style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(30,120,60,0.2)' }}>
-            {(['iva', 'tati'] as UserType[]).map(u => (
-              <button key={u} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
+            {users.map(u => (
+              <button key={u.id} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
                 className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
                 style={{
-                  background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.07)',
-                  color: activeUser === u ? 'white' : 'rgba(255,255,255,0.5)',
-                  border: `1.5px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.1)'}`,
+                  background: activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.07)',
+                  color: activeUser?.id === u.id ? 'white' : 'rgba(255,255,255,0.5)',
+                  border: `1.5px solid ${activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.1)'}`,
                 }}>
-                {USER_DISPLAY[u]}
+                {u.displayName}
               </button>
             ))}
             <button onClick={() => { resumeAudio(); sounds.click(); setMapOpen(false); setFactPopup(null); }}
@@ -350,7 +503,7 @@ export default function Home() {
           )}
           <div className="text-center py-2 text-xs shrink-0"
             style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(6,18,36,0.7)' }}>
-            Кликни върху държава — добавя/премахва от желаните на {USER_DISPLAY[activeUser]}
+            Кликни върху държава — добавя/премахва от желаните на {activeUser?.displayName}
           </div>
         </div>
       )}
@@ -360,6 +513,7 @@ export default function Home() {
         visitsByCountry={visitsByCountry}
         wishlistByCountry={wishlistByCountry}
         mode="wishlist"
+        users={users}
       />
 
       {/* Toasts */}

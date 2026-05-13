@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { UserType } from '@/types';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { countryId, user } = body as { countryId: string; user: UserType };
+    const { countryId, userId } = body as { countryId: string; userId: string };
 
-    if (!countryId || !user || !['tati', 'iva'].includes(user)) {
+    if (!countryId || !userId) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
     const visit = await prisma.visit.upsert({
-      where: { countryId_user: { countryId, user } },
+      where: { countryId_userId: { countryId, userId } },
       update: {},
-      create: { countryId, user },
-      include: { country: true },
+      create: { countryId, userId },
+      include: { country: true, user: true },
     });
 
     return NextResponse.json(visit, { status: 201 });
@@ -28,14 +27,14 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json();
-    const { countryId, user } = body as { countryId: string; user: UserType };
+    const { countryId, userId } = body as { countryId: string; userId: string };
 
-    if (!countryId || !user || !['tati', 'iva'].includes(user)) {
+    if (!countryId || !userId) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
     await prisma.visit.deleteMany({
-      where: { countryId, user },
+      where: { countryId, userId },
     });
 
     return NextResponse.json({ success: true });
