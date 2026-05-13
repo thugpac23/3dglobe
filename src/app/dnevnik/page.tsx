@@ -361,7 +361,7 @@ function DiaryEntryCard({
         border: '1px solid rgba(0,0,0,0.08)',
         boxShadow: '3px 5px 18px rgba(70,40,15,0.12)',
         transform: `rotate(${rotation}deg)`,
-        padding: '28px 28px 26px 76px',
+        padding: '28px 28px 72px 76px',
         minHeight,
       }}
     >
@@ -403,32 +403,43 @@ function DiaryEntryCard({
           {entry.content}
         </div>
 
-        {/* Actions — single row, no wrap */}
-        <div className="flex gap-2 mt-5" style={{ flexWrap: 'nowrap' }}>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
-            style={{ background: 'rgba(34,197,94,0.10)', color: '#15803D', fontSize: 15, opacity: uploading ? 0.6 : 1 }}
-          >
-            {uploading ? '⏳' : '📷 Снимка'}
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-          <button
-            onClick={onEdit}
-            className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#5C3D1A', fontSize: 15 }}
-          >
-            ✏️ Редактирай
-          </button>
-          <button
-            onClick={onDelete}
-            className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
-            style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626', fontSize: 15 }}
-          >
-            🗑️ Изтрий
-          </button>
-        </div>
+      </div>
+
+      {/* Actions — pinned to bottom of card, centered */}
+      <div style={{
+        position: 'absolute',
+        bottom: 18,
+        left: 76,
+        right: 28,
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 8,
+        flexWrap: 'nowrap',
+        zIndex: 2,
+      }}>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
+          style={{ background: 'rgba(34,197,94,0.10)', color: '#15803D', fontSize: 15, opacity: uploading ? 0.6 : 1 }}
+        >
+          {uploading ? '⏳' : '📷 Снимка'}
+        </button>
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+        <button
+          onClick={onEdit}
+          className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
+          style={{ background: 'rgba(0,0,0,0.06)', color: '#5C3D1A', fontSize: 15 }}
+        >
+          ✏️ Редактирай
+        </button>
+        <button
+          onClick={onDelete}
+          className="diary-font px-3 py-1.5 rounded-lg transition-all shrink-0"
+          style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626', fontSize: 15 }}
+        >
+          🗑️ Изтрий
+        </button>
       </div>
 
       {/* Fullscreen photo preview */}
