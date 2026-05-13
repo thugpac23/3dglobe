@@ -16,7 +16,7 @@ export default function UserToggle({ activeUser, onToggle, visitCount }: UserTog
       </p>
 
       <div className="flex items-center gap-2">
-        {(['tati', 'iva'] as UserType[]).map((user) => {
+        {(['iva', 'tati'] as UserType[]).map((user) => {
           const isActive = activeUser === user;
           const color = user === 'tati' ? '#FFD700' : '#FF50A0';
           const count = visitCount[user] + (user === 'tati' ? visitCount.both : visitCount.both);

@@ -9,7 +9,7 @@ import UserCard from '@/components/XPBar/XPBar';
 
 export default function PostizheniyaPage() {
   const [progress, setProgress] = useState<{ tati: UserProgress; iva: UserProgress } | null>(null);
-  const [activeUser, setActiveUser] = useState<UserType>('tati');
+  const [activeUser, setActiveUser] = useState<UserType>('iva');
 
   useEffect(() => {
     fetchProgress().then(setProgress).catch(() => {});
@@ -33,7 +33,7 @@ export default function PostizheniyaPage() {
 
       {/* User tabs */}
       <div className="flex gap-2 mb-6">
-        {(['tati', 'iva'] as UserType[]).map(u => (
+        {(['iva', 'tati'] as UserType[]).map(u => (
           <UserCard
             key={u}
             user={u}

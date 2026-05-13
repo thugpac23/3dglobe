@@ -142,7 +142,7 @@ function defaultConfig(user: UserType): AvatarConfig {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AvatarPage() {
-  const [activeUser, setActiveUser] = useState<UserType>('tati');
+  const [activeUser, setActiveUser] = useState<UserType>('iva');
   const [configs, setConfigs] = useState<Record<UserType, AvatarConfig>>({
     tati: defaultConfig('tati'),
     iva:  defaultConfig('iva'),
@@ -286,7 +286,7 @@ export default function AvatarPage() {
       >
         {/* User switcher — above the avatar */}
         <div className="flex gap-2" style={{ width: 220 }}>
-          {(['tati', 'iva'] as UserType[]).map(u => (
+          {(['iva', 'tati'] as UserType[]).map(u => (
             <button
               key={u}
               onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}

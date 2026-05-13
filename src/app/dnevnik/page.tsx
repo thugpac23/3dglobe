@@ -514,7 +514,7 @@ function DiaryEntryCard({
 export default function DnevnikPage() {
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeUser, setActiveUser] = useState<UserType>('tati');
+  const [activeUser, setActiveUser] = useState<UserType>('iva');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', content: '', date: new Date().toISOString().slice(0, 10) });
@@ -639,7 +639,7 @@ export default function DnevnikPage() {
 
       {/* User switcher */}
       <div className="flex gap-3 max-w-lg mx-auto mb-4">
-        {(['tati', 'iva'] as UserType[]).map(u => (
+        {(['iva', 'tati'] as UserType[]).map(u => (
           <UserCard
             key={u}
             user={u}
