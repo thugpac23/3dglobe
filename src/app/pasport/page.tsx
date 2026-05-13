@@ -18,9 +18,9 @@ interface Stamp {
 const COVER_RED  = '#6B1520';
 const COVER_DARK = '#3e0a13';
 const COVER_GOLD = '#C9A227';
-const PW = 220;
-const PH = 320;
-const BOOK_W = PW * 2 + 10; // 450px total spread width
+const PW = 290;
+const PH = 420;
+const BOOK_W = PW * 2 + 12; // 592px total spread width
 const STAMPS_PER_PAGE = 6;
 
 function getFlagEmoji(iso: string): string {
@@ -345,68 +345,142 @@ function InfoPage({ user, count, avatarConfig }: {
     <div style={{
       position: 'relative',
       width: '100%', height: '100%',
-      background: 'linear-gradient(160deg, #fffdf5 0%, #faf6e8 60%, #f2edd8 100%)',
-      padding: 16,
+      background: 'linear-gradient(170deg, #fffef8 0%, #faf7ec 55%, #f0e9d2 100%)',
       display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
     }}>
-      {/* Header strip — Republic of Bulgaria */}
-      <div style={{ textAlign: 'center', marginBottom: 12 }}>
-        <div style={{
-          fontSize: 8, fontWeight: 800, letterSpacing: '0.22em',
-          color: COVER_GOLD, textTransform: 'uppercase', lineHeight: 1.4,
-        }}>
-          Република България
-        </div>
-        <div style={{ width: 48, height: 1, background: `${COVER_GOLD}80`, margin: '4px auto 0' }} />
-      </div>
+      {/* Subtle diagonal watermark pattern */}
+      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.045, pointerEvents: 'none' }} aria-hidden>
+        <defs>
+          <pattern id="wp" x="0" y="0" width="28" height="28" patternUnits="userSpaceOnUse">
+            <text x="14" y="20" textAnchor="middle" fontSize="11" fontFamily="serif" fill={COVER_GOLD}>✦</text>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#wp)" />
+      </svg>
 
-      {/* Bulgarian waving flag — centred between header and content */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-        <BgWavingFlag size={30} />
-      </div>
+      {/* Gold ornamental border frame */}
+      <svg viewBox={`0 0 ${PW} ${PH}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-hidden>
+        {/* Outer line */}
+        <rect x="7" y="7" width={PW - 14} height={PH - 14}
+          rx="2" fill="none" stroke={COVER_GOLD} strokeWidth="1.2" strokeOpacity="0.55"
+        />
+        {/* Inner line */}
+        <rect x="11" y="11" width={PW - 22} height={PH - 22}
+          rx="1" fill="none" stroke={COVER_GOLD} strokeWidth="0.5" strokeOpacity="0.35"
+        />
+        {/* Corner flourishes */}
+        {([[7, 7], [PW - 7, 7], [7, PH - 7], [PW - 7, PH - 7]] as [number, number][]).map(([cx, cy], qi) => (
+          <circle key={qi} cx={cx} cy={cy} r="2.5" fill={COVER_GOLD} fillOpacity="0.45" />
+        ))}
+      </svg>
 
-      {/* Two-column main row — avatar left, info right (no borders) */}
-      <div style={{
-        flex: 1,
-        display: 'flex', alignItems: 'center', gap: 14,
-      }}>
-        {/* LEFT COLUMN — avatar photo */}
-        <div style={{
-          flex: '0 0 auto',
-          width: 84, height: 108,
-          background: '#d8e8f4',
-          overflow: 'hidden',
-        }}>
-          {avatarConfig
-            ? <Avatar3D avatar={{ ...avatarConfig, user }} expression={avatarConfig.expression ?? 'smile'} width={84} height={108} />
-            : <div style={{ width: 84, height: 108, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30 }}>🧑</div>
-          }
-        </div>
+      {/* Content area with padding */}
+      <div style={{ padding: '20px 18px 16px', display: 'flex', flexDirection: 'column', flex: 1, position: 'relative' }}>
 
-        {/* RIGHT COLUMN — name + visited count */}
-        <div style={{
-          flex: 1, minWidth: 0,
-          display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
-        }}>
-          <div style={{ fontSize: 9, color: '#a08e6a', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
-            име
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 10 }}>
+          <div style={{
+            fontSize: 7.5, fontWeight: 800, letterSpacing: '0.28em',
+            color: COVER_GOLD, textTransform: 'uppercase', lineHeight: 1.5, opacity: 0.9,
+          }}>
+            Република България
           </div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: '#3d2a0f', lineHeight: 1.1 }}>
-            {USER_DISPLAY[user]}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 }}>
+            <div style={{ flex: 1, height: 0.8, background: `linear-gradient(90deg, transparent, ${COVER_GOLD}90)` }} />
+            <BgWavingFlag size={20} />
+            <div style={{ flex: 1, height: 0.8, background: `linear-gradient(90deg, ${COVER_GOLD}90, transparent)` }} />
           </div>
-          <div style={{ width: 40, height: 1, background: `${COVER_GOLD}80`, margin: '6px 0' }} />
-          <div style={{ fontSize: 9, color: '#a08e6a', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
-            посетени държави
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: COVER_RED, lineHeight: 1 }}>
-            {count}
+          <div style={{
+            fontSize: 11, fontWeight: 900, letterSpacing: '0.18em',
+            color: COVER_RED, textTransform: 'uppercase', marginTop: 5, lineHeight: 1,
+          }}>
+            ПАСПОРТ
           </div>
         </div>
-      </div>
 
-      {/* Footer ribbon */}
-      <div style={{ fontSize: 7.5, color: '#c0b090', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.6, marginTop: 8 }}>
-        ПАСПОРТ НА ПЪТЕШЕСТВЕНИКА
+        {/* Divider */}
+        <div style={{ height: 0.8, background: `linear-gradient(90deg, transparent, ${COVER_GOLD}60, transparent)`, marginBottom: 12 }} />
+
+        {/* Photo + info row */}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flex: 1 }}>
+          {/* Photo box */}
+          <div style={{
+            flex: '0 0 auto',
+            width: 98, height: 124,
+            border: `1.5px solid ${COVER_GOLD}70`,
+            background: '#d8e8f4',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+          }}>
+            {avatarConfig
+              ? <Avatar3D avatar={{ ...avatarConfig, user }} expression={avatarConfig.expression ?? 'smile'} width={98} height={124} />
+              : <div style={{ width: 98, height: 124, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>🧑</div>
+            }
+          </div>
+
+          {/* Info fields */}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 7.5, color: '#a08e6a', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 2 }}>
+                Пътешественик
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: '#3d2a0f', lineHeight: 1.1 }}>
+                {USER_DISPLAY[user]}
+              </div>
+            </div>
+
+            <div style={{ height: 0.8, background: `${COVER_GOLD}50` }} />
+
+            <div>
+              <div style={{ fontSize: 7.5, color: '#a08e6a', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 3 }}>
+                Посетени държави
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <div style={{ fontSize: 30, fontWeight: 900, color: COVER_RED, lineHeight: 1 }}>
+                  {count}
+                </div>
+                <div style={{ fontSize: 9, color: '#b0906a', fontStyle: 'italic' }}>страни</div>
+              </div>
+            </div>
+
+            <div style={{ height: 0.8, background: `${COVER_GOLD}50` }} />
+
+            <div>
+              <div style={{ fontSize: 7.5, color: '#a08e6a', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 2 }}>
+                Статус
+              </div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: count >= 10 ? '#15803D' : COVER_RED }}>
+                {count === 0 ? 'Начинаещ' : count < 5 ? 'Изследовател' : count < 15 ? 'Откривател' : 'Глобален герой'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Decorative horizontal rule */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '12px 0 8px' }}>
+          <div style={{ flex: 1, height: 0.8, background: `linear-gradient(90deg, transparent, ${COVER_GOLD}60)` }} />
+          <div style={{ fontSize: 10, color: COVER_GOLD, opacity: 0.7 }}>✦</div>
+          <div style={{ flex: 1, height: 0.8, background: `linear-gradient(90deg, ${COVER_GOLD}60, transparent)` }} />
+        </div>
+
+        {/* MRZ-style zone */}
+        <div style={{
+          background: `${COVER_RED}08`,
+          border: `0.8px solid ${COVER_GOLD}40`,
+          borderRadius: 2,
+          padding: '5px 8px',
+          fontFamily: '"Courier New", monospace',
+          fontSize: 7,
+          color: '#6B4F2A',
+          letterSpacing: '0.06em',
+          lineHeight: 1.7,
+          opacity: 0.75,
+          userSelect: 'none',
+        }}>
+          <div>P&lt;BGR{USER_DISPLAY[user].toUpperCase().padEnd(16, '<').slice(0,16)}&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+          <div>BG{String(count).padStart(2,'0')}00000&lt;{new Date().getFullYear()}BG&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+        </div>
       </div>
     </div>
   );
