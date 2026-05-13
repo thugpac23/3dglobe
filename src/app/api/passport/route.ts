@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { User } from '@prisma/client';
 
 const STAMPS_PER_PAGE = 6;
 
@@ -32,26 +31,24 @@ function defaultPosition(index: number, countryId: string): { positionX: number;
 }
 
 export async function GET(req: NextRequest) {
-  const user = req.nextUrl.searchParams.get('user') as User | null;
-  if (!user || !['tati', 'iva'].includes(user)) {
+  const userId = req.nextUrl.searchParams.get('user');
+  if (!userId) {
     return NextResponse.json({ error: 'Invalid user' }, { status: 400 });
   }
 
-  // Fetch all visits for user (sorted by createdAt for stable ordering)
   const visits = await prisma.visit.findMany({
-    where: { user },
+    where: { userId },
     include: { country: true },
     orderBy: { createdAt: 'asc' },
   });
 
-  // Lazily upsert stamps for all visits
   const stamps = await Promise.all(
     visits.map(async (visit, index) => {
       const defaults = defaultPosition(index, visit.countryId);
       return prisma.passportStamp.upsert({
-        where: { countryId_user: { countryId: visit.countryId, user } },
+        where: { countryId_userId: { countryId: visit.countryId, userId } },
         create: {
-          user,
+          userId,
           countryId: visit.countryId,
           stampedAt: visit.createdAt,
           ...defaults,

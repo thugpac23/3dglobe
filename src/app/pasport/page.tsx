@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { UserType, USER_DISPLAY, AvatarConfig } from '@/types';
+import { UserProfile, AvatarConfig } from '@/types';
+import { fetchUsers } from '@/lib/api';
 import { BG_NAMES } from '@/data/countryNamesBg';
 import { sounds, resumeAudio } from '@/lib/sounds';
 
@@ -336,8 +337,9 @@ function StaticStampsPage({ stamps, color }: { stamps: Stamp[]; color: string })
   );
 }
 
-function InfoPage({ user, count, avatarConfig }: {
-  user: UserType;
+function InfoPage({ displayName, userId, count, avatarConfig }: {
+  displayName: string;
+  userId: string;
   count: number;
   avatarConfig?: Partial<AvatarConfig> | null;
 }) {
@@ -414,7 +416,7 @@ function InfoPage({ user, count, avatarConfig }: {
             boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
           }}>
             {avatarConfig
-              ? <Avatar3D avatar={{ ...avatarConfig, user }} expression={avatarConfig.expression ?? 'smile'} width={98} height={124} />
+              ? <Avatar3D avatar={{ ...avatarConfig, user: userId }} expression={avatarConfig.expression ?? 'smile'} width={98} height={124} />
               : <div style={{ width: 98, height: 124, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>🧑</div>
             }
           </div>
@@ -426,7 +428,7 @@ function InfoPage({ user, count, avatarConfig }: {
                 Пътешественик
               </div>
               <div style={{ fontSize: 20, fontWeight: 900, color: '#3d2a0f', lineHeight: 1.1 }}>
-                {USER_DISPLAY[user]}
+                {displayName}
               </div>
             </div>
 
@@ -478,7 +480,7 @@ function InfoPage({ user, count, avatarConfig }: {
           opacity: 0.75,
           userSelect: 'none',
         }}>
-          <div>P&lt;BGR{USER_DISPLAY[user].toUpperCase().padEnd(16, '<').slice(0,16)}&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+          <div>P&lt;BGR{displayName.toUpperCase().padEnd(16, '<').slice(0,16)}&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
           <div>BG{String(count).padStart(2,'0')}00000&lt;{new Date().getFullYear()}BG&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
         </div>
       </div>
@@ -494,13 +496,14 @@ function spreadToPages(idx: number): [number | 'info', number] {
 }
 
 export default function PasportPage() {
-  const [activeUser, setActiveUser]   = useState<UserType>('iva');
+  const [users, setUsers]             = useState<UserProfile[]>([]);
+  const [activeUser, setActiveUser]   = useState<UserProfile | null>(null);
   const [stamps, setStamps]           = useState<Stamp[]>([]);
   const [loading, setLoading]         = useState(true);
   const [spreadIdx, setSpreadIdx]     = useState(0);
   const [flipping, setFlipping]       = useState<'fwd' | 'bwd' | null>(null);
   const [bookScale, setBookScale]     = useState(1);
-  const [avatarConfigs, setAvatarConfigs] = useState<Record<UserType, Partial<AvatarConfig> | null>>({ tati: null, iva: null });
+  const [avatarConfigs, setAvatarConfigs] = useState<Record<string, Partial<AvatarConfig> | null>>({});
   // Incremented each time stamps should (re-)animate on the visible spread
   const [animEpoch, setAnimEpoch]     = useState(0);
 
@@ -512,16 +515,28 @@ export default function PasportPage() {
   }, []);
 
   useEffect(() => {
+    fetchUsers().then(us => {
+      setUsers(us);
+      setActiveUser(u => u ?? (us[0] ?? null));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     fetch('/api/avatar')
       .then(r => r.json())
-      .then(data => setAvatarConfigs({ tati: data.tati ?? null, iva: data.iva ?? null }))
+      .then(data => {
+        const map: Record<string, Partial<AvatarConfig> | null> = {};
+        for (const uid of Object.keys(data)) map[uid] = data[uid] ?? null;
+        setAvatarConfigs(map);
+      })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
+    if (!activeUser) return;
     setLoading(true);
     setSpreadIdx(0);
-    fetch(`/api/passport?user=${activeUser}`)
+    fetch(`/api/passport?user=${activeUser.id}`)
       .then(r => r.json())
       .then((data: Stamp[]) => {
         setStamps(data);
@@ -583,22 +598,22 @@ export default function PasportPage() {
       <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>Разгледай своите печати от обиколения свят</p>
 
       {/* User tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
-        {(['iva', 'tati'] as UserType[]).map(u => (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
+        {users.map(u => (
           <button
-            key={u}
+            key={u.id}
             onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
             style={{
               padding: '8px 20px', borderRadius: 99, fontWeight: 700, fontSize: 13,
               cursor: 'pointer',
-              background: activeUser === u ? COVER_RED : 'white',
-              color:      activeUser === u ? COVER_GOLD : '#64748b',
-              border:     `2px solid ${activeUser === u ? COVER_RED : '#E2E8F0'}`,
-              boxShadow:  activeUser === u ? `0 4px 16px ${COVER_RED}55` : '0 1px 4px rgba(0,0,0,0.08)',
+              background: activeUser?.id === u.id ? COVER_RED : 'white',
+              color:      activeUser?.id === u.id ? COVER_GOLD : '#64748b',
+              border:     `2px solid ${activeUser?.id === u.id ? COVER_RED : '#E2E8F0'}`,
+              boxShadow:  activeUser?.id === u.id ? `0 4px 16px ${COVER_RED}55` : '0 1px 4px rgba(0,0,0,0.08)',
               transition: 'all 0.2s',
             }}
           >
-            {USER_DISPLAY[u]}
+            {u.displayName}
           </button>
         ))}
       </div>
@@ -625,7 +640,7 @@ export default function PasportPage() {
                 boxShadow: 'inset -8px 0 22px rgba(0,0,0,0.10)',
               }}>
                 {curLeft === 'info'
-                  ? <InfoPage user={activeUser} count={stamps.length} avatarConfig={avatarConfigs[activeUser]} />
+                  ? <InfoPage displayName={activeUser?.displayName ?? ''} userId={activeUser?.id ?? ''} count={stamps.length} avatarConfig={activeUser ? (avatarConfigs[activeUser.id] ?? null) : null} />
                   : <StampsPage stamps={byPage(curLeft)} color={COVER_GOLD} onSave={savePosition} animEpoch={animEpoch} />}
                 {curLeft !== 'info' && (
                   <div style={{
@@ -670,7 +685,7 @@ export default function PasportPage() {
                     </div>
                     <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
                       {nextLeft === 'info'
-                        ? <InfoPage user={activeUser} count={stamps.length} avatarConfig={avatarConfigs[activeUser]} />
+                        ? <InfoPage displayName={activeUser?.displayName ?? ''} userId={activeUser?.id ?? ''} count={stamps.length} avatarConfig={activeUser ? (avatarConfigs[activeUser.id] ?? null) : null} />
                         : <StaticStampsPage stamps={byPage(nextLeft as number)} color={COVER_GOLD} />}
                     </div>
                   </div>
@@ -691,7 +706,7 @@ export default function PasportPage() {
                 >
                   <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden' }}>
                     {curLeft === 'info'
-                      ? <InfoPage user={activeUser} count={stamps.length} avatarConfig={avatarConfigs[activeUser]} />
+                      ? <InfoPage displayName={activeUser?.displayName ?? ''} userId={activeUser?.id ?? ''} count={stamps.length} avatarConfig={activeUser ? (avatarConfigs[activeUser.id] ?? null) : null} />
                       : <StaticStampsPage stamps={byPage(curLeft as number)} color={COVER_GOLD} />}
                   </div>
                   <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>

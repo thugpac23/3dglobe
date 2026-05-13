@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { UserType, USER_DISPLAY, USER_COLOR, AvatarConfig, FaceType, Expression } from '@/types';
+import { UserProfile, AvatarConfig, FaceType, Expression } from '@/types';
+import { fetchUsers } from '@/lib/api';
 import { sounds, resumeAudio } from '@/lib/sounds';
 
 const Avatar3D   = dynamic(() => import('@/components/Avatar3D/Avatar3D'),   { ssr: false });
@@ -124,12 +125,12 @@ const EYE_PRESETS  = ['#4B5563', '#3B82F6', '#10B981', '#8B4513', '#6B21A8', '#9
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-function defaultConfig(user: UserType): AvatarConfig {
+function defaultConfig(userId = ''): AvatarConfig {
   return {
-    id: user,
-    user,
-    hairStyle:   user === 'tati' ? 'short' : 'long',
-    hairColor:   user === 'tati' ? '#8B4513' : '#1a1a1a',
+    id: userId,
+    user: userId,
+    hairStyle:   'short',
+    hairColor:   '#8B4513',
     eyeColor:    '#4B5563',
     skinColor:   '#FBBF8A',
     outfit:      'casual',
@@ -142,108 +143,107 @@ function defaultConfig(user: UserType): AvatarConfig {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AvatarPage() {
-  const [activeUser, setActiveUser] = useState<UserType>('iva');
-  const [configs, setConfigs] = useState<Record<UserType, AvatarConfig>>({
-    tati: defaultConfig('tati'),
-    iva:  defaultConfig('iva'),
-  });
-  const [avatarUrls, setAvatarUrls] = useState<Record<UserType, string | null>>({
-    tati: null,
-    iva:  null,
-  });
+  const [users, setUsers]           = useState<UserProfile[]>([]);
+  const [activeUser, setActiveUser] = useState<UserProfile | null>(null);
+  const [configs, setConfigs]       = useState<Record<string, AvatarConfig>>({});
+  const [avatarUrls, setAvatarUrls] = useState<Record<string, string | null>>({});
   const [importInput, setImportInput] = useState('');
   const [saving, setSaving]           = useState(false);
   const [saved,  setSaved]            = useState(false);
   const [tab, setTab]                 = useState<'build' | 'import'>('build');
-  const [backgrounds, setBackgrounds] = useState<Record<UserType, string>>({ tati: 'studio', iva: 'studio' });
-  const [outfitColors, setOutfitColors] = useState<Record<UserType, string | null>>({ tati: null, iva: null });
+  const [backgrounds, setBackgrounds]   = useState<Record<string, string>>({});
+  const [outfitColors, setOutfitColors] = useState<Record<string, string | null>>({});
 
-  // Persist background choice per user in localStorage (no DB column needed)
+  const activeId = activeUser?.id ?? '';
+
+  // Load users on mount
+  useEffect(() => {
+    fetchUsers().then(us => {
+      setUsers(us);
+      setActiveUser(u => u ?? (us[0] ?? null));
+    }).catch(() => {});
+  }, []);
+
+  // Persist background choice per user in localStorage
   useEffect(() => {
     try {
       const raw = localStorage.getItem('avatar-bg');
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<UserType, string>;
-        setBackgrounds({ tati: parsed.tati ?? 'studio', iva: parsed.iva ?? 'studio' });
-      }
+      if (raw) setBackgrounds(JSON.parse(raw) as Record<string, string>);
     } catch { /* ignore */ }
   }, []);
   const setBackground = useCallback((bg: string) => {
     setBackgrounds(prev => {
-      const next = { ...prev, [activeUser]: bg };
+      const next = { ...prev, [activeId]: bg };
       try { localStorage.setItem('avatar-bg', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
-  }, [activeUser]);
+  }, [activeId]);
 
-  // Persist outfit color choice per user (override of outfit's default palette)
+  // Persist outfit color choice per user
   useEffect(() => {
     try {
       const raw = localStorage.getItem('avatar-outfit-color');
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<UserType, string | null>;
-        setOutfitColors({ tati: parsed.tati ?? null, iva: parsed.iva ?? null });
-      }
+      if (raw) setOutfitColors(JSON.parse(raw) as Record<string, string | null>);
     } catch { /* ignore */ }
   }, []);
   const setOutfitColor = useCallback((color: string | null) => {
     setOutfitColors(prev => {
-      const next = { ...prev, [activeUser]: color };
+      const next = { ...prev, [activeId]: color };
       try { localStorage.setItem('avatar-outfit-color', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
-  }, [activeUser]);
+  }, [activeId]);
 
   // Load persisted data on mount
   useEffect(() => {
     fetch('/api/avatar').then(r => r.json()).then(data => {
-      const map = (user: UserType, d: Record<string, unknown>): AvatarConfig => ({
-        ...defaultConfig(user),
-        hairStyle:  (d.hairStyle  as AvatarConfig['hairStyle'])  ?? defaultConfig(user).hairStyle,
-        hairColor:  (d.hairColor  as string) ?? defaultConfig(user).hairColor,
-        eyeColor:   (d.eyeColor   as string) ?? defaultConfig(user).eyeColor,
-        skinColor:  (d.skinColor  as string) ?? defaultConfig(user).skinColor,
-        outfit:     (d.outfit     as AvatarConfig['outfit'])     ?? defaultConfig(user).outfit,
-        accessories:(d.accessories as string[]) ?? [],
-        faceType:   (d.faceType   as FaceType)   ?? 'standard',
-        expression: (d.expression as Expression) ?? 'smile',
-      });
-      setConfigs({
-        tati: map('tati', data.tati ?? {}),
-        iva:  map('iva',  data.iva  ?? {}),
-      });
-      setAvatarUrls({
-        tati: (data.tati?.avatarUrl as string | null) ?? null,
-        iva:  (data.iva?.avatarUrl  as string | null) ?? null,
-      });
-      setImportInput((data[activeUser]?.avatarUrl as string) ?? '');
+      const newConfigs: Record<string, AvatarConfig> = {};
+      const newUrls: Record<string, string | null> = {};
+      for (const userId of Object.keys(data)) {
+        const d = data[userId] as Record<string, unknown>;
+        newConfigs[userId] = {
+          ...defaultConfig(userId),
+          hairStyle:   (d.hairStyle  as AvatarConfig['hairStyle']) ?? 'short',
+          hairColor:   (d.hairColor  as string) ?? '#8B4513',
+          eyeColor:    (d.eyeColor   as string) ?? '#4B5563',
+          skinColor:   (d.skinColor  as string) ?? '#FBBF8A',
+          outfit:      (d.outfit     as AvatarConfig['outfit'])    ?? 'casual',
+          accessories: (d.accessories as string[]) ?? [],
+          faceType:    (d.faceType   as FaceType)  ?? 'standard',
+          expression:  (d.expression as Expression) ?? 'smile',
+        };
+        newUrls[userId] = (d.avatarUrl as string | null) ?? null;
+      }
+      setConfigs(prev => ({ ...prev, ...newConfigs }));
+      setAvatarUrls(prev => ({ ...prev, ...newUrls }));
     }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync importInput when user tab switches
   useEffect(() => {
-    setImportInput(avatarUrls[activeUser] ?? '');
-  }, [activeUser, avatarUrls]);
+    setImportInput(avatarUrls[activeId] ?? '');
+  }, [activeId, avatarUrls]);
 
-  const cfg = configs[activeUser];
-  const color = USER_COLOR[activeUser];
+  const cfg   = configs[activeId] ?? defaultConfig(activeId);
+  const color = activeUser?.color ?? '#64748b';
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const updateConfig = useCallback(<K extends keyof AvatarConfig>(key: K, value: AvatarConfig[K]) => {
     setConfigs(prev => ({
       ...prev,
-      [activeUser]: { ...prev[activeUser], [key]: value },
+      [activeId]: { ...(prev[activeId] ?? defaultConfig(activeId)), [key]: value },
     }));
     setSaved(false);
-  }, [activeUser]);
+  }, [activeId]);
 
   const persist = useCallback(async (overrides?: Partial<AvatarConfig> & { avatarUrl?: string | null }) => {
+    if (!activeUser) return;
     setSaving(true);
     resumeAudio(); sounds.add();
-    const { id: _id, user: _user, ...cfgFields } = configs[activeUser];
-    const payload = { user: activeUser, ...cfgFields, ...overrides };
+    const current = configs[activeId] ?? defaultConfig(activeId);
+    const { id: _id, user: _user, ...cfgFields } = current;
+    const payload = { userId: activeId, ...cfgFields, ...overrides };
     try {
       await fetch('/api/avatar', {
         method: 'POST',
@@ -254,20 +254,20 @@ export default function AvatarPage() {
       setTimeout(() => setSaved(false), 2500);
     } catch { /* ignore */ }
     setSaving(false);
-  }, [activeUser, configs]);
+  }, [activeId, activeUser, configs]);
 
   const handleImport = useCallback(async () => {
     const url = importInput.trim();
     if (!url) return;
-    setAvatarUrls(prev => ({ ...prev, [activeUser]: url }));
+    setAvatarUrls(prev => ({ ...prev, [activeId]: url }));
     await persist({ avatarUrl: url });
-  }, [importInput, activeUser, persist]);
+  }, [importInput, activeId, persist]);
 
   const handleClearImport = useCallback(async () => {
     setImportInput('');
-    setAvatarUrls(prev => ({ ...prev, [activeUser]: null }));
+    setAvatarUrls(prev => ({ ...prev, [activeId]: null }));
     await persist({ avatarUrl: null });
-  }, [activeUser, persist]);
+  }, [activeId, persist]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -285,28 +285,28 @@ export default function AvatarPage() {
         style={{ border: `2px solid ${color}28`, width: 'fit-content', top: 56 }}
       >
         {/* User switcher — above the avatar */}
-        <div className="flex gap-2" style={{ width: 220 }}>
-          {(['iva', 'tati'] as UserType[]).map(u => (
+        <div className="flex gap-2 flex-wrap justify-center" style={{ maxWidth: 260, padding: '0 8px' }}>
+          {users.map(u => (
             <button
-              key={u}
+              key={u.id}
               onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setSaved(false); }}
-              className="flex-1 py-2 rounded-full font-bold text-sm transition-all"
+              className="px-3 py-1.5 rounded-full font-bold text-xs transition-all"
               style={{
-                background: activeUser === u ? USER_COLOR[u] : '#F8FAFC',
-                color: activeUser === u ? 'white' : '#64748b',
-                border: `2px solid ${activeUser === u ? USER_COLOR[u] : '#E2E8F0'}`,
-                boxShadow: activeUser === u ? `0 3px 12px ${USER_COLOR[u]}40` : 'none',
+                background: activeUser?.id === u.id ? u.color : '#F8FAFC',
+                color: activeUser?.id === u.id ? 'white' : '#64748b',
+                border: `2px solid ${activeUser?.id === u.id ? u.color : '#E2E8F0'}`,
+                boxShadow: activeUser?.id === u.id ? `0 3px 12px ${u.color}40` : 'none',
               }}
             >
-              {USER_DISPLAY[u]}
+              {u.displayName}
             </button>
           ))}
         </div>
 
         {/* Avatar preview */}
-        {avatarUrls[activeUser] ? (
+        {avatarUrls[activeId] ? (
           <>
-            <AvatarRPM avatarUrl={avatarUrls[activeUser]!} width={220} height={290} />
+            <AvatarRPM avatarUrl={avatarUrls[activeId]!} width={220} height={290} />
             <span className="text-xs text-slate-400">Завърти / Приближи</span>
           </>
         ) : (
@@ -315,8 +315,8 @@ export default function AvatarPage() {
             expression={cfg.expression ?? 'smile'}
             width={220}
             height={290}
-            background={backgrounds[activeUser]}
-            outfitColor={outfitColors[activeUser] ?? undefined}
+            background={backgrounds[activeId] ?? 'studio'}
+            outfitColor={outfitColors[activeId] ?? undefined}
           />
         )}
       </div>
@@ -443,7 +443,7 @@ export default function AvatarPage() {
                   style={{
                     width: 26, height: 26, borderRadius: '50%',
                     background: 'conic-gradient(#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa,#f87171)',
-                    border: outfitColors[activeUser] === null ? '3px solid #1e293b' : '2px solid #e2e8f0',
+                    border: outfitColors[activeId] === null || outfitColors[activeId] === undefined ? '3px solid #1e293b' : '2px solid #e2e8f0',
                   }}
                 />
                 {OUTFIT_COLOR_PRESETS.map(c => (
@@ -452,15 +452,15 @@ export default function AvatarPage() {
                     onClick={() => setOutfitColor(c)}
                     style={{
                       width: 26, height: 26, borderRadius: '50%', background: c,
-                      border: outfitColors[activeUser] === c ? '3px solid #1e293b' : '2px solid #e2e8f0',
-                      boxShadow: outfitColors[activeUser] === c ? '0 0 0 2px white inset' : 'none',
+                      border: outfitColors[activeId] === c ? '3px solid #1e293b' : '2px solid #e2e8f0',
+                      boxShadow: outfitColors[activeId] === c ? '0 0 0 2px white inset' : 'none',
                     }}
                   />
                 ))}
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input
                     type="color"
-                    value={outfitColors[activeUser] ?? '#60A5FA'}
+                    value={outfitColors[activeId] ?? '#60A5FA'}
                     onChange={e => setOutfitColor(e.target.value)}
                     style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 0 }}
                   />
@@ -475,7 +475,7 @@ export default function AvatarPage() {
                 {BACKGROUNDS.map(({ value, label }) => (
                   <Chip
                     key={value}
-                    active={backgrounds[activeUser] === value}
+                    active={(backgrounds[activeId] ?? 'studio') === value}
                     color={color}
                     onClick={() => setBackground(value)}
                   >
@@ -555,7 +555,7 @@ export default function AvatarPage() {
               </button>
             </div>
 
-            {avatarUrls[activeUser] && (
+            {avatarUrls[activeId] && (
               <button
                 onClick={handleClearImport}
                 className="w-full py-2 rounded-xl text-sm text-slate-500 border border-slate-200 hover:bg-slate-50 transition-all"

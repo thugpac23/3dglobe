@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { VisitsByCountry, WishlistByCountry, AppMode } from '@/types';
+import { VisitsByCountry, WishlistByCountry, AppMode, UserProfile } from '@/types';
 import { BG_NAMES } from '@/data/countryNamesBg';
 
 interface VisitsTableProps {
@@ -9,6 +9,7 @@ interface VisitsTableProps {
   wishlistByCountry: WishlistByCountry;
   mode: AppMode;
   compact?: boolean;
+  users?: UserProfile[];
 }
 
 interface CountryRow {
@@ -177,46 +178,52 @@ function DraggableColumn({
   );
 }
 
-export default function VisitsTable({ visitsByCountry, wishlistByCountry, mode, compact = false }: VisitsTableProps) {
+export default function VisitsTable({ visitsByCountry, wishlistByCountry, mode, compact = false, users = [] }: VisitsTableProps) {
   const sort = (a: CountryRow, b: CountryRow) => a.nameBg.localeCompare(b.nameBg, 'bg');
 
-  let cols: { storageKey: string; color: string; label: string; emoji: string; rows: CountryRow[] }[];
-
-  if (mode === 'wishlist') {
-    const tatiWish: CountryRow[] = [];
-    const ivaWish: CountryRow[]  = [];
-    const bothWish: CountryRow[] = [];
-    for (const [isoCode, entry] of Object.entries(wishlistByCountry)) {
-      const row: CountryRow = { isoCode, nameBg: BG_NAMES[isoCode] ?? entry.country.name };
-      if (entry.tati) tatiWish.push(row);
-      if (entry.iva)  ivaWish.push(row);
-      if (entry.tati && entry.iva) bothWish.push(row);
-    }
-    tatiWish.sort(sort); ivaWish.sort(sort); bothWish.sort(sort);
-    cols = [
-      { storageKey: 'wish-order-tati', color: '#F59E0B', label: 'Тати',    emoji: '⭐', rows: tatiWish },
-      { storageKey: 'wish-order-iva',  color: '#EC4899', label: 'Ива',     emoji: '⭐', rows: ivaWish  },
-      { storageKey: 'wish-order-both', color: '#14B8A6', label: 'Двамата', emoji: '🌍', rows: bothWish },
-    ];
-  } else {
-    const tatiRows: CountryRow[] = [];
-    const ivaRows: CountryRow[]  = [];
-    const bothRows: CountryRow[] = [];
-    for (const [isoCode, entry] of Object.entries(visitsByCountry)) {
-      const row: CountryRow = { isoCode, nameBg: BG_NAMES[isoCode] ?? entry.country.name };
-      if (entry.tati) tatiRows.push(row);
-      if (entry.iva)  ivaRows.push(row);
-      if (entry.tati && entry.iva) bothRows.push(row);
-    }
-    tatiRows.sort(sort); ivaRows.sort(sort); bothRows.sort(sort);
-    cols = [
-      { storageKey: 'visit-order-tati', color: '#F59E0B', label: 'Тати',           emoji: '🟡', rows: tatiRows },
-      { storageKey: 'visit-order-iva',  color: '#EC4899', label: 'Ива',            emoji: '🩷', rows: ivaRows  },
-      { storageKey: 'visit-order-both', color: '#F97316', label: 'Двамата заедно', emoji: '🌍', rows: bothRows },
-    ];
-  }
-
+  const sourceMap = mode === 'wishlist' ? wishlistByCountry : visitsByCountry;
   const emptyText = mode === 'wishlist' ? 'Няма желани дестинации' : 'Няма държави все още';
+  const emoji = mode === 'wishlist' ? '⭐' : '🌍';
+
+  // Build per-user rows
+  const userCols = users.map(u => {
+    const rows: CountryRow[] = [];
+    for (const [isoCode, entry] of Object.entries(sourceMap)) {
+      if (entry[u.id] === true) {
+        rows.push({ isoCode, nameBg: BG_NAMES[isoCode] ?? (entry.country as { name: string }).name });
+      }
+    }
+    rows.sort(sort);
+    return {
+      storageKey: `${mode}-order-${u.id}`,
+      color: u.color,
+      label: u.displayName,
+      emoji,
+      rows,
+    };
+  });
+
+  // "Shared by all" column — countries every user has (only if 2+ users)
+  const sharedCols = users.length >= 2 ? (() => {
+    const rows: CountryRow[] = [];
+    for (const [isoCode, entry] of Object.entries(sourceMap)) {
+      if (users.every(u => entry[u.id] === true)) {
+        rows.push({ isoCode, nameBg: BG_NAMES[isoCode] ?? (entry.country as { name: string }).name });
+      }
+    }
+    rows.sort(sort);
+    return [{
+      storageKey: `${mode}-order-all`,
+      color: '#14B8A6',
+      label: 'Общи',
+      emoji: '🤝',
+      rows,
+    }];
+  })() : [];
+
+  const cols = [...userCols, ...sharedCols];
+
+  if (cols.length === 0) return null;
 
   if (compact) {
     return (
@@ -226,9 +233,11 @@ export default function VisitsTable({ visitsByCountry, wishlistByCountry, mode, 
     );
   }
 
+  const gridCols = cols.length <= 2 ? cols.length : cols.length <= 4 ? 2 : 3;
+
   return (
     <div className="w-full max-w-4xl mx-auto mt-5 px-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`grid gap-3 grid-cols-1 sm:grid-cols-${gridCols}`}>
         {cols.map(c => <DraggableColumn key={c.storageKey} {...c} emptyText={emptyText} />)}
       </div>
     </div>

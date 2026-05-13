@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { UserType, USER_DISPLAY, USER_COLOR } from '@/types';
-
-const DEFAULT_EMOJIS: Record<UserType, string> = { tati: '🧳', iva: '🌸' };
+import { UserProfile } from '@/types';
 
 const EMOJI_CHOICES = [
   '🧳', '🌸', '✈️', '🌍', '🗺️', '⭐', '🏔️', '🌊', '🌺', '🦋',
@@ -11,27 +9,31 @@ const EMOJI_CHOICES = [
   '🦊', '🌹', '🎨', '🏖️', '🚀', '🌻', '🦄', '🎵',
 ];
 
+const DEFAULT_EMOJI = '🌍';
+
 interface UserCardProps {
-  user: UserType;
+  user: UserProfile;
   isActive: boolean;
   onClick: () => void;
+  onDelete?: (userId: string) => void;
 }
 
-export default function UserCard({ user, isActive, onClick }: UserCardProps) {
-  const color = USER_COLOR[user];
-  const [emoji, setEmoji] = useState(DEFAULT_EMOJIS[user]);
+export default function UserCard({ user, isActive, onClick, onDelete }: UserCardProps) {
+  const { id, color, displayName, protected: isProtected } = user;
+  const [emoji, setEmoji] = useState(DEFAULT_EMOJI);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch('/api/settings', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : {})
       .then((data: Record<string, string>) => {
-        const saved = data[`emoji_${user}`];
+        const saved = data[`emoji_${id}`];
         if (saved) setEmoji(saved);
       })
       .catch(() => {});
-  }, [user]);
+  }, [id]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -50,7 +52,7 @@ export default function UserCard({ user, isActive, onClick }: UserCardProps) {
     fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: `emoji_${user}`, value: newEmoji }),
+      body: JSON.stringify({ key: `emoji_${id}`, value: newEmoji }),
     }).catch(() => {});
   };
 
@@ -75,8 +77,54 @@ export default function UserCard({ user, isActive, onClick }: UserCardProps) {
         >
           {emoji}
         </span>
-        <span className="font-bold text-sm text-slate-800">{USER_DISPLAY[user]}</span>
+        <span className="font-bold text-sm text-slate-800 flex-1 min-w-0 truncate">{displayName}</span>
+
+        {/* Delete button — non-protected users only */}
+        {!isProtected && onDelete && (
+          <span
+            onClick={(e) => { e.stopPropagation(); setConfirmDelete(p => !p); }}
+            title="Изтрий потребителя"
+            style={{
+              fontSize: 12, color: confirmDelete ? '#DC2626' : '#94a3b8',
+              cursor: 'pointer', lineHeight: 1, padding: '2px 4px',
+              borderRadius: 6,
+              background: confirmDelete ? '#FEE2E2' : 'transparent',
+              transition: 'all 0.15s',
+            }}
+          >
+            ✕
+          </span>
+        )}
       </div>
+
+      {/* Confirm delete inline */}
+      {confirmDelete && !isProtected && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            marginTop: 6, padding: '6px 8px',
+            background: '#FEF2F2', borderRadius: 8,
+            border: '1px solid #FECACA',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <span style={{ fontSize: 11, color: '#DC2626', flex: 1 }}>
+            Изтрий {displayName}?
+          </span>
+          <button
+            onClick={() => { onDelete?.(id); }}
+            style={{ fontSize: 11, fontWeight: 700, color: 'white', background: '#DC2626', border: 'none', borderRadius: 5, padding: '2px 8px', cursor: 'pointer' }}
+          >
+            Да
+          </button>
+          <button
+            onClick={() => setConfirmDelete(false)}
+            style={{ fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            Не
+          </button>
+        </div>
+      )}
 
       {/* macOS-style emoji picker */}
       {pickerOpen && (

@@ -3,19 +3,22 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  UserType, Visit,
-  VisitsByCountry, WishlistByCountry,
-  UserProgress, USER_DISPLAY, USER_COLOR,
+  UserProfile, Visit, WishlistItem,
+  VisitsByCountry, WishlistByCountry, UserProgress,
 } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
 import {
-  fetchVisits, fetchProgress,
-  fetchWishlist, addVisit, removeVisit,
-  addXP,
+  fetchUsers, fetchVisits, fetchProgress,
+  fetchWishlist, addVisit, removeVisit, addXP,
 } from '@/lib/api';
 import { ACHIEVEMENTS } from '@/lib/xp';
 import { getFact } from '@/data/countryFacts';
 import { BG_NAMES } from '@/data/countryNamesBg';
+import UserCard from '@/components/XPBar/XPBar';
+import VisitsTable from '@/components/VisitsTable';
+
+const Globe    = dynamic(() => import('@/components/Globe'), { ssr: false });
+const WorldMap = dynamic(() => import('@/components/WorldMap/WorldMap'), { ssr: false });
 
 function getFlagEmoji(iso: string): string {
   if (!iso || iso.length !== 2) return '🌍';
@@ -26,29 +29,22 @@ function getFlagEmoji(iso: string): string {
     );
   } catch { return '🌍'; }
 }
-import UserCard from '@/components/XPBar/XPBar';
-import VisitsTable from '@/components/VisitsTable';
-
-const Globe    = dynamic(() => import('@/components/Globe'), { ssr: false });
-const WorldMap = dynamic(() => import('@/components/WorldMap/WorldMap'), { ssr: false });
 
 interface Toast { id: number; message: string; type: 'add' | 'remove' | 'xp' | 'level' | 'achievement' }
 
-const DEFAULT_PROGRESS: UserProgress = { id: '', user: 'tati', xp: 0, level: 1, achievements: [] };
+const DEFAULT_PROGRESS: UserProgress = { id: '', userId: '', xp: 0, level: 1, achievements: [] };
 
 export default function Poseteno() {
-  const [visits, setVisits] = useState<Visit[]>([]);
-  const [wishlist, setWishlist] = useState<import('@/types').WishlistItem[]>([]);
-  const [progress, setProgress] = useState<{ tati: UserProgress; iva: UserProgress }>({
-    tati: { ...DEFAULT_PROGRESS, user: 'tati' },
-    iva:  { ...DEFAULT_PROGRESS, user: 'iva' },
-  });
-  const [activeUser, setActiveUser] = useState<UserType>('iva');
-  const [loading, setLoading] = useState(true);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [globeOpen, setGlobeOpen] = useState(false);
-  const [mapOpen, setMapOpen]     = useState(false);
-  const [factPopup, setFactPopup] = useState<{ iso: string; name: string; fact: string } | null>(null);
+  const [users, setUsers]       = useState<UserProfile[]>([]);
+  const [visits, setVisits]     = useState<Visit[]>([]);
+  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [progress, setProgress] = useState<Record<string, UserProgress>>({});
+  const [activeUser, setActiveUser]   = useState<UserProfile | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [toasts, setToasts]           = useState<Toast[]>([]);
+  const [globeOpen, setGlobeOpen]     = useState(false);
+  const [mapOpen, setMapOpen]         = useState(false);
+  const [factPopup, setFactPopup]     = useState<{ iso: string; name: string; fact: string } | null>(null);
   const xpPopRef = useRef<HTMLDivElement>(null);
   const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -59,8 +55,11 @@ export default function Poseteno() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchVisits(), fetchProgress(), fetchWishlist()])
-      .then(([v, p, w]) => { setVisits(v); setProgress(p); setWishlist(w); })
+    Promise.all([fetchUsers(), fetchVisits(), fetchProgress(), fetchWishlist()])
+      .then(([u, v, p, w]) => {
+        setUsers(u); setActiveUser(u[0] ?? null);
+        setVisits(v); setProgress(p); setWishlist(w);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -98,8 +97,8 @@ export default function Poseteno() {
     const map: VisitsByCountry = {};
     for (const v of visits) {
       const iso = v.country.isoCode;
-      if (!map[iso]) map[iso] = { country: v.country, tati: false, iva: false };
-      map[iso][v.user] = true;
+      if (!map[iso]) map[iso] = { country: v.country };
+      (map[iso] as Record<string, unknown>)[v.userId] = true;
     }
     return map;
   }, [visits]);
@@ -108,34 +107,30 @@ export default function Poseteno() {
     const map: WishlistByCountry = {};
     for (const w of wishlist) {
       const iso = w.country.isoCode;
-      if (!map[iso]) map[iso] = { country: w.country, tati: false, iva: false };
-      map[iso][w.user] = true;
+      if (!map[iso]) map[iso] = { country: w.country };
+      (map[iso] as Record<string, unknown>)[w.userId] = true;
     }
     return map;
   }, [wishlist]);
 
-  const visitCount = useMemo(() => {
-    let tati = 0, iva = 0, both = 0;
-    for (const e of Object.values(visitsByCountry)) {
-      if (e.tati && e.iva) both++;
-      else if (e.tati) tati++;
-      else if (e.iva) iva++;
-    }
-    return { tati, iva, both };
-  }, [visitsByCountry]);
+  const totalVisited = useMemo(() => {
+    const seen = new Set<string>();
+    for (const v of visits) seen.add(v.country.isoCode);
+    return seen.size;
+  }, [visits]);
 
-  const handleAwardXP = useCallback(async (user: UserType, amount: number) => {
+  const handleAwardXP = useCallback(async (userId: string, displayName: string, amount: number) => {
     try {
-      const result = await addXP(user, amount);
-      setProgress((p) => ({ ...p, [user]: result.progress }));
+      const result = await addXP(userId, amount);
+      setProgress((p) => ({ ...p, [userId]: result.progress }));
       if (result.leveledUp) {
-        showToast(`🎉 ${USER_DISPLAY[user]} достигна Ниво ${result.progress.level}!`, 'level');
+        showToast(`🎉 ${displayName} достигна Ниво ${result.progress.level}!`, 'level');
       }
       for (const achId of result.newAchievements) {
         const ach = ACHIEVEMENTS.find((a) => a.id === achId);
         if (ach) showToast(`${ach.emoji} Постижение: ${ach.title}!`, 'achievement');
       }
-    } catch { /* silent fail */ }
+    } catch { /* silent */ }
   }, [showToast]);
 
   const showFactPopup = useCallback((isoCode: string) => {
@@ -148,18 +143,18 @@ export default function Poseteno() {
   }, []);
 
   const handleCountryClick = useCallback(async (isoCode: string, countryName: string) => {
+    if (!activeUser) return;
     showFactPopup(isoCode);
 
     const entry = visitsByCountry[isoCode];
-    const alreadyVisited = entry?.[activeUser] ?? false;
-    const displayName = USER_DISPLAY[activeUser];
+    const alreadyVisited = entry?.[activeUser.id] === true;
 
     if (alreadyVisited) {
-      const visit = visits.find((v) => v.country.isoCode === isoCode && v.user === activeUser);
+      const visit = visits.find((v) => v.country.isoCode === isoCode && v.userId === activeUser.id);
       if (!visit) return;
       setVisits((p) => p.filter((v) => v.id !== visit.id));
-      showToast(`${countryName} премахната от ${displayName}`, 'remove');
-      try { await removeVisit(visit.countryId, activeUser); }
+      showToast(`${countryName} премахната от ${activeUser.displayName}`, 'remove');
+      try { await removeVisit(visit.countryId, activeUser.id); }
       catch { setVisits((p) => [...p, visit]); showToast('Грешка при премахване', 'remove'); }
     } else {
       let countryId: string | null = null;
@@ -173,37 +168,37 @@ export default function Poseteno() {
         } catch { showToast(`${countryName} не е намерена`, 'remove'); return; }
       }
 
-      const isShared = entry && (entry.tati || entry.iva);
+      const isShared = users.some(u => u.id !== activeUser.id && entry?.[u.id] === true);
       const xpAmount = isShared ? 15 : 10;
 
       const optimistic: Visit = {
         id: `tmp-${Date.now()}`, countryId: countryId!,
-        user: activeUser,
+        userId: activeUser.id,
+        user: { id: activeUser.id, displayName: activeUser.displayName, color: activeUser.color },
         country: entry?.country ?? { id: countryId!, name: countryName, capital: '', isoCode },
       };
       setVisits((p) => [...p, optimistic]);
-      showToast(`✓ ${countryName} добавена към ${displayName}`, 'add');
-      handleAwardXP(activeUser, xpAmount);
+      showToast(`✓ ${countryName} добавена към ${activeUser.displayName}`, 'add');
+      handleAwardXP(activeUser.id, activeUser.displayName, xpAmount);
       try {
-        const real = await addVisit(countryId!, activeUser);
+        const real = await addVisit(countryId!, activeUser.id);
         setVisits((p) => [...p.filter((v) => v.id !== optimistic.id), real]);
       } catch {
         setVisits((p) => p.filter((v) => v.id !== optimistic.id));
         showToast('Грешка при запазване', 'remove');
       }
     }
-  }, [visitsByCountry, visits, activeUser, showToast, handleAwardXP, showFactPopup]);
+  }, [visitsByCountry, visits, users, activeUser, showToast, handleAwardXP, showFactPopup]);
 
   const toastColors: Record<Toast['type'], string> = {
     add: '#059669', remove: '#DC2626',
     xp: '#F59E0B', level: '#7C3AED', achievement: '#0EA5E9',
   };
 
-  const totalVisited = visitCount.tati + visitCount.iva + visitCount.both;
+  const activeColor = activeUser?.color ?? '#64748b';
 
   return (
     <main className="min-h-screen flex flex-col items-center pb-20 px-2">
-      {/* Header */}
       <header className="w-full max-w-2xl pt-5 pb-2 text-center">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800" style={{ letterSpacing: '-0.02em' }}>
           🗺️ Посетено
@@ -214,25 +209,21 @@ export default function Poseteno() {
       </header>
 
       {/* User switcher */}
-      <div className="flex gap-3 w-full max-w-lg mt-3 px-2">
-        {(['iva', 'tati'] as UserType[]).map((user) => (
+      <div className="flex gap-3 w-full max-w-lg mt-3 px-2 flex-wrap">
+        {users.map((u) => (
           <UserCard
-            key={user}
-            user={user}
-            isActive={activeUser === user}
-            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(user); }}
+            key={u.id}
+            user={u}
+            isActive={activeUser?.id === u.id}
+            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); }}
           />
         ))}
       </div>
 
-      <p className="text-xs text-slate-500 mt-2">
-        Кликни върху държава, за да я отбележиш за {USER_DISPLAY[activeUser]}
-      </p>
-
       {/* Map section */}
       <div className="w-full max-w-2xl mt-4 px-2">
         <h2 className="text-base font-bold text-slate-700 mb-1.5 text-center">🗺️ Карта на пътешествието</h2>
-        {!loading && (
+        {!loading && activeUser && (
           <WorldMap
             visitsByCountry={visitsByCountry}
             wishlistByCountry={wishlistByCountry}
@@ -251,19 +242,18 @@ export default function Poseteno() {
           <button
             onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(true); }}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold border-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: 'white', color: USER_COLOR[activeUser], borderColor: USER_COLOR[activeUser] }}
+            style={{ background: 'white', color: activeColor, borderColor: activeColor }}
           >
             🌍 Покажи интерактивен глобус
           </button>
           <button
             onClick={() => { resumeAudio(); sounds.click(); setMapOpen(true); }}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: USER_COLOR[activeUser], color: 'white', boxShadow: `0 3px 12px ${USER_COLOR[activeUser]}40` }}
+            style={{ background: activeColor, color: 'white', boxShadow: `0 3px 12px ${activeColor}40` }}
           >
             🗺️ Покажи на цял екран
           </button>
         </div>
-
       </div>
 
       {/* Fullscreen globe modal */}
@@ -271,32 +261,34 @@ export default function Poseteno() {
         <div className="fixed inset-0 flex flex-col" style={{ background: '#040c18', zIndex: 9999 }}>
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
             style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(80,140,230,0.15)' }}>
-            {(['iva', 'tati'] as UserType[]).map(u => (
-              <button key={u} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
+            {users.map(u => (
+              <button key={u.id} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
                 className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
                 style={{
-                  background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.07)',
-                  color: activeUser === u ? 'white' : 'rgba(255,255,255,0.5)',
-                  border: `1.5px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.1)'}`,
+                  background: activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.07)',
+                  color: activeUser?.id === u.id ? 'white' : 'rgba(255,255,255,0.5)',
+                  border: `1.5px solid ${activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.1)'}`,
                 }}>
-                {USER_DISPLAY[u]}
+                {u.displayName}
               </button>
             ))}
             <button onClick={() => { resumeAudio(); sounds.click(); setGlobeOpen(false); setFactPopup(null); }}
-              className="ml-auto w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg transition-all"
+              className="ml-auto w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg"
               style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
               title="Затвори">✕</button>
           </div>
           <div className="flex-1 flex items-center justify-center overflow-hidden"
             style={{ filter: 'drop-shadow(0 0 40px rgba(14,100,148,0.4))', touchAction: 'none' }}>
-            <Globe
-              visitsByCountry={visitsByCountry}
-              wishlistByCountry={wishlistByCountry}
-              activeUser={activeUser}
-              mode="visited"
-              onCountryClick={handleCountryClick}
-              fullscreen
-            />
+            {activeUser && (
+              <Globe
+                visitsByCountry={visitsByCountry}
+                wishlistByCountry={wishlistByCountry}
+                activeUser={activeUser.id}
+                mode="visited"
+                onCountryClick={handleCountryClick}
+                fullscreen
+              />
+            )}
           </div>
           {factPopup && (
             <div className="fact-popup-enter" style={{
@@ -309,13 +301,13 @@ export default function Poseteno() {
                 <span style={{ fontSize: 22 }}>{getFlagEmoji(factPopup.iso)}</span>
                 <span style={{ fontWeight: 700, fontSize: 14, color: '#93c5fd' }}>{factPopup.name}</span>
                 <button onClick={() => setFactPopup(null)}
-                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16 }}>✕</button>
               </div>
               <div style={{ fontSize: 12.5, lineHeight: 1.55, color: '#cbd5e1' }}>{factPopup.fact}</div>
             </div>
           )}
           <div className="text-center pb-2 text-xs shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            Кликни двукратно върху държава — добавя/премахва за {USER_DISPLAY[activeUser]}
+            Кликни двукратно — добавя/премахва за {activeUser?.displayName}
           </div>
         </div>
       )}
@@ -325,19 +317,19 @@ export default function Poseteno() {
         <div className="fixed inset-0 flex flex-col" style={{ background: '#040c18', zIndex: 9999 }}>
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
             style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(30,120,60,0.2)' }}>
-            {(['iva', 'tati'] as UserType[]).map(u => (
-              <button key={u} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
+            {users.map(u => (
+              <button key={u.id} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
                 className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
                 style={{
-                  background: activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.07)',
-                  color: activeUser === u ? 'white' : 'rgba(255,255,255,0.5)',
-                  border: `1.5px solid ${activeUser === u ? USER_COLOR[u] : 'rgba(255,255,255,0.1)'}`,
+                  background: activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.07)',
+                  color: activeUser?.id === u.id ? 'white' : 'rgba(255,255,255,0.5)',
+                  border: `1.5px solid ${activeUser?.id === u.id ? u.color : 'rgba(255,255,255,0.1)'}`,
                 }}>
-                {USER_DISPLAY[u]}
+                {u.displayName}
               </button>
             ))}
             <button onClick={() => { resumeAudio(); sounds.click(); setMapOpen(false); setFactPopup(null); }}
-              className="ml-auto w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg transition-all"
+              className="ml-auto w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg"
               style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
               title="Затвори">✕</button>
           </div>
@@ -361,14 +353,14 @@ export default function Poseteno() {
                 <span style={{ fontSize: 22 }}>{getFlagEmoji(factPopup.iso)}</span>
                 <span style={{ fontWeight: 700, fontSize: 14, color: '#93c5fd' }}>{factPopup.name}</span>
                 <button onClick={() => setFactPopup(null)}
-                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16 }}>✕</button>
               </div>
               <div style={{ fontSize: 12.5, lineHeight: 1.55, color: '#cbd5e1' }}>{factPopup.fact}</div>
             </div>
           )}
           <div className="text-center py-2 text-xs shrink-0"
             style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(6,18,36,0.7)' }}>
-            Кликни върху държава — добавя/премахва за {USER_DISPLAY[activeUser]}
+            Кликни — добавя/премахва за {activeUser?.displayName}
           </div>
         </div>
       )}
@@ -378,6 +370,7 @@ export default function Poseteno() {
         visitsByCountry={visitsByCountry}
         wishlistByCountry={wishlistByCountry}
         mode="visited"
+        users={users}
       />
 
       {/* Toasts */}
@@ -389,7 +382,6 @@ export default function Poseteno() {
           </div>
         ))}
       </div>
-
       <div ref={xpPopRef} />
     </main>
   );

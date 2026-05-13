@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { UserType, USER_COLOR } from '@/types';
+import { UserProfile } from '@/types';
+import { fetchUsers } from '@/lib/api';
 import { sounds, resumeAudio } from '@/lib/sounds';
 import UserCard from '@/components/XPBar/XPBar';
 
@@ -17,7 +18,7 @@ interface DiaryPhoto {
 
 interface DiaryEntry {
   id: string;
-  user: UserType;
+  userId: string;
   title: string;
   content: string;
   date: string;
@@ -523,15 +524,17 @@ function DiaryEntryCard({
 }
 
 export default function DnevnikPage() {
+  const [users, setUsers]   = useState<UserProfile[]>([]);
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeUser, setActiveUser] = useState<UserType>('iva');
+  const [activeUser, setActiveUser] = useState<UserProfile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', content: '', date: new Date().toISOString().slice(0, 10) });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    fetchUsers().then(u => { setUsers(u); setActiveUser(u[0] ?? null); }).catch(() => {});
     fetch('/api/diary')
       .then(r => r.ok ? r.json() : [])
       .then((data) => setEntries(data.map((e: DiaryEntry) => ({ ...e, photos: e.photos ?? [] }))))
@@ -539,7 +542,7 @@ export default function DnevnikPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const userEntries = entries.filter(e => e.user === activeUser);
+  const userEntries = entries.filter(e => e.userId === activeUser?.id);
 
   const handleSave = useCallback(async () => {
     if (!form.title.trim() || !form.content.trim()) return;
@@ -559,7 +562,7 @@ export default function DnevnikPage() {
         const r = await fetch('/api/diary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form, user: activeUser }),
+          body: JSON.stringify({ ...form, userId: activeUser?.id }),
         });
         if (r.ok) {
           const created = await r.json();
@@ -649,12 +652,12 @@ export default function DnevnikPage() {
       </header>
 
       {/* User switcher */}
-      <div className="flex gap-3 max-w-lg mx-auto mb-4">
-        {(['iva', 'tati'] as UserType[]).map(u => (
+      <div className="flex gap-3 max-w-lg mx-auto mb-4 flex-wrap">
+        {users.map(u => (
           <UserCard
-            key={u}
+            key={u.id}
             user={u}
-            isActive={activeUser === u}
+            isActive={activeUser?.id === u.id}
             onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); }}
           />
         ))}
@@ -665,7 +668,7 @@ export default function DnevnikPage() {
         <button
           onClick={() => { sounds.click(); resumeAudio(); setEditingId(null); setForm({ title: '', content: '', date: new Date().toISOString().slice(0, 10) }); setShowForm(true); }}
           className="diary-font px-6 py-2.5 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95"
-          style={{ background: USER_COLOR[activeUser], color: 'white', boxShadow: `0 4px 14px ${USER_COLOR[activeUser]}50`, fontSize: 22 }}
+          style={{ background: activeUser?.color ?? '#7A5C3A', color: 'white', boxShadow: `0 4px 14px ${activeUser?.color ?? '#7A5C3A'}50`, fontSize: 22 }}
         >
           ✏️ Нов запис
         </button>
@@ -692,7 +695,7 @@ export default function DnevnikPage() {
               value={form.title}
               onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
               className="diary-font w-full mb-3 px-3 py-2 rounded-lg border-0 border-b-2 bg-transparent outline-none"
-              style={{ borderColor: USER_COLOR[activeUser], color: '#2D1B0E', fontSize: 22 }}
+              style={{ borderColor: activeUser?.color ?? '#7A5C3A', color: '#2D1B0E', fontSize: 22 }}
             />
             <input
               type="date"
@@ -714,7 +717,7 @@ export default function DnevnikPage() {
                 onClick={handleSave}
                 disabled={saving || !form.title.trim() || !form.content.trim()}
                 className="flex-1 diary-font py-2.5 rounded-xl font-bold transition-all"
-                style={{ background: USER_COLOR[activeUser], color: 'white', opacity: saving ? 0.7 : 1, fontSize: 22 }}
+                style={{ background: activeUser?.color ?? '#7A5C3A', color: 'white', opacity: saving ? 0.7 : 1, fontSize: 22 }}
               >
                 {saving ? 'Запазване…' : '💾 Запази'}
               </button>
