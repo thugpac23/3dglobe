@@ -420,7 +420,7 @@ function spreadToPages(idx: number): [number | 'info', number] {
 }
 
 export default function PasportPage() {
-  const [activeUser, setActiveUser]   = useState<UserType>('tati');
+  const [activeUser, setActiveUser]   = useState<UserType>('iva');
   const [stamps, setStamps]           = useState<Stamp[]>([]);
   const [loading, setLoading]         = useState(true);
   const [spreadIdx, setSpreadIdx]     = useState(0);
@@ -510,7 +510,7 @@ export default function PasportPage() {
 
       {/* User tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
-        {(['tati', 'iva'] as UserType[]).map(u => (
+        {(['iva', 'tati'] as UserType[]).map(u => (
           <button
             key={u}
             onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}

@@ -43,7 +43,7 @@ export default function Home() {
     tati: { ...DEFAULT_PROGRESS, user: 'tati' },
     iva:  { ...DEFAULT_PROGRESS, user: 'iva' },
   });
-  const [activeUser, setActiveUser] = useState<UserType>('tati');
+  const [activeUser, setActiveUser] = useState<UserType>('iva');
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [globeOpen, setGlobeOpen] = useState(false);
@@ -196,7 +196,7 @@ export default function Home() {
 
       {/* User switcher */}
       <div className="flex gap-3 w-full max-w-lg mt-3 px-2">
-        {(['tati', 'iva'] as UserType[]).map((user) => (
+        {(['iva', 'tati'] as UserType[]).map((user) => (
           <UserCard
             key={user}
             user={user}
@@ -253,7 +253,7 @@ export default function Home() {
         <div className="fixed inset-0 flex flex-col" style={{ background: '#040c18', zIndex: 9999 }}>
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
             style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(80,140,230,0.15)' }}>
-            {(['tati', 'iva'] as UserType[]).map(u => (
+            {(['iva', 'tati'] as UserType[]).map(u => (
               <button key={u} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
                 className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
                 style={{
@@ -307,7 +307,7 @@ export default function Home() {
         <div className="fixed inset-0 flex flex-col" style={{ background: '#040c18', zIndex: 9999 }}>
           <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
             style={{ background: 'rgba(6,18,36,0.9)', borderBottom: '1px solid rgba(30,120,60,0.2)' }}>
-            {(['tati', 'iva'] as UserType[]).map(u => (
+            {(['iva', 'tati'] as UserType[]).map(u => (
               <button key={u} onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
                 className="px-4 py-1.5 rounded-full font-bold text-xs transition-all"
                 style={{

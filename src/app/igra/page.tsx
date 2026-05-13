@@ -25,7 +25,7 @@ const MODES: { id: GameMode; emoji: string; label: string }[] = [
 ];
 
 export default function IgraPage() {
-  const [activeUser, setActiveUser] = useState<UserType>('tati');
+  const [activeUser, setActiveUser] = useState<UserType>('iva');
   const [mode, setMode]             = useState<GameMode>('quiz');
 
   const color = USER_COLOR[activeUser];
@@ -37,7 +37,7 @@ export default function IgraPage() {
 
       {/* User tabs */}
       <div className="flex gap-2 mb-4">
-        {(['tati', 'iva'] as UserType[]).map(u => (
+        {(['iva', 'tati'] as UserType[]).map(u => (
           <button
             key={u}
             onClick={() => { resumeAudio(); sounds.click(); setActiveUser(u); }}
