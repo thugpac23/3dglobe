@@ -416,7 +416,7 @@ function InfoPage({ displayName, userId, count, avatarConfig }: {
             boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
           }}>
             {avatarConfig
-              ? <Avatar3D avatar={{ ...avatarConfig, user: userId }} expression={avatarConfig.expression ?? 'smile'} width={98} height={124} />
+              ? <Avatar3D avatar={{ ...avatarConfig, userId }} expression={avatarConfig.expression ?? 'smile'} width={98} height={124} />
               : <div style={{ width: 98, height: 124, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>🧑</div>
             }
           </div>
