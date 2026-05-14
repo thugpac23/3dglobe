@@ -5,7 +5,7 @@ import { UserType, USER_DISPLAY } from '@/types';
 interface UserToggleProps {
   activeUser: UserType;
   onToggle: (user: UserType) => void;
-  visitCount: { tati: number; iva: number; both: number };
+  visitCount: { tati: number; iva: number; both: number; [key: string]: number };
 }
 
 export default function UserToggle({ activeUser, onToggle, visitCount }: UserToggleProps) {

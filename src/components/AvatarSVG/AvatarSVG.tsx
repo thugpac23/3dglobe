@@ -44,7 +44,7 @@ export default function AvatarSVG({ avatar, size = 80, label, view = 'front' }: 
   const skin      = avatar.skinColor ?? '#FBBF8A';
   const outfit    = avatar.outfit    ?? 'casual';
   const acc: string[] = avatar.accessories ?? [];
-  const isMale    = avatar.user !== 'iva';
+  const isMale    = avatar.userId !== 'iva';
 
   const def     = OUTFIT_DEFS[outfit] ?? OUTFIT_DEFS.casual;
   const bodyC   = def.primary;

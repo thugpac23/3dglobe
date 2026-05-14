@@ -128,7 +128,7 @@ const EYE_PRESETS  = ['#4B5563', '#3B82F6', '#10B981', '#8B4513', '#6B21A8', '#9
 function defaultConfig(userId = ''): AvatarConfig {
   return {
     id: userId,
-    user: userId,
+    userId,
     hairStyle:   'short',
     hairColor:   '#8B4513',
     eyeColor:    '#4B5563',
@@ -242,7 +242,7 @@ export default function AvatarPage() {
     setSaving(true);
     resumeAudio(); sounds.add();
     const current = configs[activeId] ?? defaultConfig(activeId);
-    const { id: _id, user: _user, ...cfgFields } = current;
+    const { id: _id, userId: _userId, ...cfgFields } = current;
     const payload = { userId: activeId, ...cfgFields, ...overrides };
     try {
       await fetch('/api/avatar', {

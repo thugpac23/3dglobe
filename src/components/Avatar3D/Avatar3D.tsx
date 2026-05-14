@@ -83,7 +83,7 @@ function buildCharacter(
   const outfit  = avatar.outfit    ?? 'casual';
   const hair    = avatar.hairStyle ?? 'short';
   const acc     = avatar.accessories ?? [];
-  const isMale  = avatar.user !== 'iva';
+  const isMale  = avatar.userId !== 'iva';
 
   // Outfit palette — main + bottom shade follow user override, accent stays
   // outfit-specific so structural details (gold royal buttons, white sporty
@@ -2231,7 +2231,7 @@ export default function Avatar3D({
 
   const avatarKey = useMemo(() => [
     avatar.hairStyle, avatar.hairColor, avatar.eyeColor,
-    avatar.skinColor, avatar.outfit, avatar.user,
+    avatar.skinColor, avatar.outfit, avatar.userId,
     effectiveFaceType, effectiveExpression,
     outfitColor ?? '',
     ...(avatar.accessories ?? []),
