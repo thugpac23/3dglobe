@@ -211,16 +211,26 @@ async function main() {
   console.log(`Done — ${countries.length} countries seeded.`);
 
   for (const user of ['tati', 'iva']) {
-    await prisma.userProgress.upsert({
-      where: { user },
-      update: {},
-      create: { user, xp: 0, level: 1, achievements: '[]' },
-    });
-    await prisma.avatar.upsert({
-      where: { user },
+    await prisma.userProfile.upsert({
+      where: { id: user },
       update: {},
       create: {
-        user,
+        id: user,
+        displayName: user === 'tati' ? 'Тати' : 'Ива',
+        color:       user === 'tati' ? '#F59E0B' : '#EC4899',
+        protected:   true,
+      },
+    });
+    await prisma.userProgress.upsert({
+      where: { userId: user },
+      update: {},
+      create: { userId: user, xp: 0, level: 1, achievements: '[]' },
+    });
+    await prisma.avatar.upsert({
+      where: { userId: user },
+      update: {},
+      create: {
+        userId: user,
         hairStyle: user === 'tati' ? 'short' : 'long',
         hairColor: user === 'tati' ? '#8B4513' : '#1a1a1a',
         eyeColor:  '#4B5563',
@@ -230,7 +240,7 @@ async function main() {
       },
     });
   }
-  console.log('UserProgress + Avatar records ready.');
+  console.log('UserProfile + UserProgress + Avatar records ready.');
 }
 
 main()
