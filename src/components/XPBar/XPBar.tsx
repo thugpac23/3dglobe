@@ -7,6 +7,8 @@ const EMOJI_CHOICES = [
   '🧳', '🌸', '✈️', '🌍', '🗺️', '⭐', '🏔️', '🌊', '🌺', '🦋',
   '🌈', '🎒', '📸', '🎭', '🌙', '☀️', '🍀', '🌴', '🦁', '🐬',
   '🦊', '🌹', '🎨', '🏖️', '🚀', '🌻', '🦄', '🎵',
+  '🐶', '🐱', '🐻', '🐼', '🐨', '🐯', '🐰', '🐺', '🦝', '🐮',
+  '🐷', '🐸', '🐵', '🦒', '🦓',
 ];
 
 const DEFAULT_EMOJI = '🌍';
@@ -142,7 +144,10 @@ export default function UserCard({ user, isActive, onClick, onDelete }: UserCard
           onClick={e => e.stopPropagation()}
         >
           <div className="text-xs text-slate-400 mb-2 font-medium px-1">Избери иконa</div>
-          <div className="grid grid-cols-7 gap-1">
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: 4,
+            maxHeight: 160, overflowY: 'auto',
+          }}>
             {EMOJI_CHOICES.map(e => (
               <button
                 key={e}
