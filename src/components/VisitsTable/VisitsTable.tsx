@@ -233,11 +233,11 @@ export default function VisitsTable({ visitsByCountry, wishlistByCountry, mode, 
     );
   }
 
-  const gridCols = cols.length <= 2 ? cols.length : cols.length <= 4 ? 2 : 3;
+  const colCount = Math.min(cols.length, 3);
 
   return (
     <div className="w-full max-w-4xl mx-auto mt-5 px-4">
-      <div className={`grid gap-3 grid-cols-1 sm:grid-cols-${gridCols}`}>
+      <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
         {cols.map(c => <DraggableColumn key={c.storageKey} {...c} emptyText={emptyText} />)}
       </div>
     </div>
