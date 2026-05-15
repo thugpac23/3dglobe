@@ -74,16 +74,9 @@ function AddUserForm({
       background: 'white', borderRadius: 16, padding: '14px 16px',
       border: '1.5px solid #E2E8F0', boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
     }}>
-      {/* Name + emoji row */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-        <button
-          onClick={() => {
-            const idx = EMOJI_CHOICES.indexOf(emoji);
-            setEmoji(EMOJI_CHOICES[(idx + 1) % EMOJI_CHOICES.length]);
-          }}
-          style={{ fontSize: 26, background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
-          title="Смени иконата"
-        >{emoji}</button>
+      {/* Name + selected emoji preview */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+        <div style={{ fontSize: 26, lineHeight: 1, width: 32, textAlign: 'center' }}>{emoji}</div>
         <input
           autoFocus
           placeholder="Въведи име..."
@@ -95,6 +88,28 @@ function AddUserForm({
             border: '1.5px solid #E2E8F0', fontSize: 14, outline: 'none',
           }}
         />
+      </div>
+
+      {/* Emoji grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4,
+        marginBottom: 10, maxHeight: 130, overflowY: 'auto',
+        padding: 4, background: '#F8FAFC', borderRadius: 10,
+      }}>
+        {EMOJI_CHOICES.map(e => (
+          <button
+            key={e}
+            onClick={() => setEmoji(e)}
+            style={{
+              fontSize: 20, lineHeight: 1, padding: 4, borderRadius: 6,
+              background: emoji === e ? color : 'white',
+              border: `1.5px solid ${emoji === e ? color : '#E2E8F0'}`,
+              cursor: 'pointer',
+              boxShadow: emoji === e ? `0 2px 6px ${color}40` : 'none',
+              transition: 'all 0.12s',
+            }}
+          >{e}</button>
+        ))}
       </div>
 
       {/* Color palette */}
