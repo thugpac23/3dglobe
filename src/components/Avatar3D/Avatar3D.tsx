@@ -2180,6 +2180,183 @@ function paintSpace(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.stroke();
 }
 
+// ── Pet builder ──────────────────────────────────────────────────────────────
+function buildPet(kind: string): THREE.Group | null {
+  if (!kind || kind === 'none') return null;
+  const g = new THREE.Group();
+
+  const makeMat = (hex: number, opts: { roughness?: number; metalness?: number } = {}) =>
+    new THREE.MeshStandardMaterial({ color: hex, roughness: opts.roughness ?? 0.6, metalness: opts.metalness ?? 0.04 });
+  const M = (geo: THREE.BufferGeometry, m: THREE.Material) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.castShadow = true; mesh.receiveShadow = false;
+    return mesh;
+  };
+
+  if (kind === 'dog' || kind === 'cat' || kind === 'fox' || kind === 'rabbit') {
+    // Common four-legged base with per-pet colors / ears / tail
+    const palette = kind === 'dog'    ? { body: 0xB07843, belly: 0xD9B98C, nose: 0x2D2D2D }
+                  : kind === 'cat'    ? { body: 0xE9A33B, belly: 0xFAD49A, nose: 0xF472B6 }
+                  : kind === 'fox'    ? { body: 0xDC6B2F, belly: 0xF5E0C1, nose: 0x2D2D2D }
+                                      : { body: 0xF5F5F5, belly: 0xFFFFFF, nose: 0xF472B6 }; // rabbit
+    const bodyM  = makeMat(palette.body);
+    const bellyM = makeMat(palette.belly, { roughness: 0.7 });
+    const eyeM   = makeMat(0x1F2937, { roughness: 0.2 });
+    const noseM  = makeMat(palette.nose, { roughness: 0.4 });
+
+    // Body — slightly elongated sphere
+    const body = M(new THREE.SphereGeometry(0.16, 16, 12), bodyM);
+    body.scale.set(1.15, 0.95, 1.05);
+    body.position.set(0, 0.16, 0);
+    g.add(body);
+
+    // Belly highlight
+    const belly = M(new THREE.SphereGeometry(0.115, 14, 10), bellyM);
+    belly.scale.set(0.95, 0.85, 0.95);
+    belly.position.set(0, 0.13, 0.04);
+    g.add(belly);
+
+    // Head
+    const head = M(new THREE.SphereGeometry(0.13, 16, 12), bodyM);
+    head.position.set(0.16, 0.24, 0);
+    g.add(head);
+
+    // Snout
+    const snout = M(new THREE.SphereGeometry(0.06, 12, 10), bellyM);
+    snout.scale.set(1.1, 0.85, 0.95);
+    snout.position.set(0.26, 0.20, 0);
+    g.add(snout);
+
+    // Nose
+    const nose = M(new THREE.SphereGeometry(0.022, 8, 8), noseM);
+    nose.position.set(0.31, 0.22, 0);
+    g.add(nose);
+
+    // Eyes
+    const le = M(new THREE.SphereGeometry(0.018, 8, 8), eyeM);
+    le.position.set(0.21, 0.28, 0.07); g.add(le);
+    const re = M(new THREE.SphereGeometry(0.018, 8, 8), eyeM);
+    re.position.set(0.21, 0.28, -0.07); g.add(re);
+
+    // Ears — shape varies
+    if (kind === 'rabbit') {
+      const earGeo = new THREE.CylinderGeometry(0.018, 0.025, 0.13, 8);
+      const earL = M(earGeo, bodyM); earL.position.set(0.13, 0.40, 0.05); earL.rotation.z = 0.12; g.add(earL);
+      const earR = M(earGeo, bodyM); earR.position.set(0.13, 0.40, -0.05); earR.rotation.z = 0.12; g.add(earR);
+    } else if (kind === 'cat' || kind === 'fox') {
+      const earGeo = new THREE.ConeGeometry(0.04, 0.08, 6);
+      const earL = M(earGeo, bodyM); earL.position.set(0.13, 0.36, 0.08); earL.rotation.z = -0.4; g.add(earL);
+      const earR = M(earGeo, bodyM); earR.position.set(0.13, 0.36, -0.08); earR.rotation.z = -0.4; g.add(earR);
+    } else { // dog
+      const earGeo = new THREE.SphereGeometry(0.045, 8, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
+      const earL = M(earGeo, bodyM); earL.position.set(0.13, 0.32, 0.10); earL.rotation.z = 0.4; g.add(earL);
+      const earR = M(earGeo, bodyM); earR.position.set(0.13, 0.32, -0.10); earR.rotation.z = 0.4; g.add(earR);
+    }
+
+    // Legs — 4 stubby cylinders
+    const legGeo = new THREE.CylinderGeometry(0.028, 0.032, 0.085, 8);
+    [[0.08, 0.08],[0.08, -0.08],[-0.08, 0.08],[-0.08, -0.08]].forEach(([x, z]) => {
+      const leg = M(legGeo, bodyM); leg.position.set(x, 0.04, z); g.add(leg);
+    });
+
+    // Tail — varies
+    if (kind === 'fox') {
+      const tail = M(new THREE.SphereGeometry(0.06, 10, 8), bodyM);
+      tail.scale.set(1.5, 0.95, 0.95);
+      tail.position.set(-0.22, 0.20, 0); tail.rotation.z = 0.3; g.add(tail);
+      const tailTip = M(new THREE.SphereGeometry(0.035, 8, 8), makeMat(0xFFFFFF));
+      tailTip.position.set(-0.30, 0.24, 0); g.add(tailTip);
+    } else if (kind === 'rabbit') {
+      const puff = M(new THREE.SphereGeometry(0.045, 10, 8), makeMat(0xFFFFFF, { roughness: 0.85 }));
+      puff.position.set(-0.18, 0.16, 0); g.add(puff);
+    } else if (kind === 'cat') {
+      const tailGeo = new THREE.CylinderGeometry(0.018, 0.022, 0.18, 8);
+      const tail = M(tailGeo, bodyM); tail.position.set(-0.20, 0.20, 0); tail.rotation.z = -0.7; g.add(tail);
+    } else { // dog
+      const tail = M(new THREE.CylinderGeometry(0.020, 0.028, 0.08, 8), bodyM);
+      tail.position.set(-0.18, 0.22, 0); tail.rotation.z = -0.8; g.add(tail);
+    }
+  }
+
+  else if (kind === 'dragon') {
+    const bodyM = makeMat(0x16A34A);
+    const bellyM = makeMat(0xA7F3D0, { roughness: 0.55 });
+    const hornM = makeMat(0xFCD34D, { roughness: 0.6 });
+    const eyeM = makeMat(0x1F2937, { roughness: 0.2 });
+
+    const body = M(new THREE.SphereGeometry(0.18, 16, 12), bodyM);
+    body.scale.set(1.2, 1, 1.05); body.position.set(0, 0.17, 0); g.add(body);
+    const belly = M(new THREE.SphereGeometry(0.13, 12, 10), bellyM); belly.scale.set(1, 0.85, 1); belly.position.set(0, 0.13, 0.06); g.add(belly);
+    // Head
+    const head = M(new THREE.SphereGeometry(0.13, 16, 12), bodyM); head.position.set(0.20, 0.30, 0); g.add(head);
+    const snout = M(new THREE.SphereGeometry(0.07, 12, 10), bodyM); snout.scale.set(1.2, 0.85, 0.95); snout.position.set(0.30, 0.26, 0); g.add(snout);
+    // Horns
+    const hornGeo = new THREE.ConeGeometry(0.022, 0.07, 8);
+    const h1 = M(hornGeo, hornM); h1.position.set(0.17, 0.41, 0.06); h1.rotation.z = -0.2; g.add(h1);
+    const h2 = M(hornGeo, hornM); h2.position.set(0.17, 0.41, -0.06); h2.rotation.z = -0.2; g.add(h2);
+    // Eyes
+    const e1 = M(new THREE.SphereGeometry(0.02, 8, 8), eyeM); e1.position.set(0.25, 0.34, 0.07); g.add(e1);
+    const e2 = M(new THREE.SphereGeometry(0.02, 8, 8), eyeM); e2.position.set(0.25, 0.34, -0.07); g.add(e2);
+    // Wings — flat planes
+    const wingGeo = new THREE.PlaneGeometry(0.20, 0.16);
+    const wingM = new THREE.MeshStandardMaterial({ color: 0x86EFAC, side: THREE.DoubleSide, roughness: 0.7 });
+    const w1 = new THREE.Mesh(wingGeo, wingM); w1.position.set(-0.02, 0.30, 0.20); w1.rotation.y = -0.4; w1.castShadow = true; g.add(w1);
+    const w2 = new THREE.Mesh(wingGeo, wingM); w2.position.set(-0.02, 0.30, -0.20); w2.rotation.y = 0.4; w2.castShadow = true; g.add(w2);
+    // Legs
+    const legGeo = new THREE.CylinderGeometry(0.030, 0.034, 0.085, 8);
+    [[0.08, 0.09],[0.08, -0.09],[-0.08, 0.09],[-0.08, -0.09]].forEach(([x, z]) => {
+      const leg = M(legGeo, bodyM); leg.position.set(x, 0.04, z); g.add(leg);
+    });
+    // Tail
+    const tail = M(new THREE.ConeGeometry(0.06, 0.20, 8), bodyM); tail.position.set(-0.22, 0.18, 0); tail.rotation.z = Math.PI / 2; g.add(tail);
+  }
+
+  else if (kind === 'butterfly') {
+    const bodyM = makeMat(0x7C3AED);
+    const wingM = new THREE.MeshStandardMaterial({ color: 0xF472B6, side: THREE.DoubleSide, roughness: 0.5, transparent: true, opacity: 0.92 });
+    // Body — vertical cylinder
+    const body = M(new THREE.CylinderGeometry(0.022, 0.022, 0.18, 10), bodyM);
+    body.position.set(0, 0.32, 0); g.add(body);
+    // Wings — 4 planes
+    const wTop = new THREE.PlaneGeometry(0.13, 0.16);
+    const wBot = new THREE.PlaneGeometry(0.11, 0.13);
+    const w1 = new THREE.Mesh(wTop, wingM); w1.position.set(0, 0.36, 0.10); w1.castShadow = true; g.add(w1);
+    const w2 = new THREE.Mesh(wTop, wingM); w2.position.set(0, 0.36, -0.10); w2.castShadow = true; g.add(w2);
+    const w3 = new THREE.Mesh(wBot, wingM); w3.position.set(0, 0.25, 0.085); w3.castShadow = true; g.add(w3);
+    const w4 = new THREE.Mesh(wBot, wingM); w4.position.set(0, 0.25, -0.085); w4.castShadow = true; g.add(w4);
+    // Antennae
+    const antGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.06, 4);
+    const a1 = M(antGeo, bodyM); a1.position.set(0, 0.45, 0.025); a1.rotation.z = 0.2; g.add(a1);
+    const a2 = M(antGeo, bodyM); a2.position.set(0, 0.45, -0.025); a2.rotation.z = 0.2; g.add(a2);
+  }
+
+  else if (kind === 'parrot') {
+    const bodyM = makeMat(0xDC2626);
+    const wingM = makeMat(0x10B981);
+    const beakM = makeMat(0xFBBF24, { roughness: 0.5 });
+    const eyeM = makeMat(0x1F2937, { roughness: 0.2 });
+    // Body
+    const body = M(new THREE.SphereGeometry(0.17, 16, 12), bodyM); body.scale.set(1, 1.15, 1); body.position.set(0, 0.20, 0); g.add(body);
+    // Head
+    const head = M(new THREE.SphereGeometry(0.11, 14, 12), bodyM); head.position.set(0, 0.40, 0); g.add(head);
+    // Beak (cone)
+    const beak = M(new THREE.ConeGeometry(0.04, 0.08, 8), beakM); beak.position.set(0.10, 0.38, 0); beak.rotation.z = -Math.PI / 2; g.add(beak);
+    // Eyes
+    const e1 = M(new THREE.SphereGeometry(0.018, 8, 8), eyeM); e1.position.set(0.06, 0.42, 0.07); g.add(e1);
+    const e2 = M(new THREE.SphereGeometry(0.018, 8, 8), eyeM); e2.position.set(0.06, 0.42, -0.07); g.add(e2);
+    // Wing
+    const wing = M(new THREE.SphereGeometry(0.09, 10, 8), wingM); wing.scale.set(0.5, 1.2, 1); wing.position.set(-0.08, 0.20, 0); g.add(wing);
+    // Tail feathers
+    const tail = M(new THREE.ConeGeometry(0.06, 0.16, 6), wingM); tail.position.set(-0.18, 0.10, 0); tail.rotation.z = Math.PI / 2; g.add(tail);
+    // Feet — small cylinders
+    const footGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.05, 6);
+    const f1 = M(footGeo, beakM); f1.position.set(0.02, 0.04, 0.04); g.add(f1);
+    const f2 = M(footGeo, beakM); f2.position.set(0.02, 0.04, -0.04); g.add(f2);
+  }
+
+  return g;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 interface Props {
   avatar: Partial<AvatarConfig>;
@@ -2191,6 +2368,10 @@ interface Props {
   background?: string;
   /** Optional outfit color override — affects main + bot shades */
   outfitColor?: string;
+  /** Optional pet companion (small mesh next to avatar) */
+  pet?: string;
+  /** Trigger emote — change id to retrigger same type */
+  emote?: { type: string; id: number } | null;
 }
 
 // Available illustrated background scenes
@@ -2200,6 +2381,8 @@ export default function Avatar3D({
   avatar, width = 220, height = 300,
   expression: expressionProp, background = 'studio',
   outfitColor,
+  pet = 'none',
+  emote = null,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null);
@@ -2225,6 +2408,16 @@ export default function Avatar3D({
   const blinkTimerRef = useRef(0);
   const nextBlinkRef  = useRef(2.5 + Math.random() * 3);
   const blinkPhaseRef = useRef(-1); // -1 = idle, ≥0 = animating
+
+  // Pet refs
+  const petRef       = useRef<THREE.Group | null>(null);
+  const petBobRef    = useRef(Math.random() * 6.28);
+  const petKindRef   = useRef<string>(pet);
+
+  // Emote animation refs
+  const emoteTypeRef = useRef<string | null>(null);
+  const emoteTRef    = useRef(0);
+  const lastEmoteIdRef = useRef<number>(0);
 
   const effectiveExpression: Expression = expressionProp ?? avatar.expression ?? 'smile';
   const effectiveFaceType: FaceType     = avatar.faceType ?? 'standard';
@@ -2290,12 +2483,32 @@ export default function Avatar3D({
     rim.position.set(0, -1, -4);
     scene.add(rim);
 
+    // Soft ground shadow plane — sits below the character feet, receives shadow only
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(6, 6),
+      new THREE.ShadowMaterial({ opacity: 0.22 }),
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.94;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
     const { group: char, parts } = buildCharacter(avatar, effectiveExpression, effectiveFaceType, outfitColor);
     scene.add(char);
     rendererRef.current  = renderer;
     sceneRef.current     = scene;
     characterRef.current = char;
     partsRef.current     = parts;
+
+    // Pet — start beside the character
+    const petGroup = buildPet(pet);
+    if (petGroup) {
+      petGroup.position.set(0.85, -0.94, 0.05);
+      petGroup.rotation.y = -0.4;
+      scene.add(petGroup);
+      petRef.current = petGroup;
+      petKindRef.current = pet;
+    }
 
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate);
@@ -2304,6 +2517,85 @@ export default function Avatar3D({
       const now = performance.now() / 1000;
       const dt  = lastTRef.current > 0 ? Math.min(now - lastTRef.current, 0.08) : 0.016;
       lastTRef.current = now;
+
+      // Emote animation — overrides idle pose briefly
+      const char = characterRef.current;
+      if (char) {
+        if (emoteTypeRef.current) {
+          emoteTRef.current += dt;
+          const t = emoteTRef.current;
+          const DURATION = emoteTypeRef.current === 'sleep' ? 3.2 : 2.0;
+          // Defaults — reset each frame so any tweaks from previous emote clear
+          char.position.set(0, 0, 0);
+          let extraRotZ = 0;
+          let extraRotX = 0;
+          let extraRotY = 0;
+          let scaleY = 1;
+          if (emoteTypeRef.current === 'wave') {
+            // Lean side-to-side
+            extraRotZ = Math.sin(t * 8) * 0.12;
+          } else if (emoteTypeRef.current === 'jump') {
+            // Up-and-down bounce, 2 hops
+            const phase = (t / DURATION) * Math.PI * 2;
+            char.position.y = Math.max(0, Math.sin(phase) * 0.28);
+            scaleY = 1 - Math.max(0, -Math.sin(phase)) * 0.06;
+          } else if (emoteTypeRef.current === 'dance') {
+            // Hip sway + slight bob + small spin
+            extraRotZ = Math.sin(t * 6) * 0.18;
+            extraRotY = Math.sin(t * 3) * 0.35;
+            char.position.y = Math.abs(Math.sin(t * 6)) * 0.05;
+          } else if (emoteTypeRef.current === 'victory') {
+            // Lift up, mini spin, return
+            const u = Math.min(1, t / DURATION);
+            const easeOut = 1 - Math.pow(1 - u, 2);
+            char.position.y = Math.sin(easeOut * Math.PI) * 0.18;
+            extraRotY = Math.sin(easeOut * Math.PI * 2) * 0.4;
+          } else if (emoteTypeRef.current === 'sleep') {
+            // Tilt forward, slow gentle sway
+            const u = Math.min(1, t / 0.6);
+            extraRotX = u * 0.42;
+            extraRotZ = Math.sin(t * 1.6) * 0.04;
+            char.position.y = -0.04 * u;
+          }
+          char.rotation.z = extraRotZ;
+          char.rotation.x = extraRotX;
+          char.rotation.y = rotYRef.current + extraRotY;
+          char.scale.y = scaleY;
+          if (t >= DURATION) {
+            emoteTypeRef.current = null;
+            emoteTRef.current = 0;
+            char.position.set(0, 0, 0);
+            char.rotation.x = 0;
+            char.rotation.y = rotYRef.current;
+            char.scale.y = 1;
+          }
+        } else {
+          // Ensure non-emote frames reset emote-only transforms
+          char.rotation.x = 0;
+          char.scale.y = 1;
+        }
+      }
+
+      // Pet idle — float bob for butterfly, gentle bob otherwise
+      const petG = petRef.current;
+      if (petG) {
+        petBobRef.current += dt * 2.4;
+        if (petKindRef.current === 'butterfly') {
+          // Bigger float, wing flap via z-rotation pulse on wings (children 1..4)
+          petG.position.y = -0.45 + Math.sin(petBobRef.current * 1.2) * 0.08;
+          const flap = Math.sin(petBobRef.current * 9) * 0.6;
+          for (let i = 1; i <= 4; i++) {
+            const w = petG.children[i];
+            if (w) w.rotation.y = (i % 2 === 0 ? -flap : flap);
+          }
+        } else if (petKindRef.current === 'parrot') {
+          petG.position.y = -0.94 + Math.abs(Math.sin(petBobRef.current * 1.5)) * 0.06;
+        } else {
+          // Sit on the ground, slight breath
+          petG.position.y = -0.94 + Math.sin(petBobRef.current) * 0.012;
+          petG.rotation.y = -0.4 + Math.sin(petBobRef.current * 0.4) * 0.08;
+        }
+      }
 
       // Cross-fade between illustrated background scenes
       const bgC    = bgCanvasRef.current;
@@ -2327,9 +2619,9 @@ export default function Avatar3D({
         breathRef.current += dt * 0.88;
         p.torso.scale.y = 1 + Math.sin(breathRef.current) * 0.009;
 
-        // Subtle head tilt via full-character z-rotation
+        // Subtle head tilt via full-character z-rotation (paused during emote)
         headBobRef.current += dt * 0.52;
-        if (characterRef.current) {
+        if (characterRef.current && !emoteTypeRef.current) {
           characterRef.current.rotation.z = Math.sin(headBobRef.current) * 0.011;
         }
 
@@ -2383,6 +2675,33 @@ export default function Avatar3D({
     blinkPhaseRef.current = -1;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarKey]);
+
+  // Pet — rebuild when the kind changes
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (petRef.current) {
+      scene.remove(petRef.current);
+      petRef.current = null;
+    }
+    petKindRef.current = pet;
+    const petGroup = buildPet(pet);
+    if (petGroup) {
+      petGroup.position.set(0.85, -0.94, 0.05);
+      petGroup.rotation.y = -0.4;
+      scene.add(petGroup);
+      petRef.current = petGroup;
+    }
+  }, [pet]);
+
+  // Emote — start when id changes
+  useEffect(() => {
+    if (!emote) return;
+    if (emote.id === lastEmoteIdRef.current) return;
+    lastEmoteIdRef.current = emote.id;
+    emoteTypeRef.current = emote.type;
+    emoteTRef.current = 0;
+  }, [emote]);
 
   // Cross-fade to a new scene when the background prop changes
   useEffect(() => {

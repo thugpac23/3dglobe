@@ -123,6 +123,65 @@ const SKIN_PRESETS = ['#FBBF8A', '#F4A460', '#D2691E', '#8B4513', '#FFDAB9', '#C
 const HAIR_PRESETS = ['#8B4513', '#1a1a1a', '#D4AF37', '#FF6B35', '#C0C0C0', '#FFFFFF'];
 const EYE_PRESETS  = ['#4B5563', '#3B82F6', '#10B981', '#8B4513', '#6B21A8', '#9CA3AF'];
 
+// ── Themed presets ────────────────────────────────────────────────────────────
+type Preset = {
+  id: string;
+  emoji: string;
+  label: string;
+  patch: Partial<Pick<AvatarConfig, 'hairStyle' | 'hairColor' | 'outfit' | 'accessories' | 'eyeColor' | 'skinColor' | 'expression' | 'faceType'>>;
+  outfitColor?: string | null;
+};
+
+const PRESETS: Preset[] = [
+  { id: 'superhero', emoji: '🦸', label: 'Супергерой',
+    patch: { hairStyle: 'short', hairColor: '#1a1a1a', outfit: 'sporty', accessories: ['superhero-mask','belt-bag','gloves'], expression: 'smile' },
+    outfitColor: '#DC2626' },
+  { id: 'astronaut', emoji: '🚀', label: 'Астронавт',
+    patch: { hairStyle: 'short', hairColor: '#8B4513', outfit: 'scuba', accessories: ['ski-goggles','gloves','watch'], expression: 'surprised' },
+    outfitColor: '#E5E7EB' },
+  { id: 'pirate', emoji: '🏴‍☠️', label: 'Пират',
+    patch: { hairStyle: 'long', hairColor: '#1a1a1a', outfit: 'adventure', accessories: ['pirate-hat','belt-bag','compass-necklace'], expression: 'smile' },
+    outfitColor: '#1E293B' },
+  { id: 'princess', emoji: '👸', label: 'Принцеса',
+    patch: { hairStyle: 'longest', hairColor: '#D4AF37', outfit: 'royal', accessories: ['crown','necklace','flower-crown'], expression: 'smile' },
+    outfitColor: '#EC4899' },
+  { id: 'ninja', emoji: '🥷', label: 'Нинджа',
+    patch: { hairStyle: 'tied', hairColor: '#1a1a1a', outfit: 'ninja', accessories: ['superhero-mask'], expression: 'thinking' },
+    outfitColor: '#0F172A' },
+  { id: 'scientist', emoji: '🔬', label: 'Учен',
+    patch: { hairStyle: 'curly', hairColor: '#C0C0C0', outfit: 'formal', accessories: ['glasses','tie','watch'], expression: 'thinking' },
+    outfitColor: '#F8FAFC' },
+  { id: 'wizard', emoji: '🧙', label: 'Магьосник',
+    patch: { hairStyle: 'long', hairColor: '#FFFFFF', outfit: 'royal', accessories: ['wizard-hat','compass-necklace'], expression: 'smile' },
+    outfitColor: '#7C3AED' },
+  { id: 'explorer', emoji: '🤠', label: 'Изследовател',
+    patch: { hairStyle: 'short', hairColor: '#8B4513', outfit: 'explorer', accessories: ['explorer-hat','binoculars','map','compass-necklace'], expression: 'smile' },
+    outfitColor: '#A16207' },
+];
+
+// ── Pets ─────────────────────────────────────────────────────────────────────
+type PetId = 'none' | 'dog' | 'cat' | 'rabbit' | 'dragon' | 'butterfly' | 'parrot' | 'fox';
+const PETS: { id: PetId; emoji: string; label: string }[] = [
+  { id: 'none',      emoji: '🚫', label: 'Без' },
+  { id: 'dog',       emoji: '🐶', label: 'Куче' },
+  { id: 'cat',       emoji: '🐱', label: 'Котка' },
+  { id: 'rabbit',    emoji: '🐰', label: 'Зайче' },
+  { id: 'fox',       emoji: '🦊', label: 'Лисица' },
+  { id: 'dragon',    emoji: '🐉', label: 'Дракон' },
+  { id: 'butterfly', emoji: '🦋', label: 'Пеперуда' },
+  { id: 'parrot',    emoji: '🦜', label: 'Папагал' },
+];
+
+// ── Emotes ───────────────────────────────────────────────────────────────────
+type EmoteId = 'wave' | 'jump' | 'dance' | 'victory' | 'sleep';
+const EMOTES: { id: EmoteId; emoji: string; label: string }[] = [
+  { id: 'wave',    emoji: '👋', label: 'Здравей' },
+  { id: 'jump',    emoji: '🤸', label: 'Скок' },
+  { id: 'dance',   emoji: '💃', label: 'Танц' },
+  { id: 'victory', emoji: '🏆', label: 'Победа' },
+  { id: 'sleep',   emoji: '😴', label: 'Сън' },
+];
+
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
 function defaultConfig(userId = ''): AvatarConfig {
@@ -153,6 +212,8 @@ export default function AvatarPage() {
   const [tab, setTab]                 = useState<'build' | 'import'>('build');
   const [backgrounds, setBackgrounds]   = useState<Record<string, string>>({});
   const [outfitColors, setOutfitColors] = useState<Record<string, string | null>>({});
+  const [pets, setPets]                 = useState<Record<string, PetId>>({});
+  const [emote, setEmote]               = useState<{ type: EmoteId; id: number } | null>(null);
 
   const activeId = activeUser?.id ?? '';
 
@@ -193,6 +254,59 @@ export default function AvatarPage() {
       return next;
     });
   }, [activeId]);
+
+  // Persist pet choice per user
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('avatar-pet');
+      if (raw) setPets(JSON.parse(raw) as Record<string, PetId>);
+    } catch { /* ignore */ }
+  }, []);
+  const setPet = useCallback((p: PetId) => {
+    setPets(prev => {
+      const next = { ...prev, [activeId]: p };
+      try { localStorage.setItem('avatar-pet', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [activeId]);
+
+  // Apply preset → patches the config
+  const applyPreset = useCallback((preset: Preset) => {
+    setConfigs(prev => ({
+      ...prev,
+      [activeId]: { ...(prev[activeId] ?? defaultConfig(activeId)), ...preset.patch },
+    }));
+    if (preset.outfitColor !== undefined) setOutfitColor(preset.outfitColor);
+    setSaved(false);
+  }, [activeId, setOutfitColor]);
+
+  // Surprise Me — randomise everything
+  const surpriseMe = useCallback(() => {
+    const pick = <T,>(arr: readonly T[]) => arr[Math.floor(Math.random() * arr.length)];
+    const allAcc = ACCESSORY_CATEGORIES.flatMap(c => c.items.map(i => i.id));
+    const randomAccessories = allAcc.filter(() => Math.random() < 0.12).slice(0, 4);
+    const next: Partial<AvatarConfig> = {
+      hairStyle: pick(HAIR_STYLES.map(h => h.value)),
+      hairColor: pick(HAIR_PRESETS),
+      eyeColor:  pick(EYE_PRESETS),
+      skinColor: pick(SKIN_PRESETS),
+      outfit:    pick(OUTFITS.map(o => o.value)),
+      expression: pick(EXPRESSIONS.map(e => e.value)),
+      faceType:   pick(FACE_TYPES.map(f => f.value)),
+      accessories: randomAccessories,
+    };
+    setConfigs(prev => ({
+      ...prev,
+      [activeId]: { ...(prev[activeId] ?? defaultConfig(activeId)), ...next },
+    }));
+    setOutfitColor(Math.random() < 0.5 ? pick(OUTFIT_COLOR_PRESETS) : null);
+    setSaved(false);
+  }, [activeId, setOutfitColor]);
+
+  // Trigger an emote — id timestamp so same emote retriggers
+  const playEmote = useCallback((type: EmoteId) => {
+    setEmote({ type, id: Date.now() });
+  }, []);
 
   // Load persisted data on mount
   useEffect(() => {
@@ -317,7 +431,32 @@ export default function AvatarPage() {
             height={290}
             background={backgrounds[activeId] ?? 'studio'}
             outfitColor={outfitColors[activeId] ?? undefined}
+            pet={pets[activeId] ?? 'none'}
+            emote={emote}
           />
+        )}
+
+        {/* Emote buttons — appear only in build mode (no GLB avatar) */}
+        {!avatarUrls[activeId] && (
+          <div className="flex gap-1.5 flex-wrap justify-center" style={{ maxWidth: 240 }}>
+            {EMOTES.map(em => (
+              <button
+                key={em.id}
+                onClick={() => { resumeAudio(); sounds.click(); playEmote(em.id); }}
+                title={em.label}
+                className="flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                style={{
+                  width: 38, height: 38, borderRadius: 12,
+                  background: 'white',
+                  border: `1.5px solid ${color}30`,
+                  fontSize: 18,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                }}
+              >
+                {em.emoji}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
@@ -343,6 +482,53 @@ export default function AvatarPage() {
 
         {tab === 'build' ? (
           <>
+            {/* Themed presets — one-tap full looks */}
+            <Section color={color} label="🎭 Бързи стилове">
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                {PRESETS.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => { resumeAudio(); sounds.click(); applyPreset(p); }}
+                    title={p.label}
+                    className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl transition-all hover:scale-105 active:scale-95"
+                    style={{
+                      background: 'white',
+                      border: `1.5px solid ${color}28`,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                    }}
+                  >
+                    <span style={{ fontSize: 22, lineHeight: 1 }}>{p.emoji}</span>
+                    <span className="text-[10px] font-semibold text-slate-600 leading-tight text-center">{p.label}</span>
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            {/* Pet companion */}
+            <Section color={color} label="🐾 Любимец">
+              <div className="flex flex-wrap gap-1.5">
+                {PETS.map(p => {
+                  const active = (pets[activeId] ?? 'none') === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => { resumeAudio(); sounds.click(); setPet(p.id); }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all"
+                      style={{
+                        background: active ? color : 'white',
+                        color: active ? 'white' : '#64748b',
+                        border: `1.5px solid ${active ? color : '#E2E8F0'}`,
+                        boxShadow: active ? `0 2px 8px ${color}40` : 'none',
+                      }}
+                    >
+                      <span style={{ fontSize: 14, lineHeight: 1 }}>{p.emoji}</span>
+                      <span>{p.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Section>
+
             {/* Hair style */}
             <Section color={color} label="Прическа">
               <div className="flex flex-wrap gap-1.5">
@@ -517,13 +703,26 @@ export default function AvatarPage() {
               </div>
             </Section>
 
-            <button
-              onClick={() => persist()}
-              className="w-full py-3 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
-              style={{ background: color, boxShadow: `0 4px 16px ${color}40` }}
-            >
-              💾 Запази героя
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { resumeAudio(); sounds.click(); surpriseMe(); }}
+                className="flex-1 py-3 rounded-2xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  background: 'white',
+                  color,
+                  border: `2px dashed ${color}`,
+                }}
+              >
+                🎲 Изненадай ме
+              </button>
+              <button
+                onClick={() => persist()}
+                className="flex-1 py-3 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: color, boxShadow: `0 4px 16px ${color}40` }}
+              >
+                💾 Запази героя
+              </button>
+            </div>
           </>
         ) : (
           /* ── Import GLB tab ──────────────────────────────────────────── */
