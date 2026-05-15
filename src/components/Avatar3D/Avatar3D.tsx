@@ -2210,6 +2210,27 @@ function paintSpace(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.stroke();
 }
 
+// ── Pet placement ────────────────────────────────────────────────────────────
+// Per-kind position/rotation/scale so pets are visible in the right spot
+// (parrot on shoulder, butterfly near head, dragon hovering, ground pets close).
+function getPetPlacement(kind: string): { pos: [number, number, number]; rotY: number; scale: number } {
+  switch (kind) {
+    case 'parrot':
+      // Sits on the right shoulder — shoulder is at world (0.37, 0.58, 0)
+      return { pos: [0.36, 0.62, 0.04], rotY: -0.5, scale: 0.55 };
+    case 'butterfly':
+      // Flutters next to the avatar's head
+      return { pos: [0.62, 0.55, 0.20], rotY: 0, scale: 0.95 };
+    case 'dragon':
+      // Hovers beside torso, more visible
+      return { pos: [0.72, 0.15, 0.10], rotY: -0.4, scale: 1.05 };
+    case 'rabbit':
+      return { pos: [0.60, -0.94, 0.30], rotY: -0.5, scale: 1.25 };
+    default: // dog / cat / fox — on the ground, close enough to be visible
+      return { pos: [0.62, -0.94, 0.30], rotY: -0.5, scale: 1.30 };
+  }
+}
+
 // ── Pet builder ──────────────────────────────────────────────────────────────
 function buildPet(kind: string): THREE.Group | null {
   if (!kind || kind === 'none') return null;
@@ -2541,11 +2562,13 @@ export default function Avatar3D({
     characterRef.current = char;
     partsRef.current     = parts;
 
-    // Pet — start beside the character
+    // Pet — placed per-kind (shoulder, hovering, ground)
     const petGroup = buildPet(pet);
     if (petGroup) {
-      petGroup.position.set(0.85, -0.94, 0.05);
-      petGroup.rotation.y = -0.4;
+      const pl = getPetPlacement(pet);
+      petGroup.position.set(...pl.pos);
+      petGroup.rotation.y = pl.rotY;
+      petGroup.scale.setScalar(pl.scale);
       scene.add(petGroup);
       petRef.current = petGroup;
       petKindRef.current = pet;
@@ -2617,24 +2640,31 @@ export default function Avatar3D({
         }
       }
 
-      // Pet idle — float bob for butterfly, gentle bob otherwise
+      // Pet idle — animation relative to its placement baseline
       const petG = petRef.current;
       if (petG) {
         petBobRef.current += dt * 2.4;
+        const pl = getPetPlacement(petKindRef.current);
         if (petKindRef.current === 'butterfly') {
-          // Bigger float, wing flap via z-rotation pulse on wings (children 1..4)
-          petG.position.y = -0.45 + Math.sin(petBobRef.current * 1.2) * 0.08;
+          // Flutters around its baseline + wing flap
+          petG.position.y = pl.pos[1] + Math.sin(petBobRef.current * 1.4) * 0.10;
+          petG.position.x = pl.pos[0] + Math.sin(petBobRef.current * 0.8) * 0.06;
           const flap = Math.sin(petBobRef.current * 9) * 0.6;
           for (let i = 1; i <= 4; i++) {
             const w = petG.children[i];
             if (w) w.rotation.y = (i % 2 === 0 ? -flap : flap);
           }
+        } else if (petKindRef.current === 'dragon') {
+          // Gentle hover + tiny bob
+          petG.position.y = pl.pos[1] + Math.sin(petBobRef.current * 1.2) * 0.06;
+          petG.rotation.z = Math.sin(petBobRef.current * 0.7) * 0.05;
         } else if (petKindRef.current === 'parrot') {
-          petG.position.y = -0.94 + Math.abs(Math.sin(petBobRef.current * 1.5)) * 0.06;
+          // Subtle head-bob in place on shoulder
+          petG.position.y = pl.pos[1] + Math.abs(Math.sin(petBobRef.current * 1.4)) * 0.014;
         } else {
-          // Sit on the ground, slight breath
-          petG.position.y = -0.94 + Math.sin(petBobRef.current) * 0.012;
-          petG.rotation.y = -0.4 + Math.sin(petBobRef.current * 0.4) * 0.08;
+          // Dog / cat / fox / rabbit — sit on the ground with breath + look
+          petG.position.y = pl.pos[1] + Math.sin(petBobRef.current) * 0.012;
+          petG.rotation.y = pl.rotY + Math.sin(petBobRef.current * 0.4) * 0.08;
         }
       }
 
@@ -2728,8 +2758,10 @@ export default function Avatar3D({
     petKindRef.current = pet;
     const petGroup = buildPet(pet);
     if (petGroup) {
-      petGroup.position.set(0.85, -0.94, 0.05);
-      petGroup.rotation.y = -0.4;
+      const pl = getPetPlacement(pet);
+      petGroup.position.set(...pl.pos);
+      petGroup.rotation.y = pl.rotY;
+      petGroup.scale.setScalar(pl.scale);
       scene.add(petGroup);
       petRef.current = petGroup;
     }
