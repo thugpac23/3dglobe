@@ -96,10 +96,13 @@ function buildCharacter(
     botHex = palette.bot;
   }
 
-  const skinM  = mat(skinHex, { roughness: 0.52, metalness: 0.02 });
-  const hairM  = mat(hairHex, { roughness: 0.72, metalness: 0.01 });
-  const eyeM   = mat(eyeHex,  { roughness: 0.28 });
-  const whiteM = mat(0xffffff, { roughness: 0.22 });
+  // Skin — slight warm emissive gives a subsurface-scatter feel under key light
+  const skinM  = mat(skinHex, { roughness: 0.46, metalness: 0.0, emissive: 0xff7a55, emissiveIntensity: 0.025 });
+  // Hair — lower roughness + tiny metalness for soft sheen highlights
+  const hairM  = mat(hairHex, { roughness: 0.58, metalness: 0.06 });
+  // Eyes — very low roughness for that wet-shine catch-light
+  const eyeM   = mat(eyeHex,  { roughness: 0.10, metalness: 0.08 });
+  const whiteM = mat(0xffffff, { roughness: 0.16 });
   const darkM  = mat(0x2D2D2D, { roughness: 0.82 });
   const topM   = mat(topHex, { roughness: 0.72 });
   const botM   = mat(botHex, { roughness: 0.72 });
@@ -1015,27 +1018,36 @@ function buildCharacter(
 
   // Crown
   if (acc.includes('crown')) {
-    const goldM2 = mat(0xFCD34D, { roughness: 0.36, metalness: 0.38 });
+    // True polished-gold material with high metalness + low roughness
+    const goldM2 = mat(0xFFD56B, { roughness: 0.18, metalness: 0.92, emissive: 0xFFB84D, emissiveIntensity: 0.04 });
+    const goldDeepM = mat(0xCC9300, { roughness: 0.28, metalness: 0.95 });
     const baseY = 0.22 * faceY + hairLift;
-    const crownBase = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.10, 16), goldM2);
+    const crownBase = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.10, 24), goldM2);
     crownBase.position.set(0, baseY, 0);
     headGroup.add(crownBase);
-    const crownRidge = mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.024, 16), mat(0xD97706, { metalness: 0.40, roughness: 0.40 }));
+    const crownRidge = mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.024, 24), goldDeepM);
     crownRidge.position.set(0, baseY + 0.05, 0);
     headGroup.add(crownRidge);
+    // Faceted gems — high reflective MeshStandard params give crystal feel
     const gemColors = [0xEF4444, 0x60A5FA, 0x34D399, 0xF472B6, 0xFBBF24];
     for (let i = 0; i < 5; i++) {
       const angle = (i / 5) * Math.PI * 2;
-      const spike = mesh(new THREE.ConeGeometry(0.058, 0.22, 6), goldM2);
+      const spike = mesh(new THREE.ConeGeometry(0.058, 0.22, 8), goldM2);
       spike.position.set(Math.sin(angle) * 0.30, baseY + 0.17, Math.cos(angle) * 0.30);
       headGroup.add(spike);
-      const gem = mesh(new THREE.SphereGeometry(0.036, 8, 8), mat(gemColors[i], { roughness: 0.12, metalness: 0.16 }));
+      // Tiny gold tip for each spike
+      const tip = mesh(new THREE.SphereGeometry(0.025, 8, 8), goldM2);
+      tip.position.set(Math.sin(angle) * 0.30, baseY + 0.30, Math.cos(angle) * 0.30);
+      headGroup.add(tip);
+      // Faceted gem (octahedron for crystal facets)
+      const gem = mesh(new THREE.OctahedronGeometry(0.042, 0), mat(gemColors[i], { roughness: 0.05, metalness: 0.35, emissive: gemColors[i], emissiveIntensity: 0.16 }));
       gem.position.set(Math.sin(angle) * 0.30, baseY + 0.08, Math.cos(angle) * 0.30);
+      gem.rotation.x = 0.4;
       headGroup.add(gem);
     }
     for (let i = 0; i < 10; i++) {
       const angle = (i / 10) * Math.PI * 2;
-      const stud = mesh(new THREE.SphereGeometry(0.020, 6, 6), mat(0xD97706, { metalness: 0.42 }));
+      const stud = mesh(new THREE.SphereGeometry(0.020, 8, 8), goldDeepM);
       stud.position.set(Math.sin(angle) * 0.37, baseY + 0.01, Math.cos(angle) * 0.37);
       headGroup.add(stud);
     }
@@ -1204,8 +1216,9 @@ function buildCharacter(
 
   // Sunglasses
   if (acc.includes('sunglasses')) {
-    const sunFrameM = mat(0x111827, { roughness: 0.36 });
-    const sunLensM = mat(0x030712, { transparent: true, opacity: 0.90, roughness: 0.06, metalness: 0.12 });
+    // Glossy black frame with subtle highlight + reflective tinted lens
+    const sunFrameM = mat(0x0A0A0A, { roughness: 0.22, metalness: 0.55 });
+    const sunLensM = mat(0x0E1322, { transparent: true, opacity: 0.86, roughness: 0.04, metalness: 0.55, emissive: 0x223044, emissiveIntensity: 0.08 });
     for (const fx of [-0.113, 0.113]) {
       const sunFrame = mesh(new THREE.TorusGeometry(0.072, 0.014, 8, 20), sunFrameM);
       sunFrame.position.set(fx, eyeBaseY, faceFrontZ);
@@ -1236,8 +1249,9 @@ function buildCharacter(
 
   // Regular glasses
   if (acc.includes('glasses')) {
-    const glFrameM = mat(0x92400E, { roughness: 0.54 });
-    const glLensM = mat(0xBAE6FD, { transparent: true, opacity: 0.34, roughness: 0.08 });
+    // Glossy thin frame + very transparent glass lens with sheen
+    const glFrameM = mat(0x4A2C18, { roughness: 0.26, metalness: 0.32 });
+    const glLensM = mat(0xCFE9FF, { transparent: true, opacity: 0.22, roughness: 0.02, metalness: 0.05, envMapIntensity: 1.6 });
     for (const fx of [-0.113, 0.113]) {
       const glFrame = mesh(new THREE.TorusGeometry(0.070, 0.012, 8, 20), glFrameM);
       glFrame.position.set(fx, eyeBaseY, faceFrontZ);
@@ -1616,19 +1630,35 @@ function buildCharacter(
 
   // Watch (left wrist: x=-0.72, y=0.32 in g-space)
   if (acc.includes('watch')) {
-    const wFaceM = mat(0xD1D5DB, { metalness: 0.46, roughness: 0.36 });
-    const wStrapM = mat(0x1C1917, { roughness: 0.76 });
-    const wStrap = mesh(new THREE.TorusGeometry(0.088, 0.016, 5, 14), wStrapM);
+    // Polished metal case + soft leather strap + bright dial
+    const wFaceM = mat(0xD4D8DE, { metalness: 0.88, roughness: 0.18 });
+    const wBezelM = mat(0xA1A5AC, { metalness: 0.92, roughness: 0.22 });
+    const wStrapM = mat(0x1F1916, { roughness: 0.86 });
+    const wStrap = mesh(new THREE.TorusGeometry(0.088, 0.018, 6, 16), wStrapM);
     wStrap.position.set(-0.72, 0.32, 0);
     wStrap.rotation.y = Math.PI / 2;
     g.add(wStrap);
-    const wCase = mesh(new THREE.CylinderGeometry(0.056, 0.056, 0.036, 14), wFaceM);
-    wCase.position.set(-0.72, 0.32, 0.090);
+    // Stitching ridge
+    const wStitch = mesh(new THREE.TorusGeometry(0.092, 0.005, 4, 18), mat(0xD9C285, { roughness: 0.7 }));
+    wStitch.position.set(-0.72, 0.32, 0);
+    wStitch.rotation.y = Math.PI / 2;
+    g.add(wStitch);
+    const wCase = mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.040, 20), wFaceM);
+    wCase.position.set(-0.72, 0.32, 0.088);
     wCase.rotation.x = Math.PI / 2;
     g.add(wCase);
-    const wDial = mesh(new THREE.CircleGeometry(0.046, 14), mat(0xFFFDE7, { roughness: 0.70 }));
-    wDial.position.set(-0.72, 0.32, 0.110);
+    // Bezel ring around the dial for extra polish
+    const wBezel = mesh(new THREE.TorusGeometry(0.055, 0.008, 6, 22), wBezelM);
+    wBezel.position.set(-0.72, 0.32, 0.108);
+    g.add(wBezel);
+    const wDial = mesh(new THREE.CircleGeometry(0.046, 22), mat(0xF7F4E8, { roughness: 0.42 }));
+    wDial.position.set(-0.72, 0.32, 0.112);
     g.add(wDial);
+    // Glass cover (highlight)
+    const wGlass = mesh(new THREE.SphereGeometry(0.046, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.35), mat(0xFFFFFF, { transparent: true, opacity: 0.18, roughness: 0.02, metalness: 0.0 }));
+    wGlass.position.set(-0.72, 0.32, 0.113);
+    wGlass.rotation.x = -Math.PI / 2;
+    g.add(wGlass);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2;
       const wMarker = mesh(new THREE.BoxGeometry(0.006, 0.012, 0.004), mat(0x374151));
@@ -2469,18 +2499,29 @@ export default function Avatar3D({
     bgTex.needsUpdate = true;
     scene.background = bgTex;
 
-    // Soft 3-point lighting
-    scene.add(new THREE.AmbientLight(0xfff4e8, 0.52));
-    const key = new THREE.DirectionalLight(0xffffff, 0.96);
-    key.position.set(2.5, 5, 4);
+    // 4-point lighting: warm ambient + cool fill + key + back rim for silhouette
+    scene.add(new THREE.AmbientLight(0xfff4e8, 0.42));
+    const hemi = new THREE.HemisphereLight(0xfff6ec, 0x556b8a, 0.30);
+    scene.add(hemi);
+    const key = new THREE.DirectionalLight(0xffffff, 1.05);
+    key.position.set(2.6, 5.2, 4.2);
     key.castShadow = true;
-    key.shadow.mapSize.setScalar(1024);
+    key.shadow.mapSize.setScalar(2048);
+    key.shadow.bias = -0.0008;
+    key.shadow.normalBias = 0.012;
+    key.shadow.radius = 4;
+    key.shadow.camera.near = 0.5;
+    key.shadow.camera.far  = 14;
+    key.shadow.camera.left = -2;
+    key.shadow.camera.right = 2;
+    key.shadow.camera.top = 3;
+    key.shadow.camera.bottom = -2;
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x8ab4f8, 0.36);
-    fill.position.set(-3, 1, -2);
+    const fill = new THREE.DirectionalLight(0x8ab4f8, 0.32);
+    fill.position.set(-3, 1.6, -1.6);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffe0cc, 0.2);
-    rim.position.set(0, -1, -4);
+    const rim = new THREE.DirectionalLight(0xffe0cc, 0.45);
+    rim.position.set(-2, 2.5, -4);
     scene.add(rim);
 
     // Soft ground shadow plane — sits below the character feet, receives shadow only
