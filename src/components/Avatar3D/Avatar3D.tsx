@@ -2422,6 +2422,8 @@ interface Props {
   pet?: string;
   /** World-space offset applied on top of the pet's default placement (from drag) */
   petOffset?: { x: number; y: number };
+  /** Called when user finishes dragging the pet, with new world-space offset */
+  onPetOffsetChange?: (offset: { x: number; y: number }) => void;
   /** Trigger emote — change id to retrigger same type */
   emote?: { type: string; id: number } | null;
 }
@@ -2435,17 +2437,21 @@ export default function Avatar3D({
   outfitColor,
   pet = 'none',
   petOffset,
+  onPetOffsetChange,
   emote = null,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef     = useRef<THREE.Scene | null>(null);
+  const cameraRef    = useRef<THREE.PerspectiveCamera | null>(null);
   const characterRef = useRef<THREE.Group | null>(null);
   const partsRef     = useRef<CharacterParts | null>(null);
   const rafRef       = useRef<number>(0);
   const rotYRef      = useRef(0);
-  const isDragRef    = useRef(false);
-  const lastXRef     = useRef(0);
+  const isDragRef       = useRef(false);
+  const lastXRef        = useRef(0);
+  const petDragRef      = useRef(false);
+  const petDragStartRef = useRef({ ix: 0, iy: 0, ox: 0, oy: 0 }); // intersect start + offset start
   // Background scene refs — illustrated cross-fade between scenes
   const bgCanvasRef   = useRef<HTMLCanvasElement | null>(null);  // visible composite
   const bgFromCanvasRef = useRef<HTMLCanvasElement | null>(null); // previous scene
@@ -2501,6 +2507,7 @@ export default function Avatar3D({
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
     camera.position.set(0, 0.86, 3.9);
     camera.lookAt(0, 0.62, 0);
+    cameraRef.current = camera;
 
     // Background — CanvasTexture cross-faded between illustrated scenes
     const bgCanvas = document.createElement('canvas');
@@ -2810,26 +2817,96 @@ export default function Avatar3D({
     bgKeyRef.current = background;
   }, [background]);
 
-  function startDrag(x: number) { isDragRef.current = true; lastXRef.current = x; }
-  function moveDrag(x: number) {
-    if (!isDragRef.current) return;
-    rotYRef.current += (x - lastXRef.current) * 0.012;
-    lastXRef.current = x;
+  // Returns screen-space distance (px) from (clientX, clientY) to the pet's projected center.
+  function petScreenDist(clientX: number, clientY: number): number {
+    const canvas = canvasRef.current;
+    const petG   = petRef.current;
+    const cam    = cameraRef.current;
+    if (!canvas || !petG || !cam || petKindRef.current === 'none') return Infinity;
+    const petPos = new THREE.Vector3();
+    petG.getWorldPosition(petPos);
+    const ndc = petPos.clone().project(cam);
+    const rect = canvas.getBoundingClientRect();
+    const sx = (ndc.x + 1) / 2 * rect.width  + rect.left;
+    const sy = (-ndc.y + 1) / 2 * rect.height + rect.top;
+    return Math.hypot(clientX - sx, clientY - sy);
   }
-  function endDrag() { isDragRef.current = false; }
+
+  // Project (clientX, clientY) onto the Z=petZ plane to get a world-space point.
+  function projectOnPetPlane(clientX: number, clientY: number): THREE.Vector3 | null {
+    const canvas = canvasRef.current;
+    const cam    = cameraRef.current;
+    const petG   = petRef.current;
+    if (!canvas || !cam || !petG) return null;
+    const rect = canvas.getBoundingClientRect();
+    const ndcX =  ((clientX - rect.left) / rect.width)  * 2 - 1;
+    const ndcY = -((clientY - rect.top)  / rect.height) * 2 + 1;
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -petG.position.z);
+    const pt = new THREE.Vector3();
+    return raycaster.ray.intersectPlane(plane, pt) ? pt : null;
+  }
+
+  function startDrag(clientX: number, clientY: number) {
+    // Hit test: if pointer is within 44px of the pet center, drag the pet
+    if (petScreenDist(clientX, clientY) < 44) {
+      const pt = projectOnPetPlane(clientX, clientY);
+      if (pt) {
+        petDragRef.current = true;
+        petDragStartRef.current = { ix: pt.x, iy: pt.y, ox: petOffsetRef.current.x, oy: petOffsetRef.current.y };
+        return;
+      }
+    }
+    // Otherwise rotate avatar
+    isDragRef.current = true;
+    lastXRef.current  = clientX;
+  }
+
+  function moveDrag(clientX: number, clientY: number) {
+    if (petDragRef.current) {
+      const pt = projectOnPetPlane(clientX, clientY);
+      if (!pt) return;
+      const s   = petDragStartRef.current;
+      const off = { x: s.ox + (pt.x - s.ix), y: s.oy + (pt.y - s.iy) };
+      petOffsetRef.current = off;
+      const petG = petRef.current;
+      if (petG) {
+        const pl = getPetPlacement(petKindRef.current);
+        petG.position.x = pl.pos[0] + off.x;
+        petG.position.y = pl.pos[1] + off.y;
+      }
+      return;
+    }
+    if (!isDragRef.current) return;
+    rotYRef.current += (clientX - lastXRef.current) * 0.012;
+    lastXRef.current = clientX;
+  }
+
+  function endDrag() {
+    if (petDragRef.current) {
+      petDragRef.current = false;
+      onPetOffsetChange?.(petOffsetRef.current);
+      return;
+    }
+    isDragRef.current = false;
+  }
+
+  const isPetActive = pet !== 'none';
 
   return (
     <canvas
       ref={canvasRef}
       width={width}
       height={height}
-      style={{ display: 'block', cursor: 'grab', touchAction: 'none', borderRadius: 16 }}
-      onMouseDown={e => startDrag(e.clientX)}
-      onMouseMove={e => moveDrag(e.clientX)}
+      style={{ display: 'block', touchAction: 'none', borderRadius: 16,
+        cursor: isPetActive ? 'default' : 'grab' }}
+      onMouseDown={e => startDrag(e.clientX, e.clientY)}
+      onMouseMove={e => moveDrag(e.clientX, e.clientY)}
       onMouseUp={endDrag}
       onMouseLeave={endDrag}
-      onTouchStart={e => startDrag(e.touches[0].clientX)}
-      onTouchMove={e => { e.preventDefault(); moveDrag(e.touches[0].clientX); }}
+      onTouchStart={e => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+      onTouchMove={e => { e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); }}
       onTouchEnd={endDrag}
     />
   );
