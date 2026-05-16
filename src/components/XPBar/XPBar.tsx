@@ -60,26 +60,26 @@ export default function UserCard({ user, isActive, onClick, onDelete }: UserCard
 
   return (
     <div
-      className="flex-1 relative transition-all duration-200 select-none"
+      className="relative transition-all duration-200 select-none"
       style={{
         background: isActive ? 'white' : 'rgba(255,255,255,0.55)',
         border: `2px solid ${isActive ? color : 'rgba(0,0,0,0.08)'}`,
         borderRadius: 14,
-        padding: '8px 12px',
+        padding: '8px 14px',
         boxShadow: isActive ? `0 3px 14px ${color}28` : '0 1px 4px rgba(0,0,0,0.07)',
         cursor: 'pointer',
       }}
       onClick={onClick}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center gap-2">
         <span
           onClick={(e) => { e.stopPropagation(); setPickerOpen(p => !p); }}
-          style={{ fontSize: 22, lineHeight: 1, cursor: 'pointer' }}
+          style={{ fontSize: 20, lineHeight: 1, cursor: 'pointer' }}
           title="Смени иконата"
         >
           {emoji}
         </span>
-        <span className="font-bold text-sm text-slate-800 flex-1 min-w-0 truncate">{displayName}</span>
+        <span className="font-bold text-sm text-slate-800 whitespace-nowrap">{displayName}</span>
 
         {/* Delete button — non-protected users only */}
         {!isProtected && onDelete && (

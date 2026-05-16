@@ -341,7 +341,7 @@ export default function Home() {
       </header>
 
       {/* User switcher */}
-      <div className="flex gap-3 w-full max-w-4xl mt-3 px-4 flex-wrap">
+      <div className="flex gap-3 w-full max-w-4xl mt-3 px-4 flex-wrap justify-center">
         {users.map((u) => (
           <UserCard
             key={u.id}
