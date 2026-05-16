@@ -2216,18 +2216,17 @@ function paintSpace(ctx: CanvasRenderingContext2D, w: number, h: number) {
 function getPetPlacement(kind: string): { pos: [number, number, number]; rotY: number; scale: number } {
   switch (kind) {
     case 'parrot':
-      // Sits on the right shoulder — shoulder is at world (0.37, 0.58, 0)
       return { pos: [0.36, 0.62, 0.04], rotY: -0.5, scale: 0.55 };
     case 'butterfly':
-      // Flutters next to the avatar's head
-      return { pos: [0.62, 0.55, 0.20], rotY: 0, scale: 0.95 };
+      return { pos: [0.58, 0.62, 0.20], rotY: 0, scale: 0.95 };
     case 'dragon':
-      // Hovers beside torso, more visible
-      return { pos: [0.72, 0.15, 0.10], rotY: -0.4, scale: 1.05 };
+      // Hovers to the right of the torso, well within frame
+      return { pos: [0.58, 0.30, 0.10], rotY: -0.4, scale: 1.05 };
     case 'rabbit':
-      return { pos: [0.60, -0.94, 0.30], rotY: -0.5, scale: 1.25 };
-    default: // dog / cat / fox — on the ground, close enough to be visible
-      return { pos: [0.62, -0.94, 0.30], rotY: -0.5, scale: 1.30 };
+      // Raised so ears are fully visible
+      return { pos: [0.52, -0.55, 0.30], rotY: -0.5, scale: 1.25 };
+    default: // dog / cat / fox
+      return { pos: [0.52, -0.58, 0.30], rotY: -0.5, scale: 1.30 };
   }
 }
 
@@ -2421,6 +2420,8 @@ interface Props {
   outfitColor?: string;
   /** Optional pet companion (small mesh next to avatar) */
   pet?: string;
+  /** World-space offset applied on top of the pet's default placement (from drag) */
+  petOffset?: { x: number; y: number };
   /** Trigger emote — change id to retrigger same type */
   emote?: { type: string; id: number } | null;
 }
@@ -2433,6 +2434,7 @@ export default function Avatar3D({
   expression: expressionProp, background = 'studio',
   outfitColor,
   pet = 'none',
+  petOffset,
   emote = null,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
@@ -2461,9 +2463,10 @@ export default function Avatar3D({
   const blinkPhaseRef = useRef(-1); // -1 = idle, ≥0 = animating
 
   // Pet refs
-  const petRef       = useRef<THREE.Group | null>(null);
-  const petBobRef    = useRef(Math.random() * 6.28);
-  const petKindRef   = useRef<string>(pet);
+  const petRef        = useRef<THREE.Group | null>(null);
+  const petBobRef     = useRef(Math.random() * 6.28);
+  const petKindRef    = useRef<string>(pet);
+  const petOffsetRef  = useRef(petOffset ?? { x: 0, y: 0 });
 
   // Emote animation refs
   const emoteTypeRef = useRef<string | null>(null);
@@ -2562,11 +2565,12 @@ export default function Avatar3D({
     characterRef.current = char;
     partsRef.current     = parts;
 
-    // Pet — placed per-kind (shoulder, hovering, ground)
+    // Pet — placed per-kind (shoulder, hovering, ground) + drag offset
     const petGroup = buildPet(pet);
     if (petGroup) {
-      const pl = getPetPlacement(pet);
-      petGroup.position.set(...pl.pos);
+      const pl  = getPetPlacement(pet);
+      const off = petOffsetRef.current;
+      petGroup.position.set(pl.pos[0] + off.x, pl.pos[1] + off.y, pl.pos[2]);
       petGroup.rotation.y = pl.rotY;
       petGroup.scale.setScalar(pl.scale);
       scene.add(petGroup);
@@ -2640,30 +2644,32 @@ export default function Avatar3D({
         }
       }
 
-      // Pet idle — animation relative to its placement baseline
+      // Pet idle — animation relative to its placement baseline + drag offset
       const petG = petRef.current;
       if (petG) {
         petBobRef.current += dt * 2.4;
-        const pl = getPetPlacement(petKindRef.current);
+        const pl  = getPetPlacement(petKindRef.current);
+        const off = petOffsetRef.current;
+        const bx  = pl.pos[0] + off.x;
+        const by  = pl.pos[1] + off.y;
         if (petKindRef.current === 'butterfly') {
-          // Flutters around its baseline + wing flap
-          petG.position.y = pl.pos[1] + Math.sin(petBobRef.current * 1.4) * 0.10;
-          petG.position.x = pl.pos[0] + Math.sin(petBobRef.current * 0.8) * 0.06;
+          petG.position.y = by + Math.sin(petBobRef.current * 1.4) * 0.10;
+          petG.position.x = bx + Math.sin(petBobRef.current * 0.8) * 0.06;
           const flap = Math.sin(petBobRef.current * 9) * 0.6;
           for (let i = 1; i <= 4; i++) {
             const w = petG.children[i];
             if (w) w.rotation.y = (i % 2 === 0 ? -flap : flap);
           }
         } else if (petKindRef.current === 'dragon') {
-          // Gentle hover + tiny bob
-          petG.position.y = pl.pos[1] + Math.sin(petBobRef.current * 1.2) * 0.06;
+          petG.position.y = by + Math.sin(petBobRef.current * 1.2) * 0.06;
+          petG.position.x = bx;
           petG.rotation.z = Math.sin(petBobRef.current * 0.7) * 0.05;
         } else if (petKindRef.current === 'parrot') {
-          // Subtle head-bob in place on shoulder
-          petG.position.y = pl.pos[1] + Math.abs(Math.sin(petBobRef.current * 1.4)) * 0.014;
+          petG.position.y = by + Math.abs(Math.sin(petBobRef.current * 1.4)) * 0.014;
+          petG.position.x = bx;
         } else {
-          // Dog / cat / fox / rabbit — sit on the ground with breath + look
-          petG.position.y = pl.pos[1] + Math.sin(petBobRef.current) * 0.012;
+          petG.position.y = by + Math.sin(petBobRef.current) * 0.012;
+          petG.position.x = bx;
           petG.rotation.y = pl.rotY + Math.sin(petBobRef.current * 0.4) * 0.08;
         }
       }
@@ -2747,6 +2753,18 @@ export default function Avatar3D({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarKey]);
 
+  // Pet offset — update ref without rebuilding the pet
+  useEffect(() => {
+    petOffsetRef.current = petOffset ?? { x: 0, y: 0 };
+    const petG = petRef.current;
+    if (petG) {
+      const pl = getPetPlacement(petKindRef.current);
+      const off = petOffsetRef.current;
+      petG.position.x = pl.pos[0] + off.x;
+      petG.position.y = pl.pos[1] + off.y;
+    }
+  }, [petOffset]);
+
   // Pet — rebuild when the kind changes
   useEffect(() => {
     const scene = sceneRef.current;
@@ -2759,7 +2777,8 @@ export default function Avatar3D({
     const petGroup = buildPet(pet);
     if (petGroup) {
       const pl = getPetPlacement(pet);
-      petGroup.position.set(...pl.pos);
+      const off = petOffsetRef.current;
+      petGroup.position.set(pl.pos[0] + off.x, pl.pos[1] + off.y, pl.pos[2]);
       petGroup.rotation.y = pl.rotY;
       petGroup.scale.setScalar(pl.scale);
       scene.add(petGroup);

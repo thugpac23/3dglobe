@@ -32,7 +32,6 @@ const COLOR = {
   both:     USER_FILL_GLOBE.both,
   wishlist: USER_FILL_GLOBE.wishlist,
   hover:    'rgba(255,220,60,0.65)',
-  selected: 'rgba(255,255,255,0.85)',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,7 +121,6 @@ function getCapColor(
   selectedIso: string | null,
   mode: AppMode,
 ): string {
-  if (iso === selectedIso) return COLOR.selected;
   if (iso === hoveredIso)  return COLOR.hover;
   if (mode === 'wishlist') {
     const w = wishlistByCountry[iso];
@@ -203,13 +201,14 @@ function makeHtmlEl(d: object): HTMLElement {
 
 const ZoomBtn = ({ label, onClick }: { label: string; onClick: () => void }) => (
   <button
-    onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
+    onClick={(e) => { e.stopPropagation(); onClick(); }}
     className="w-9 h-9 rounded-xl flex items-center justify-center text-xl font-bold transition-all hover:scale-110 active:scale-95"
     style={{
       background: 'rgba(6,18,40,0.85)',
       color: 'rgba(180,210,255,0.9)',
       border: '1px solid rgba(80,140,230,0.25)',
       boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+      cursor: 'pointer',
     }}
   >
     {label}
@@ -219,6 +218,8 @@ const ZoomBtn = ({ label, onClick }: { label: string; onClick: () => void }) => 
 export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCountryClick, fullscreen = false }: GlobeProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef     = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const globeApiRef  = useRef<any>(null);
   const [hoveredIso,  setHoveredIso]  = useState<string | null>(null);
   const [selectedIso, setSelectedIso] = useState<string | null>(null);
   const [dims, setDims]               = useState({ w: 320, h: 320 });
@@ -229,10 +230,14 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   // Resize
   useEffect(() => {
     function resize() {
-      const size = fullscreen
-        ? Math.min(window.innerWidth, window.innerHeight - 72)
-        : Math.min(window.innerWidth - 16, Math.floor(window.innerHeight * 0.75));
-      setDims({ w: Math.max(size, 300), h: Math.max(size, 300) });
+      if (fullscreen) {
+        const h = Math.max(window.innerHeight - 56, 300);
+        const w = Math.max(Math.min(window.innerWidth, 896), 300);
+        setDims({ w, h });
+      } else {
+        const size = Math.min(window.innerWidth - 16, Math.floor(window.innerHeight * 0.75));
+        setDims({ w: Math.max(size, 300), h: Math.max(size, 300) });
+      }
     }
     resize();
     window.addEventListener('resize', resize);
@@ -246,25 +251,24 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
       if (pov?.altitude !== undefined) {
         setCameraAlt(prev => Math.abs(prev - pov.altitude) > 0.05 ? pov.altitude : prev);
       }
-    }, 300);
+    }, 100);
     return () => clearInterval(id);
   }, []);
 
   // Labels: progressive by altitude. No labels when zoomed out.
   // Font size scales up as the camera gets closer (lower altitude).
   const visibleLabels = useMemo<LabelDatum[]>(() => {
-    if (cameraAlt > 2.8) return [];                             // far out — no labels
+    if (cameraAlt > 3.5) return [];
     const filtered =
-      cameraAlt > 2.0 ? allLabels.filter(l => l.labelrank <= 2) : // only 5–6 giants
-      cameraAlt > 1.4 ? allLabels.filter(l => l.labelrank <= 3) :
-      cameraAlt > 0.9 ? allLabels.filter(l => l.labelrank <= 4) :
-      cameraAlt > 0.5 ? allLabels.filter(l => l.labelrank <= 6) :
+      cameraAlt > 2.5 ? allLabels.filter(l => l.labelrank <= 2) :
+      cameraAlt > 1.8 ? allLabels.filter(l => l.labelrank <= 3) :
+      cameraAlt > 1.2 ? allLabels.filter(l => l.labelrank <= 5) :
+      cameraAlt > 0.7 ? allLabels.filter(l => l.labelrank <= 7) :
       allLabels;
-    // Scale font size with zoom: bigger labels when camera is closer
-    const zoomScale = Math.min(1.4, Math.max(0.85, 1 / cameraAlt * 0.9));
+    const zoomScale = Math.min(1.6, Math.max(0.85, 1 / cameraAlt * 0.9));
     return filtered.map(l => ({
       ...l,
-      fontSize: Math.round((l.labelrank <= 2 ? 14 : l.labelrank <= 3 ? 12 : 10) * zoomScale),
+      fontSize: Math.round((l.labelrank <= 2 ? 15 : l.labelrank <= 3 ? 13 : 11) * zoomScale),
     }));
   }, [cameraAlt]);
 
@@ -293,6 +297,7 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
 
   const handleGlobeReady = useCallback(() => {
     const ctrl = globeRef.current?.controls();
+    globeApiRef.current = globeRef.current;
     if (ctrl) {
       ctrl.autoRotate = true;
       ctrl.autoRotateSpeed = 0.3;
@@ -330,8 +335,8 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
     const iso = polygon ? resolveIso((polygon as GlobePolygon).properties) : null;
     setHoveredIso(iso);
     // Only resume auto-rotate on un-hover if nothing is selected
-    if (globeRef.current?.controls && !selectedIso) {
-      globeRef.current.controls().autoRotate = !iso;
+    if (globeApiRef.current?.controls && !selectedIso) {
+      globeApiRef.current.controls().autoRotate = !iso;
     }
   }, [selectedIso]);
 
@@ -345,14 +350,14 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
       // ── Second click → confirm ──
       onCountryClick(iso, poly.properties?.NAME || iso);
       setSelectedIso(null);
-      if (globeRef.current?.controls) {
-        globeRef.current.controls().autoRotate = !hoveredIso;
+      if (globeApiRef.current?.controls) {
+        globeApiRef.current.controls().autoRotate = !hoveredIso;
       }
     } else {
       // ── First click → select ──
       setSelectedIso(iso);
-      if (globeRef.current?.controls) {
-        globeRef.current.controls().autoRotate = false;
+      if (globeApiRef.current?.controls) {
+        globeApiRef.current.controls().autoRotate = false;
       }
     }
   }, [selectedIso, hoveredIso, onCountryClick]);
@@ -361,8 +366,8 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   const handleGlobeClick = useCallback(() => {
     if (selectedIso) {
       setSelectedIso(null);
-      if (globeRef.current?.controls && !hoveredIso) {
-        globeRef.current.controls().autoRotate = true;
+      if (globeApiRef.current?.controls && !hoveredIso) {
+        globeApiRef.current.controls().autoRotate = true;
       }
     }
   }, [selectedIso, hoveredIso]);
@@ -374,19 +379,19 @@ export default function Globe({ visitsByCountry, wishlistByCountry, mode, onCoun
   }, [visitsByCountry, wishlistByCountry, mode]);
 
   function zoomIn() {
-    if (!globeRef.current) return;
-    const pov = globeRef.current.pointOfView();
+    if (!globeApiRef.current) return;
+    const pov = globeApiRef.current.pointOfView();
     const alt = (typeof pov?.altitude === 'number' && isFinite(pov.altitude)) ? pov.altitude : cameraAlt;
     const next = Math.max(0.1, alt * 0.65);
-    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: next }, 400);
+    globeApiRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: next }, 400);
     setCameraAlt(next);
   }
   function zoomOut() {
-    if (!globeRef.current) return;
-    const pov = globeRef.current.pointOfView();
+    if (!globeApiRef.current) return;
+    const pov = globeApiRef.current.pointOfView();
     const alt = (typeof pov?.altitude === 'number' && isFinite(pov.altitude)) ? pov.altitude : cameraAlt;
     const next = Math.min(6, alt / 0.65);
-    globeRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: next }, 400);
+    globeApiRef.current.pointOfView({ lat: pov?.lat ?? 0, lng: pov?.lng ?? 0, altitude: next }, 400);
     setCameraAlt(next);
   }
 
