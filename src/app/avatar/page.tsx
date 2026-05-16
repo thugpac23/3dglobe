@@ -73,15 +73,16 @@ const EXPRESSIONS: { value: Expression; label: string }[] = [
 
 const ACCESSORY_CATEGORIES: { label: string; items: { id: string; label: string }[] }[] = [
   { label: 'Глава', items: [
-    { id: 'cap',          label: '🧢 Бейзболна' },
-    { id: 'winter-hat',   label: '🎩 Зимна' },
-    { id: 'explorer-hat', label: '🤠 Изследовател' },
-    { id: 'crown',        label: '👑 Корона' },
-    { id: 'flower-crown', label: '🌸 Цветна корона' },
-    { id: 'headphones',   label: '🎧 Слушалки' },
-    { id: 'pirate-hat',   label: '☠️ Пиратска' },
-    { id: 'wizard-hat',   label: '🧙 Магьосник' },
-    { id: 'animal-ears',  label: '🐱 Котешки уши' },
+    { id: 'cap',           label: '🧢 Бейзболна' },
+    { id: 'winter-hat',    label: '🎩 Зимна' },
+    { id: 'explorer-hat',  label: '🤠 Изследовател' },
+    { id: 'crown',         label: '👑 Корона' },
+    { id: 'flower-crown',  label: '🌸 Цветна корона' },
+    { id: 'headphones',    label: '🎧 Слушалки' },
+    { id: 'pirate-hat',    label: '☠️ Пиратска' },
+    { id: 'wizard-hat',    label: '🧙 Магьосник' },
+    { id: 'animal-ears',   label: '🐱 Котешки уши' },
+    { id: 'space-helmet',  label: '🚀 Космонавт' },
   ]},
   { label: 'Лице', items: [
     { id: 'glasses',        label: '🔵 Очила' },
@@ -137,7 +138,7 @@ const PRESETS: Preset[] = [
     patch: { hairStyle: 'short', hairColor: '#1a1a1a', outfit: 'sporty', accessories: ['superhero-mask','belt-bag','gloves'], expression: 'smile' },
     outfitColor: '#DC2626' },
   { id: 'astronaut', emoji: '🚀', label: 'Астронавт',
-    patch: { hairStyle: 'short', hairColor: '#8B4513', outfit: 'scuba', accessories: ['ski-goggles','gloves','watch'], expression: 'surprised' },
+    patch: { hairStyle: 'short', hairColor: '#8B4513', outfit: 'scuba', accessories: ['space-helmet','gloves','watch'], expression: 'surprised' },
     outfitColor: '#E5E7EB' },
   { id: 'pirate', emoji: '🏴‍☠️', label: 'Пират',
     patch: { hairStyle: 'long', hairColor: '#1a1a1a', outfit: 'adventure', accessories: ['pirate-hat','belt-bag','compass-necklace'], expression: 'smile' },
@@ -145,9 +146,6 @@ const PRESETS: Preset[] = [
   { id: 'princess', emoji: '👸', label: 'Принцеса',
     patch: { hairStyle: 'longest', hairColor: '#D4AF37', outfit: 'royal', accessories: ['crown','necklace','flower-crown'], expression: 'smile' },
     outfitColor: '#EC4899' },
-  { id: 'ninja', emoji: '🥷', label: 'Нинджа',
-    patch: { hairStyle: 'tied', hairColor: '#1a1a1a', outfit: 'ninja', accessories: ['superhero-mask'], expression: 'thinking' },
-    outfitColor: '#0F172A' },
   { id: 'scientist', emoji: '🔬', label: 'Учен',
     patch: { hairStyle: 'curly', hairColor: '#C0C0C0', outfit: 'formal', accessories: ['glasses','tie','watch'], expression: 'thinking' },
     outfitColor: '#F8FAFC' },
@@ -514,15 +512,19 @@ export default function AvatarPage() {
                     key={p.id}
                     onClick={() => { resumeAudio(); sounds.click(); applyPreset(p); }}
                     title={p.label}
-                    className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl transition-all hover:scale-105 active:scale-95"
+                    className="flex flex-col items-center gap-0.5 py-2 px-0.5 rounded-xl transition-all hover:scale-105 active:scale-95 overflow-hidden"
                     style={{
                       background: 'white',
                       border: `1.5px solid ${color}28`,
                       boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                      minWidth: 0,
                     }}
                   >
                     <span style={{ fontSize: 22, lineHeight: 1 }}>{p.emoji}</span>
-                    <span className="text-[10px] font-semibold text-slate-600 leading-tight text-center">{p.label}</span>
+                    <span
+                      className="font-semibold text-slate-600 leading-tight text-center w-full"
+                      style={{ fontSize: 9, wordBreak: 'break-word', hyphens: 'auto' }}
+                    >{p.label}</span>
                   </button>
                 ))}
               </div>

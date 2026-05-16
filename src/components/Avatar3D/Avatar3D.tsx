@@ -1130,24 +1130,25 @@ function buildCharacter(
   if (acc.includes('pirate-hat')) {
     const pirateHatM = mat(0x111827, { roughness: 0.74 });
     const pirateTrimM = mat(0xFCD34D, { metalness: 0.40, roughness: 0.40 });
-    const baseY = 0.19 * faceY + hairLift;
+    // Raised so the brim sits clearly above the eyebrows (was 0.19)
+    const baseY = 0.28 * faceY + hairLift;
     // Crown body
     const pirateBody = mesh(new THREE.CylinderGeometry(0.28, 0.30, 0.28, 4), pirateHatM);
     pirateBody.position.set(0, baseY + 0.14, 0);
     pirateBody.rotation.y = Math.PI / 4;
     headGroup.add(pirateBody);
-    // Side brims (left / right, tilted upward)
+    // Side brims (left / right, tilted upward — reduced tilt so they don't dip into the face)
     for (const sx of [-1, 1]) {
       const brimPiece = mesh(
         new THREE.CylinderGeometry(0.46, 0.46, 0.05, 12, 1, false, -Math.PI * 0.42, Math.PI * 0.84),
         pirateHatM,
       );
-      brimPiece.position.set(sx * 0.10, baseY + 0.02, 0);
-      brimPiece.rotation.z = sx * 0.68;
+      brimPiece.position.set(sx * 0.10, baseY + 0.04, 0);
+      brimPiece.rotation.z = sx * 0.42;
       headGroup.add(brimPiece);
       const goldTrim = mesh(new THREE.BoxGeometry(0.038, 0.34, 0.028), pirateTrimM);
-      goldTrim.position.set(sx * 0.40, baseY + 0.02, 0);
-      goldTrim.rotation.z = sx * 0.68;
+      goldTrim.position.set(sx * 0.40, baseY + 0.04, 0);
+      goldTrim.rotation.z = sx * 0.42;
       headGroup.add(goldTrim);
     }
     // Skull at front
@@ -1351,29 +1352,72 @@ function buildCharacter(
     }
   }
 
-  // Superhero mask
+  // Superhero domino mask — a black band wrapping across the eyes
+  // Sphere section at the head surface, with skin-coloured eye openings so eyes show through.
   if (acc.includes('superhero-mask')) {
-    const maskM2 = mat(0x7C3AED, { roughness: 0.58 });
-    // Curved mask shell wrapping the eye/brow band
-    for (const fx of [-0.113, 0, 0.113]) {
-      const seg = mesh(new THREE.SphereGeometry(0.130, 12, 8, 0, Math.PI * 2, Math.PI * 0.40, Math.PI * 0.20), maskM2);
-      seg.position.set(fx * 0.6, eyeBaseY + 0.014, 0);
-      headGroup.add(seg);
-    }
-    // Eye holes
+    const maskM2 = mat(0x0F172A, { roughness: 0.42, metalness: 0.06 });
+    // Front-facing curved band — wraps ~144° of horizontal arc, narrow vertical band at eye level
+    const band = mesh(
+      new THREE.SphereGeometry(0.335, 28, 16, -Math.PI * 0.40, Math.PI * 0.80, Math.PI * 0.40, Math.PI * 0.16),
+      maskM2,
+    );
+    headGroup.add(band);
+    // Eye openings — skin-coloured oval bulges in front of the band so eyes remain visible
     for (const fx of [-0.113, 0.113]) {
-      const maskHole = mesh(new THREE.CircleGeometry(0.054, 16), mat(0x1C1917, { roughness: 0.84 }));
-      maskHole.position.set(fx, eyeBaseY, faceFrontZ + 0.004);
-      headGroup.add(maskHole);
+      const opening = mesh(new THREE.SphereGeometry(0.058, 16, 12), skinM);
+      opening.position.set(fx, eyeBaseY, faceFrontZ - 0.005);
+      opening.scale.set(1.18, 0.85, 0.40);
+      headGroup.add(opening);
     }
-    // Wing flares on sides
+    // Pointed wing flares on outer sides
     for (const sx of [-1, 1]) {
-      const wingFlare = mesh(new THREE.BoxGeometry(0.12, 0.080, 0.028), maskM2);
-      wingFlare.position.set(sx * 0.36, eyeBaseY + 0.026, faceFrontZ - 0.08);
-      wingFlare.rotation.z = sx * 0.30;
-      wingFlare.rotation.y = sx * 0.30;
-      headGroup.add(wingFlare);
+      const wing = mesh(new THREE.BoxGeometry(0.10, 0.060, 0.022), maskM2);
+      wing.position.set(sx * 0.30, eyeBaseY + 0.020, faceFrontZ - 0.10);
+      wing.rotation.z = sx * 0.32;
+      wing.rotation.y = sx * 0.45;
+      headGroup.add(wing);
     }
+  }
+
+  // Astronaut helmet — opaque white shell with dark visor that hides the face
+  if (acc.includes('space-helmet')) {
+    const shellM  = mat(0xF1F5F9, { roughness: 0.22, metalness: 0.18 });
+    const visorM  = mat(0x111827, { metalness: 0.92, roughness: 0.06 });
+    const goldM   = mat(0xFCD34D, { metalness: 0.85, roughness: 0.16 });
+    const accentM = mat(0xC0C0C0, { metalness: 0.62, roughness: 0.32 });
+    // Main helmet shell — opaque sphere outside the head
+    const shell = mesh(new THREE.SphereGeometry(0.395, 28, 22), shellM);
+    shell.position.set(0, 0.020, 0);
+    shell.scale.set(1.04, 1.02, 1.06);
+    headGroup.add(shell);
+    // Dark glass visor — front section covering the face
+    const visor = mesh(
+      new THREE.SphereGeometry(0.405, 28, 18, -Math.PI / 2, Math.PI, Math.PI * 0.30, Math.PI * 0.42),
+      visorM,
+    );
+    visor.position.set(0, 0.020, 0);
+    visor.scale.set(1.04, 1.02, 1.06);
+    headGroup.add(visor);
+    // Gold reflective shine across the top of the visor
+    const shine = mesh(
+      new THREE.SphereGeometry(0.410, 22, 14, -Math.PI * 0.35, Math.PI * 0.70, Math.PI * 0.30, Math.PI * 0.10),
+      goldM,
+    );
+    shine.position.set(0, 0.020, 0);
+    shine.scale.set(1.04, 1.02, 1.06);
+    headGroup.add(shine);
+    // Gold collar where the helmet meets the suit
+    const collar = mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.05, 24), goldM);
+    collar.position.set(0, -0.30, 0);
+    headGroup.add(collar);
+    // Antenna on top
+    const antenna = mesh(new THREE.CylinderGeometry(0.010, 0.012, 0.11, 8), accentM);
+    antenna.position.set(0.16, 0.42, 0);
+    antenna.rotation.z = -0.10;
+    headGroup.add(antenna);
+    const antennaTip = mesh(new THREE.SphereGeometry(0.022, 10, 8), mat(0xDC2626, { roughness: 0.32 }));
+    antennaTip.position.set(0.175, 0.48, 0);
+    headGroup.add(antennaTip);
   }
 
   // ── NECK ─────────────────────────────────────────────────────────────────
