@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { UserProfile, AvatarConfig, FaceType, Expression } from '@/types';
 import { fetchUsers } from '@/lib/api';
@@ -213,7 +213,9 @@ export default function AvatarPage() {
   const [backgrounds, setBackgrounds]   = useState<Record<string, string>>({});
   const [outfitColors, setOutfitColors] = useState<Record<string, string | null>>({});
   const [pets, setPets]                 = useState<Record<string, PetId>>({});
+  const [petOffsets, setPetOffsets]     = useState<Record<string, { x: number; y: number }>>({});
   const [emote, setEmote]               = useState<{ type: EmoteId; id: number } | null>(null);
+  const petDragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
 
   const activeId = activeUser?.id ?? '';
 
@@ -266,6 +268,27 @@ export default function AvatarPage() {
     setPets(prev => {
       const next = { ...prev, [activeId]: p };
       try { localStorage.setItem('avatar-pet', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+    // Reset offset when switching pets (each pet has its own good default position)
+    setPetOffsets(prev => {
+      const next = { ...prev, [activeId]: { x: 0, y: 0 } };
+      try { localStorage.setItem('avatar-pet-offsets', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [activeId]);
+
+  // Persist pet drag offsets per user
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('avatar-pet-offsets');
+      if (raw) setPetOffsets(JSON.parse(raw) as Record<string, { x: number; y: number }>);
+    } catch { /* ignore */ }
+  }, []);
+  const savePetOffset = useCallback((offset: { x: number; y: number }) => {
+    setPetOffsets(prev => {
+      const next = { ...prev, [activeId]: offset };
+      try { localStorage.setItem('avatar-pet-offsets', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
   }, [activeId]);
@@ -424,16 +447,56 @@ export default function AvatarPage() {
             <span className="text-xs text-slate-400">Завърти / Приближи</span>
           </>
         ) : (
-          <Avatar3D
-            avatar={cfg}
-            expression={cfg.expression ?? 'smile'}
-            width={220}
-            height={290}
-            background={backgrounds[activeId] ?? 'studio'}
-            outfitColor={outfitColors[activeId] ?? undefined}
-            pet={pets[activeId] ?? 'none'}
-            emote={emote}
-          />
+          <div style={{ position: 'relative', display: 'inline-block', lineHeight: 0 }}>
+            <Avatar3D
+              avatar={cfg}
+              expression={cfg.expression ?? 'smile'}
+              width={220}
+              height={290}
+              background={backgrounds[activeId] ?? 'studio'}
+              outfitColor={outfitColors[activeId] ?? undefined}
+              pet={pets[activeId] ?? 'none'}
+              petOffset={petOffsets[activeId] ?? { x: 0, y: 0 }}
+              emote={emote}
+            />
+            {/* Pet drag overlay — visible only when a pet is active */}
+            {(pets[activeId] ?? 'none') !== 'none' && (
+              <div
+                style={{
+                  position: 'absolute', inset: 0,
+                  cursor: petDragRef.current ? 'grabbing' : 'grab',
+                  zIndex: 5,
+                  // Transparent — only captures pointer events for drag
+                  background: 'transparent',
+                }}
+                title="Влачи любимеца"
+                onPointerDown={e => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  const cur = petOffsets[activeId] ?? { x: 0, y: 0 };
+                  petDragRef.current = { startX: e.clientX, startY: e.clientY, baseX: cur.x, baseY: cur.y };
+                }}
+                onPointerMove={e => {
+                  if (!petDragRef.current) return;
+                  // 220×290 canvas — 1px ≈ 0.0098 world units
+                  const scale = 0.0098;
+                  const dx = (e.clientX - petDragRef.current.startX) * scale;
+                  const dy = -(e.clientY - petDragRef.current.startY) * scale;
+                  setPetOffsets(prev => ({
+                    ...prev,
+                    [activeId]: { x: petDragRef.current!.baseX + dx, y: petDragRef.current!.baseY + dy },
+                  }));
+                }}
+                onPointerUp={e => {
+                  if (!petDragRef.current) return;
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                  const cur = petOffsets[activeId] ?? { x: 0, y: 0 };
+                  savePetOffset(cur);
+                  petDragRef.current = null;
+                }}
+                onPointerCancel={() => { petDragRef.current = null; }}
+              />
+            )}
+          </div>
         )}
 
         {/* Emote buttons — appear only in build mode (no GLB avatar) */}

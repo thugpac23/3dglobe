@@ -199,7 +199,7 @@ export default function Poseteno() {
 
   return (
     <main className="min-h-screen flex flex-col items-center pb-20 px-2">
-      <header className="w-full max-w-2xl pt-5 pb-2 text-center">
+      <header className="w-full max-w-4xl pt-5 pb-2 text-center">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800" style={{ letterSpacing: '-0.02em' }}>
           🗺️ Посетено
         </h1>
@@ -209,7 +209,7 @@ export default function Poseteno() {
       </header>
 
       {/* User switcher */}
-      <div className="flex gap-3 w-full max-w-lg mt-3 px-2 flex-wrap">
+      <div className="flex gap-3 w-full max-w-4xl mt-3 px-4 flex-wrap justify-center">
         {users.map((u) => (
           <UserCard
             key={u.id}
@@ -221,7 +221,7 @@ export default function Poseteno() {
       </div>
 
       {/* Map section */}
-      <div className="w-full max-w-2xl mt-4 px-2">
+      <div className="w-full max-w-4xl mt-4 px-4">
         <h2 className="text-base font-bold text-slate-700 mb-1.5 text-center">🗺️ Карта на пътешествието</h2>
         {!loading && activeUser && (
           <WorldMap
@@ -229,11 +229,11 @@ export default function Poseteno() {
             wishlistByCountry={wishlistByCountry}
             mode="visited"
             onCountryClick={handleCountryClick}
-            height={300}
+            height={420}
           />
         )}
         {loading && (
-          <div className="rounded-2xl flex items-center justify-center text-slate-400 text-sm" style={{ height: 300, background: 'rgba(0,0,0,0.06)' }}>
+          <div className="rounded-2xl flex items-center justify-center text-slate-400 text-sm" style={{ height: 420, background: 'rgba(0,0,0,0.06)' }}>
             Зареждане…
           </div>
         )}

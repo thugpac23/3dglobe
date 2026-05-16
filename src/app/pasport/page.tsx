@@ -99,13 +99,13 @@ function InkStamp({ stamp, color }: { stamp: Stamp; color: string }) {
   const bgName = BG_NAMES[stamp.country.isoCode] ?? stamp.country.name;
   const flag   = getFlagEmoji(stamp.country.isoCode);
   const date   = new Date(stamp.stampedAt).toLocaleDateString('bg-BG', { year: 'numeric', month: 'short' });
-  const short  = bgName.length > 11 ? bgName.slice(0, 10) + '…' : bgName;
+  const short  = bgName.length > 16 ? bgName.slice(0, 14) + '…' : bgName;
   return (
     <svg viewBox="0 0 100 100" width="100%" height="100%">
       <circle cx="50" cy="50" r="47" fill="none" stroke={color} strokeWidth="2.5" strokeDasharray="5 3" opacity="0.75" />
       <circle cx="50" cy="50" r="40" fill={`${color}18`} stroke={color} strokeWidth="1.5" opacity="0.8" />
       <text x="50" y="37" textAnchor="middle" fontSize="22" dominantBaseline="middle">{flag}</text>
-      <text x="50" y="59" textAnchor="middle" fontSize="8.5" fill={color} fontWeight="700"
+      <text x="50" y="61" textAnchor="middle" fontSize="10" fill={color} fontWeight="700"
             fontFamily="-apple-system,Arial,sans-serif" opacity="0.9">{short}</text>
       <text x="50" y="71" textAnchor="middle" fontSize="6.5" fill={color} opacity="0.6"
             fontFamily="-apple-system,Arial,sans-serif">{date}</text>
@@ -405,7 +405,7 @@ function InfoPage({ displayName, userId, count, avatarConfig }: {
         <div style={{ height: 0.8, background: `linear-gradient(90deg, transparent, ${COVER_GOLD}60, transparent)`, marginBottom: 12 }} />
 
         {/* Photo + info row */}
-        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flex: 1 }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', margin: 'auto 0' }}>
           {/* Photo box */}
           <div style={{
             flex: '0 0 auto',
