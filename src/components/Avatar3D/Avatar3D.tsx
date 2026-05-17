@@ -2781,6 +2781,7 @@ export default function Avatar3D({
 
     return () => {
       cancelAnimationFrame(rafRef.current);
+      renderer.forceContextLoss();
       renderer.dispose();
       rendererRef.current  = null;
       sceneRef.current     = null;
