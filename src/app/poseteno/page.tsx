@@ -8,7 +8,8 @@ import {
 } from '@/types';
 import { sounds, resumeAudio } from '@/lib/sounds';
 import {
-  fetchUsers, fetchVisits, fetchProgress,
+  fetchUsers, createUser, deleteUser,
+  fetchVisits, fetchProgress,
   fetchWishlist, addVisit, removeVisit, addXP,
 } from '@/lib/api';
 import { ACHIEVEMENTS } from '@/lib/xp';
@@ -34,6 +35,117 @@ interface Toast { id: number; message: string; type: 'add' | 'remove' | 'xp' | '
 
 const DEFAULT_PROGRESS: UserProgress = { id: '', userId: '', xp: 0, level: 1, achievements: [] };
 
+const USER_COLORS = ['#8B5CF6','#10B981','#3B82F6','#F97316','#06B6D4','#EF4444','#84CC16','#EC4899'];
+
+const EMOJI_CHOICES = [
+  '🧳','🌸','✈️','🌍','🗺️','⭐','🏔️','🌊','🌺','🦋',
+  '🌈','🎒','📸','🎭','🌙','☀️','🍀','🌴','🦁','🐬',
+  '🦊','🌹','🎨','🏖️','🚀','🌻','🦄','🎵',
+  '🐶','🐱','🐻','🐼','🐨','🐯','🐰','🐺','🦝','🐮',
+  '🐷','🐸','🐵','🦒','🦓',
+];
+
+function AddUserForm({
+  usedColors,
+  onAdd,
+  onCancel,
+}: {
+  usedColors: string[];
+  onAdd: (displayName: string, color: string, emoji: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const nextColor = USER_COLORS.find(c => !usedColors.includes(c)) ?? USER_COLORS[0];
+  const [name, setName] = useState('');
+  const [color, setColor] = useState(nextColor);
+  const [emoji, setEmoji] = useState('🌍');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    await onAdd(name.trim(), color, emoji);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{
+      background: 'white', borderRadius: 16, padding: '14px 16px',
+      border: '1.5px solid #E2E8F0', boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+    }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+        <div style={{ fontSize: 26, lineHeight: 1, width: 32, textAlign: 'center' }}>{emoji}</div>
+        <input
+          autoFocus
+          placeholder="Въведи име..."
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onCancel(); }}
+          style={{
+            flex: 1, padding: '7px 12px', borderRadius: 10,
+            border: '1.5px solid #E2E8F0', fontSize: 14, outline: 'none',
+          }}
+        />
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4,
+        marginBottom: 10, maxHeight: 130, overflowY: 'auto',
+        padding: 4, background: '#F8FAFC', borderRadius: 10,
+      }}>
+        {EMOJI_CHOICES.map(e => (
+          <button
+            key={e}
+            onClick={() => setEmoji(e)}
+            style={{
+              fontSize: 20, lineHeight: 1, padding: 4, borderRadius: 6,
+              background: emoji === e ? color : 'white',
+              border: `1.5px solid ${emoji === e ? color : '#E2E8F0'}`,
+              cursor: 'pointer',
+              boxShadow: emoji === e ? `0 2px 6px ${color}40` : 'none',
+              transition: 'all 0.12s',
+            }}
+          >{e}</button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {USER_COLORS.map(c => (
+          <button
+            key={c}
+            onClick={() => setColor(c)}
+            style={{
+              width: 24, height: 24, borderRadius: '50%', background: c,
+              border: color === c ? '3px solid #1e293b' : '2px solid transparent',
+              cursor: 'pointer', padding: 0,
+              boxShadow: color === c ? `0 0 0 2px white inset` : 'none',
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={submit}
+          disabled={!name.trim() || saving}
+          style={{
+            flex: 1, padding: '8px 0', borderRadius: 10, fontWeight: 700, fontSize: 13,
+            background: color, color: 'white', border: 'none', cursor: 'pointer',
+            opacity: (!name.trim() || saving) ? 0.5 : 1,
+          }}
+        >
+          {saving ? 'Запазване…' : '+ Добави'}
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '8px 16px', borderRadius: 10, fontSize: 13,
+            background: '#F1F5F9', color: '#64748b', border: 'none', cursor: 'pointer',
+          }}
+        >
+          Откажи
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Poseteno() {
   const [users, setUsers]       = useState<UserProfile[]>([]);
   const [visits, setVisits]     = useState<Visit[]>([]);
@@ -44,6 +156,7 @@ export default function Poseteno() {
   const [toasts, setToasts]           = useState<Toast[]>([]);
   const [globeOpen, setGlobeOpen]     = useState(false);
   const [mapOpen, setMapOpen]         = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [factPopup, setFactPopup]     = useState<{ iso: string; name: string; fact: string } | null>(null);
   const xpPopRef = useRef<HTMLDivElement>(null);
   const factTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,6 +303,25 @@ export default function Poseteno() {
     }
   }, [visitsByCountry, visits, users, activeUser, showToast, handleAwardXP, showFactPopup]);
 
+  const handleAddUser = useCallback(async (displayName: string, color: string, emoji: string) => {
+    const newUser = await createUser(displayName, color, emoji);
+    setUsers(prev => [...prev, newUser]);
+    setActiveUser(newUser);
+    setShowAddForm(false);
+  }, []);
+
+  const handleDeleteUser = useCallback(async (userId: string) => {
+    await deleteUser(userId);
+    setUsers(prev => {
+      const next = prev.filter(u => u.id !== userId);
+      if (activeUser?.id === userId) setActiveUser(next[0] ?? null);
+      return next;
+    });
+    setVisits(prev => prev.filter(v => v.userId !== userId));
+    setWishlist(prev => prev.filter(w => w.userId !== userId));
+    setProgress(prev => { const n = { ...prev }; delete n[userId]; return n; });
+  }, [activeUser]);
+
   const toastColors: Record<Toast['type'], string> = {
     add: '#059669', remove: '#DC2626',
     xp: '#F59E0B', level: '#7C3AED', achievement: '#0EA5E9',
@@ -215,10 +347,36 @@ export default function Poseteno() {
             key={u.id}
             user={u}
             isActive={activeUser?.id === u.id}
-            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); }}
+            onClick={() => { sounds.click(); resumeAudio(); setActiveUser(u); setShowAddForm(false); }}
+            onDelete={handleDeleteUser}
           />
         ))}
+        {!showAddForm && (
+          <button
+            onClick={() => { sounds.click(); resumeAudio(); setShowAddForm(true); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 14, fontSize: 13,
+              background: 'rgba(255,255,255,0.7)', color: '#64748b',
+              border: '2px dashed #CBD5E1', cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            + Добави
+          </button>
+        )}
       </div>
+
+      {/* Add user form */}
+      {showAddForm && (
+        <div className="w-full max-w-4xl mt-3 px-4">
+          <AddUserForm
+            usedColors={users.map(u => u.color)}
+            onAdd={handleAddUser}
+            onCancel={() => setShowAddForm(false)}
+          />
+        </div>
+      )}
 
       {/* Map section */}
       <div className="w-full max-w-4xl mt-4 px-4">
